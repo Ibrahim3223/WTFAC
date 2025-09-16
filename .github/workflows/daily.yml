@@ -3,7 +3,7 @@ name: Daily Shorts (single channel)
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 env:
   TZ: ${{ secrets.TZ }}
@@ -11,9 +11,6 @@ env:
 jobs:
   build-upload:
     runs-on: ubuntu-latest
-    concurrency:
-      group: daily-shorts
-      cancel-in-progress: false
 
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +18,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "requirements.txt"
 
       - name: Install FFmpeg
         run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
@@ -30,9 +25,9 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt || pip install edge-tts google-api-python-client google-auth-oauthlib requests nest-asyncio
+          pip install edge-tts google-api-python-client google-auth-oauthlib requests nest-asyncio
 
-      - name: Sanity checks (env + tools)
+      - name: Sanity checks
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
@@ -42,35 +37,22 @@ jobs:
           set -e
           python -V
           ffmpeg -version | head -n 1
-          python - <<'PY'
-import os
-for k in ["PEXELS_API_KEY","YT_CLIENT_ID","YT_CLIENT_SECRET","YT_REFRESH_TOKEN"]:
-    v=os.environ.get(k,"")
-    print(f"{k}: {'OK' if v else 'MISSING'} (len={len(v)})")
-PY
+          python -c "import os,json; ks=['PEXELS_API_KEY','YT_CLIENT_ID','YT_CLIENT_SECRET','YT_REFRESH_TOKEN']; print(json.dumps({k:('OK' if os.getenv(k) else 'MISSING') for k in ks}))"
           mkdir -p out
 
-      - name: Run generator & upload (verbose)
+      - name: Run generator & upload
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
           ROTATION_SEED: ${{ secrets.ROTATION_SEED }}
-          PYTHONUNBUFFERED: "1"
-        run: |
-          set -e
-          python -X dev -u autoshorts_daily.py
-
-      - name: List outputs
-        if: always()
-        run: |
-          ls -lah || true
-          ls -lah out || true
+        run: python autoshorts_daily.py
 
       - name: Save video artifact
-        if: always() && hashFiles('out/*.mp4') != ''
+        if: ${{ always() && hashFiles('out/*.mp4') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: last-video
           path: out/*.mp4
+          if-no-files-found: ignore
