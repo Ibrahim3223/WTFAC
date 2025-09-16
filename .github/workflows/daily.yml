@@ -1,0 +1,48 @@
+name: Daily Shorts (single channel)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
+  workflow_dispatch: {}
+
+env:
+  TZ: ${{ secrets.TZ }}
+
+jobs:
+  build-upload:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: daily-shorts
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install FFmpeg
+        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install edge-tts google-api-python-client nest_asyncio requests
+
+      - name: Run generator & upload
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          ROTATION_SEED: ${{ secrets.ROTATION_SEED }}
+        run: python autoshorts_daily.py
+
+      - name: Save video artifact (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-video
+          path: out/*.mp4
