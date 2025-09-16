@@ -137,19 +137,63 @@ def pick_script_for_today() -> dict:
     country = ROTATION[idx]
     return {"country":country, **SCRIPT_BANK[country]}
 
-# ---- TTS (edge → mp3 → wav) ----
-import asyncio, nest_asyncio; nest_asyncio.apply()
-async def _edge(text, out_mp3): await edge_tts.Communicate(text, voice=VOICE, rate=VOICE_RATE).save(out_mp3)
-def tts_to_wav(text: str, out_wav: str) -> float:
-    mp3 = out_wav.replace(".wav",".mp3")
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        fut = asyncio.ensure_future(_edge(text, mp3)); loop.run_until_complete(fut)
-    else:
-        loop.run_until_complete(_edge(text, mp3))
-    run(["ffmpeg","-y","-i", mp3,"-ar","44100","-ac","1","-af","volume=0.95,highpass=f=80,lowpass=f=8000", out_wav])
-    pathlib.Path(mp3).unlink(missing_ok=True)
-    return max(0.2, ffprobe_dur(out_wav))
+# --- TTS: Edge-tts (+ otomatik Google fallback) ---
+import urllib.parse
+
+VOICE = "en-US-AriaNeural"
+VOICE_RATE = "+10%"
+
+def tts_to_wav(text: str, wav_out: str) -> float:
+    """
+    1) edge-tts ile MP3 üret -> WAV'a çevir
+    2) edge-tts 401 / ağ hatası verirse Google Translate TTS fallback
+    """
+    mp3 = wav_out.replace(".wav", ".mp3")
+
+    # 1) EDGE-TTS
+    try:
+        import asyncio, nest_asyncio, edge_tts
+        nest_asyncio.apply()
+
+        async def _edge():
+            comm = edge_tts.Communicate(text, voice=VOICE, rate=VOICE_RATE)
+            await comm.save(mp3)
+
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Colab / Actions güvenli çalıştırma
+            task = loop.create_task(_edge())
+            loop.run_until_complete(task)
+        else:
+            loop.run_until_complete(_edge())
+
+        # MP3 -> WAV
+        _ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        return _probe_duration(wav_out, 2.5)
+
+    except Exception as e:
+        print("⚠️ edge-tts failed, falling back to Google TTS:", e)
+
+    # 2) GOOGLE TRANSLATE TTS (fallback)
+    try:
+        import requests
+        q = urllib.parse.quote(text.replace('"','').replace("'",""))
+        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=en&client=tw-ob&ttsspeed=0.9"
+        headers = {
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        open(mp3,"wb").write(r.content)
+
+        _ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        return _probe_duration(wav_out, 2.5)
+
+    except Exception as e2:
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        raise RuntimeError(f"TTS failed on both Edge and Google: {e2}")
 
 # ---- Pexels ----
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
@@ -327,5 +371,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
