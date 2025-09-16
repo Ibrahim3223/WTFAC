@@ -143,16 +143,29 @@ import urllib.parse
 VOICE = "en-US-AriaNeural"
 VOICE_RATE = "+10%"
 
+# --- TTS: Edge-tts (+ Google fallback) | self-contained, no _ff dependency ---
 def tts_to_wav(text: str, wav_out: str) -> float:
-    """
-    1) edge-tts ile MP3 üret -> WAV'a çevir
-    2) edge-tts 401 / ağ hatası verirse Google Translate TTS fallback
-    """
+    import asyncio, nest_asyncio, urllib.parse, requests, subprocess, pathlib
+
+    # local helpers (ffmpeg/ffprobe)
+    def _run_ff(args):
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args], check=True)
+
+    def _probe(path: str, default: float = 2.5) -> float:
+        try:
+            pr = subprocess.run(
+                ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
+                capture_output=True, text=True, check=True
+            )
+            return float(pr.stdout.strip())
+        except Exception:
+            return default
+
     mp3 = wav_out.replace(".wav", ".mp3")
 
-    # 1) EDGE-TTS
+    # 1) EDGE-TTS (dene)
     try:
-        import asyncio, nest_asyncio, edge_tts
+        import edge_tts
         nest_asyncio.apply()
 
         async def _edge():
@@ -161,35 +174,32 @@ def tts_to_wav(text: str, wav_out: str) -> float:
 
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # Colab / Actions güvenli çalıştırma
-            task = loop.create_task(_edge())
-            loop.run_until_complete(task)
+            fut = loop.create_task(_edge())
+            loop.run_until_complete(fut)
         else:
             loop.run_until_complete(_edge())
 
-        # MP3 -> WAV
-        _ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
+        _run_ff(["-i", mp3, "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", wav_out])
         pathlib.Path(mp3).unlink(missing_ok=True)
-        return _probe_duration(wav_out, 2.5)
+        return _probe(wav_out, 2.5)
 
     except Exception as e:
         print("⚠️ edge-tts failed, falling back to Google TTS:", e)
 
     # 2) GOOGLE TRANSLATE TTS (fallback)
     try:
-        import requests
-        q = urllib.parse.quote(text.replace('"','').replace("'",""))
+        q = urllib.parse.quote(text.replace('"', '').replace("'", ""))
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl=en&client=tw-ob&ttsspeed=0.9"
         headers = {
-            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         r = requests.get(url, headers=headers, timeout=30)
         r.raise_for_status()
-        open(mp3,"wb").write(r.content)
+        open(mp3, "wb").write(r.content)
 
-        _ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
+        _run_ff(["-i", mp3, "-ar", "44100", "-ac", "1", "-acodec", "pcm_s16le", wav_out])
         pathlib.Path(mp3).unlink(missing_ok=True)
-        return _probe_duration(wav_out, 2.5)
+        return _probe(wav_out, 2.5)
 
     except Exception as e2:
         pathlib.Path(mp3).unlink(missing_ok=True)
@@ -371,6 +381,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
