@@ -129,7 +129,7 @@ ROTATION = list(SCRIPT_BANK.keys())
 
 def pick_script_for_today() -> dict:
     # her gün farklı ülke (deterministik): gün-yılına göre döndür
-    seed = int(os.getenv("ROTATION_SEED","0"))
+    seed = int(os.getenv("ROTATION_SEED") or "0")
     tz = os.getenv("TZ","UTC")
     now = datetime.datetime.now(datetime.timezone.utc)
     doy = now.timetuple().tm_yday
@@ -327,4 +327,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
