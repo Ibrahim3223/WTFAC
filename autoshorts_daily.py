@@ -218,24 +218,60 @@ def mux(video: str, audio: str, outp: str):
     run(["ffmpeg","-y","-i",video,"-i",audio,"-map","0:v:0","-map","1:a:0",
          "-c:v","copy","-c:a","aac","-b:a","192k","-movflags","+faststart","-shortest", outp])
 
-# ---- upload to YouTube ----
-def yt_service():
-    cid = os.getenv("YT_CLIENT_ID"); cs = os.getenv("YT_CLIENT_SECRET"); rt = os.getenv("YT_REFRESH_TOKEN")
-    if not (cid and cs and rt): raise RuntimeError("YouTube OAuth secrets missing.")
-    creds = Credentials(None, refresh_token=rt, token_uri="https://oauth2.googleapis.com/token",
-                        client_id=cid, client_secret=cs, scopes=["https://www.googleapis.com/auth/youtube.upload"])
-    return build("youtube","v3",credentials=creds, cache_discovery=False)
+# ---- smarter metadata builder ----
+def _country_flag(country: str) -> str:
+    flags = {
+        "Turkey":"🇹🇷","Japan":"🇯🇵","Iceland":"🇮🇸","Norway":"🇳🇴","Mexico":"🇲🇽",
+        "United States":"🇺🇸","Canada":"🇨🇦","France":"🇫🇷","Germany":"🇩🇪","Italy":"🇮🇹",
+        "Spain":"🇪🇸","South Korea":"🇰🇷","Brazil":"🇧🇷","United Kingdom":"🇬🇧"
+    }
+    return flags.get(country, "")
 
-def upload_youtube(video_path: str, title: str, description: str, tags: list, privacy="public"):
+def build_metadata(country: str, topic: str, sentences: list, visibility: str = "public", lang: str = "en"):
+    flag = _country_flag(country)
+    hook = (sentences[0].rstrip(" .!?") if sentences else f"{country} facts")
+    # Başlık (<=100 char öneri, API üst sınır 100-150 civarı)
+    title = f"{flag} {hook} — {country} #shorts"
+    if len(title) > 95:
+        title = f"{flag} {topic} — {country} #shorts"
+    # Açıklama (<=5000)
+    description = (
+        f"{topic} — {country}\n"
+        f"{hook}.\n\n"
+        f"Daily country facts. Auto-generated educational short.\n"
+        f"Stock footage via Pexels (license allows reuse).\n"
+        f"#shorts #{country.lower().replace(' ','')} #facts #geography"
+    )
+    # Tag listesi (aşırıya kaçma, 10–15 tag yeter)
+    tags = list(dict.fromkeys([
+        country, topic, "facts", "geography", "education", "shorts",
+        country + " facts", f"{country} travel", f"{country} culture"
+    ]))
+    return {
+        "title": title[:95],
+        "description": description[:4900],
+        "tags": tags[:15],
+        "privacy": visibility,          # "public" | "unlisted" | "private"
+        "defaultLanguage": lang,        # snippet.defaultLanguage
+        "defaultAudioLanguage": lang    # snippet.defaultAudioLanguage
+    }
+
+# ---- upload to YouTube ----
+def upload_youtube(video_path: str, meta: dict):
     y = yt_service()
     body = {
         "snippet": {
-            "title": title[:95],
-            "description": description[:4900],
-            "tags": tags,
-            "categoryId": "27"  # Education
+            "title": meta["title"],
+            "description": meta["description"],
+            "tags": meta.get("tags", []),
+            "categoryId": "27",  # Education
+            "defaultLanguage": meta.get("defaultLanguage", "en"),
+            "defaultAudioLanguage": meta.get("defaultAudioLanguage", "en")
         },
-        "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}
+        "status": {
+            "privacyStatus": meta.get("privacy", "public"),
+            "selfDeclaredMadeForKids": False
+        }
     }
     from googleapiclient.http import MediaFileUpload
     media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
@@ -285,13 +321,10 @@ def main():
     print("Saved:", outp)
 
     # 7) upload
-    title = f"{topic} — {country} #shorts"
-    desc  = (f"Daily country facts — {country}\n"
-             f"Auto-generated educational short.\n"
-             f"Stock footage via Pexels (license allows reuse).")
-    tags  = [country, topic, "facts", "geography", "education", "shorts"]
-    vid_id = upload_youtube(outp, title, desc, tags, privacy="public")
+    meta = build_metadata(country, topic, sentences, visibility="public", lang="en")  # TR kanal ise lang="tr"
+    vid_id = upload_youtube(outp, meta)
     print("YouTube Video ID:", vid_id)
 
 if __name__ == "__main__":
     main()
+
