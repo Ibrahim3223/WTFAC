@@ -310,6 +310,33 @@ def build_metadata(country: str, topic: str, sentences: list, visibility: str = 
         "defaultAudioLanguage": lang    # snippet.defaultAudioLanguage
     }
 
+# --- YouTube service (OAuth with refresh token) ---
+def yt_service():
+    import os
+    from googleapiclient.discovery import build
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+
+    cid  = os.getenv("YT_CLIENT_ID")
+    csec = os.getenv("YT_CLIENT_SECRET")
+    rtok = os.getenv("YT_REFRESH_TOKEN")
+    if not (cid and csec and rtok):
+        raise RuntimeError("Missing YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN")
+
+    creds = Credentials(
+        token=None,  # access token'ı şimdi refresh ile alacağız
+        refresh_token=rtok,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=cid,
+        client_secret=csec,
+        scopes=["https://www.googleapis.com/auth/youtube.upload"],
+    )
+    # Access token'ı al (ve doğrula)
+    creds.refresh(Request())
+
+    # cache_discovery=False => GitHub Actions'ta discovery cache uyarısını engeller
+    return build("youtube", "v3", credentials=creds, cache_discovery=False)
+
 # ---- upload to YouTube ----
 def upload_youtube(video_path: str, meta: dict):
     y = yt_service()
@@ -381,6 +408,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
