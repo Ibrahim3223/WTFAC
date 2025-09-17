@@ -1,13 +1,16 @@
 channels:
   - name: WT Facts About Countries
     env: WT Facts About Countries
+    enabled: false
     mode: country_facts
     lang: en
     visibility: public
     seed: "0"
+    # prompt: ""   # opsiyonel
 
   - name: Tales of The Forgetten Realms
     env: Tales of The Forgetten Realms
+    enabled: false
     mode: history_story
     lang: en
     visibility: public
@@ -15,6 +18,7 @@ channels:
 
   - name: Famous Quotes Explained
     env: Famous Quotes Explained
+    enabled: false
     mode: quotes
     lang: en
     visibility: public
@@ -22,6 +26,7 @@ channels:
 
   - name: TaxWise USA
     env: TaxWise USA
+    enabled: false
     mode: taxwise_usa
     lang: en
     visibility: public
@@ -29,6 +34,7 @@ channels:
 
   - name: Echo of the Unknown
     env: Echo of the Unknown
+    enabled: false
     mode: horror_story
     lang: en
     visibility: public
@@ -36,6 +42,7 @@ channels:
 
   - name: World Briefing
     env: World Briefing
+    enabled: true
     mode: daily_news
     lang: en
     visibility: public
@@ -43,13 +50,15 @@ channels:
 
   - name: Flashback Minute
     env: Flashback Minute
-    mode: history_story     # (istersen "on_this_day" yazabiliriz)
+    enabled: true
+    mode: history_story   # istersen on_this_day yapabiliriz
     lang: en
     visibility: public
     seed: "6"
 
   - name: Universe Jumper
     env: Universe Jumper
+    enabled: false
     mode: alt_universe
     lang: en
     visibility: public
@@ -57,6 +66,7 @@ channels:
 
   - name: If They Lived Today
     env: If They Lived Today
+    enabled: false
     mode: if_lived_today
     lang: en
     visibility: public
@@ -64,6 +74,7 @@ channels:
 
   - name: Rewind Retro Media
     env: Rewind Retro Media
+    enabled: false
     mode: nostalgia_story
     lang: en
     visibility: public
@@ -71,6 +82,7 @@ channels:
 
   - name: Cricket Queens
     env: Cricket Queens
+    enabled: true
     mode: cricket_women
     lang: en
     visibility: public
@@ -78,6 +90,7 @@ channels:
 
   - name: GalacticUpdate
     env: GalacticUpdate
+    enabled: false
     mode: space_news
     lang: en
     visibility: public
@@ -85,13 +98,15 @@ channels:
 
   - name: Cinematic Echo
     env: Cinematic Echo
-    mode: quotes            # telif güvenli yorum + stock b-roll
+    enabled: false
+    mode: quotes           # telif riskini azaltmak için yorum + stock b-roll
     lang: en
     visibility: public
     seed: "12"
 
   - name: CritterFact
     env: CritterFact
+    enabled: true
     mode: animal_facts
     lang: en
     visibility: public
@@ -99,6 +114,7 @@ channels:
 
   - name: WildWonderCaps
     env: WildWonderCaps
+    enabled: false
     mode: animal_facts
     lang: en
     visibility: public
@@ -106,6 +122,7 @@ channels:
 
   - name: NextGen Update
     env: NextGen Update
+    enabled: true
     mode: tech_news
     lang: en
     visibility: public
@@ -113,6 +130,7 @@ channels:
 
   - name: BeyondAxis
     env: BeyondAxis
+    enabled: false
     mode: utopic_tech
     lang: en
     visibility: public
@@ -120,6 +138,7 @@ channels:
 
   - name: BehindTheFame
     env: BehindTheFame
+    enabled: true
     mode: fame_story
     lang: en
     visibility: public
@@ -127,6 +146,7 @@ channels:
 
   - name: One Day Inside
     env: One Day Inside
+    enabled: false
     mode: post_apoc
     lang: en
     visibility: public
@@ -134,6 +154,7 @@ channels:
 
   - name: Gods Unleashed
     env: Gods Unleashed
+    enabled: false
     mode: myth_gods
     lang: en
     visibility: public
@@ -141,6 +162,7 @@ channels:
 
   - name: Microworld Stories
     env: Microworld Stories
+    enabled: true
     mode: kids_story
     lang: en
     visibility: public
@@ -148,6 +170,7 @@ channels:
 
   - name: Bot Gone Wild
     env: Bot Gone Wild
+    enabled: false
     mode: ai_alt
     lang: en
     visibility: public
@@ -155,6 +178,7 @@ channels:
 
   - name: SkySynthLab
     env: SkySynthLab
+    enabled: false
     mode: utopic_tech
     lang: en
     visibility: public
@@ -162,6 +186,7 @@ channels:
 
   - name: FixIt Fast
     env: FixIt Fast
+    enabled: false
     mode: fixit_fast
     lang: en
     visibility: public
@@ -169,6 +194,7 @@ channels:
 
   - name: GameDay 60
     env: GameDay 60
+    enabled: false
     mode: sports_news
     lang: en
     visibility: public
