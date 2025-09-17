@@ -3,3 +3,4 @@ google-api-python-client
 google-auth-oauthlib
 requests
 nest-asyncio
+feedparser
