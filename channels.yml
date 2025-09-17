@@ -1,0 +1,175 @@
+channels:
+  - name: WT Facts About Countries
+    env: WT Facts About Countries
+    mode: country_facts
+    lang: en
+    visibility: public
+    seed: "0"
+
+  - name: Tales of The Forgetten Realms
+    env: Tales of The Forgetten Realms
+    mode: history_story
+    lang: en
+    visibility: public
+    seed: "1"
+
+  - name: Famous Quotes Explained
+    env: Famous Quotes Explained
+    mode: quotes
+    lang: en
+    visibility: public
+    seed: "2"
+
+  - name: TaxWise USA
+    env: TaxWise USA
+    mode: taxwise_usa
+    lang: en
+    visibility: public
+    seed: "3"
+
+  - name: Echo of the Unknown
+    env: Echo of the Unknown
+    mode: horror_story
+    lang: en
+    visibility: public
+    seed: "4"
+
+  - name: World Briefing
+    env: World Briefing
+    mode: daily_news
+    lang: en
+    visibility: public
+    seed: "5"
+
+  - name: Flashback Minute
+    env: Flashback Minute
+    mode: history_story     # (istersen "on_this_day" yazabiliriz)
+    lang: en
+    visibility: public
+    seed: "6"
+
+  - name: Universe Jumper
+    env: Universe Jumper
+    mode: alt_universe
+    lang: en
+    visibility: public
+    seed: "7"
+
+  - name: If They Lived Today
+    env: If They Lived Today
+    mode: if_lived_today
+    lang: en
+    visibility: public
+    seed: "8"
+
+  - name: Rewind Retro Media
+    env: Rewind Retro Media
+    mode: nostalgia_story
+    lang: en
+    visibility: public
+    seed: "9"
+
+  - name: Cricket Queens
+    env: Cricket Queens
+    mode: cricket_women
+    lang: en
+    visibility: public
+    seed: "10"
+
+  - name: GalacticUpdate
+    env: GalacticUpdate
+    mode: space_news
+    lang: en
+    visibility: public
+    seed: "11"
+
+  - name: Cinematic Echo
+    env: Cinematic Echo
+    mode: quotes            # telif güvenli yorum + stock b-roll
+    lang: en
+    visibility: public
+    seed: "12"
+
+  - name: CritterFact
+    env: CritterFact
+    mode: animal_facts
+    lang: en
+    visibility: public
+    seed: "13"
+
+  - name: WildWonderCaps
+    env: WildWonderCaps
+    mode: animal_facts
+    lang: en
+    visibility: public
+    seed: "14"
+
+  - name: NextGen Update
+    env: NextGen Update
+    mode: tech_news
+    lang: en
+    visibility: public
+    seed: "15"
+
+  - name: BeyondAxis
+    env: BeyondAxis
+    mode: utopic_tech
+    lang: en
+    visibility: public
+    seed: "16"
+
+  - name: BehindTheFame
+    env: BehindTheFame
+    mode: fame_story
+    lang: en
+    visibility: public
+    seed: "17"
+
+  - name: One Day Inside
+    env: One Day Inside
+    mode: post_apoc
+    lang: en
+    visibility: public
+    seed: "18"
+
+  - name: Gods Unleashed
+    env: Gods Unleashed
+    mode: myth_gods
+    lang: en
+    visibility: public
+    seed: "19"
+
+  - name: Microworld Stories
+    env: Microworld Stories
+    mode: kids_story
+    lang: en
+    visibility: public
+    seed: "20"
+
+  - name: Bot Gone Wild
+    env: Bot Gone Wild
+    mode: ai_alt
+    lang: en
+    visibility: public
+    seed: "21"
+
+  - name: SkySynthLab
+    env: SkySynthLab
+    mode: utopic_tech
+    lang: en
+    visibility: public
+    seed: "22"
+
+  - name: FixIt Fast
+    env: FixIt Fast
+    mode: fixit_fast
+    lang: en
+    visibility: public
+    seed: "23"
+
+  - name: GameDay 60
+    env: GameDay 60
+    mode: sports_news
+    lang: en
+    visibility: public
+    seed: "24"
