@@ -1,16 +1,56 @@
-name: Daily Shorts (single channel)
+name: Daily Shorts (multi-channel)
 
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
   workflow_dispatch:
 
-env:
-  TZ: ${{ secrets.TZ }}
-
 jobs:
-  build-upload:
+  # 1) channels.yml'den matrix üret
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.mk.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build matrix from channels.yml
+        id: mk
+        run: |
+          python - <<'PY'
+          import os, json, sys
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.run([sys.executable, "-m", "pip", "install", "PyYAML", "-q"], check=True)
+              import yaml
+
+          data = yaml.safe_load(open("channels.yml"))
+          chans = [c["name"] for c in data.get("channels", []) if c.get("enabled", True)]
+          if not chans:
+              raise SystemExit("No channels enabled in channels.yml")
+
+          matrix = {"channel": chans}
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={json.dumps(matrix)}\n")
+          print("Matrix:", matrix)
+          PY
+
+  # 2) Her kanal için üret & yükle
+  build-upload:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    # ENVIRONMENT: kanal adıyla bire bir aynı olmalı
+    environment: ${{ matrix.channel }}
 
     steps:
       - uses: actions/checkout@v4
@@ -25,34 +65,60 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install edge-tts google-api-python-client google-auth-oauthlib requests nest-asyncio
+          # requirements.txt varsa ilk onu dener; yoksa tek tek kurar
+          (pip install -r requirements.txt) || \
+          pip install edge-tts google-api-python-client google-auth google-auth-oauthlib requests nest-asyncio
 
       - name: Sanity checks
         env:
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          # Repo secrets (genel)
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          # Environment secrets (kanala özel)
+          YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          # Environment variables (kanala özel)
+          TZ:               ${{ vars.TZ }}
+          MODE:             ${{ vars.MODE }}
+          LANG:             ${{ vars.LANG }}
+          GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
+          ROTATION_SEED:    ${{ vars.ROTATION_SEED }}
         run: |
           set -e
-          python -V
-          ffmpeg -version | head -n 1
-          python -c "import os,json; ks=['PEXELS_API_KEY','YT_CLIENT_ID','YT_CLIENT_SECRET','YT_REFRESH_TOKEN']; print(json.dumps({k:('OK' if os.getenv(k) else 'MISSING') for k in ks}))"
+          echo "== Channel: ${{ matrix.channel }} =="
+          echo "Python: $(python -V)"
+          echo "FFmpeg: $(ffmpeg -version | head -n 1)"
           mkdir -p out
+          python - <<'PY'
+          import os, json
+          ks = ["GEMINI_API_KEY","PEXELS_API_KEY","YT_CLIENT_ID","YT_CLIENT_SECRET","YT_REFRESH_TOKEN"]
+          print("SECRETS:", json.dumps({k:("OK" if os.getenv(k) else "MISSING") for k in ks}))
+          print("MODE:", os.getenv("MODE"))
+          print("LANG:", os.getenv("LANG"))
+          print("TZ:", os.getenv("TZ"))
+          PY
 
       - name: Run generator & upload
         env:
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          ROTATION_SEED: ${{ secrets.ROTATION_SEED }}
-        run: python autoshorts_daily.py
+          TZ:               ${{ vars.TZ }}
+          MODE:             ${{ vars.MODE }}
+          LANG:             ${{ vars.LANG }}
+          GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
+          ROTATION_SEED:    ${{ vars.ROTATION_SEED }}
+        run: |
+          echo "Generating & uploading for: ${{ matrix.channel }}"
+          python autoshorts_daily.py
 
       - name: Save video artifact
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: last-video
+          name: ${{ matrix.channel }}-last-video
           path: out/*.mp4
           if-no-files-found: ignore
