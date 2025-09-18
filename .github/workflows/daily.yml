@@ -1,29 +1,32 @@
 name: Daily Shorts (single channel)
 
 on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: "Which Channel Environment?"
-        required: true
-        type: environment
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Environment (channel) name"
+        required: true
+        default: "WT Facts About Countries"
 
 env:
-  TZ: ${{ vars.TZ || secrets.TZ || 'Europe/Istanbul' }}
+  TZ: ${{ vars.TZ }}
 
 jobs:
   build-upload:
     runs-on: ubuntu-latest
 
-    # 👇 manuel tetikte inputtan, cron'da "default" bir ortam kullanmak istersen ayarlayabilirsin
-    environment: ${{ inputs.environment }}
+    # Burada seçtiğin environment'ın (kanalın) secrets/vars'ı bağlanır
+    environment:
+      name: ${{ inputs.env }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -33,83 +36,44 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install edge-tts google-api-python-client google-auth-oauthlib requests nest-asyncio
+          pip install edge-tts google-api-python-client google-auth google-auth-oauthlib requests nest-asyncio pyyaml
 
-      - name: Sanity checks (secrets & vars)
-        env:
-          # 🔐 SECRETS
-          PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
-          YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
-          # 🧭 VARS (ENVIRONMENT VARS)
-          CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
-          MODE:         ${{ vars.MODE }}
-          LANG:         ${{ vars.LANG || vars.DEFAULT_LANG || 'en' }}
-          VISIBILITY:   ${{ vars.VISIBILITY || vars.DEFAULT_VISIBILITY || 'public' }}
-          ROTATION_SEED:${{ vars.ROTATION_SEED || '0' }}
-          USE_GEMINI:   ${{ vars.USE_GEMINI || vars.USE_GEMINI_REPO || '0' }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-          GEMINI_PROMPT:${{ vars.GEMINI_PROMPT || '' }}
-          TTS_VOICE:    ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
-          TTS_RATE:     ${{ vars.TTS_RATE  || '+10%' }}
+      - name: Sanity checks
         run: |
-          set -e
           python -V
           ffmpeg -version | head -n 1
-          echo "ENVIRONMENT: ${{ inputs.environment }}"
-          python - << 'PY'
-import os, json
-print("Secrets:", json.dumps({
-  'PEXELS_API_KEY': 'OK' if os.getenv('PEXELS_API_KEY') else 'MISSING',
-  'YT_CLIENT_ID': 'OK' if os.getenv('YT_CLIENT_ID') else 'MISSING',
-  'YT_CLIENT_SECRET': 'OK' if os.getenv('YT_CLIENT_SECRET') else 'MISSING',
-  'YT_REFRESH_TOKEN': 'OK' if os.getenv('YT_REFRESH_TOKEN') else 'MISSING',
-  'GEMINI_API_KEY': 'OK' if os.getenv('GEMINI_API_KEY') else 'MISSING',
-}, indent=2))
-print("Vars:", json.dumps({
-  'CHANNEL_NAME': os.getenv('CHANNEL_NAME'),
-  'MODE': os.getenv('MODE'),
-  'LANG': os.getenv('LANG'),
-  'VISIBILITY': os.getenv('VISIBILITY'),
-  'ROTATION_SEED': os.getenv('ROTATION_SEED'),
-  'USE_GEMINI': os.getenv('USE_GEMINI'),
-  'GEMINI_MODEL': os.getenv('GEMINI_MODEL'),
-  'GEMINI_PROMPT': bool(os.getenv('GEMINI_PROMPT')),
-  'TTS_VOICE': os.getenv('TTS_VOICE'),
-  'TTS_RATE': os.getenv('TTS_RATE'),
-}, indent=2))
-PY
           mkdir -p out
 
-      - name: Generate & Upload
+      - name: Run generator & upload
         env:
-          # 🔐 SECRETS
+          # --- ENVIRONMENT (channel) SECRETS ---
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
-          # 🧭 VARS
-          CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
+
+          # --- VARS (environment vars repo vars üzerine yazılır) ---
+          USE_GEMINI:        ${{ vars.USE_GEMINI }}
+          GEMINI_MODEL:      ${{ vars.GEMINI_MODEL }}
+          TTS_VOICE:         ${{ vars.TTS_VOICE }}
+          TTS_RATE:          ${{ vars.TTS_RATE }}
+          DEFAULT_LANG:      ${{ vars.DEFAULT_LANG }}
+          DEFAULT_VISIBILITY:${{ vars.DEFAULT_VISIBILITY }}
+          ROTATION_SEED:     ${{ vars.ROTATION_SEED }}
+          GEMINI_PROMPT:     ${{ vars.GEMINI_PROMPT }}
+
+          # --- Kanal bilgileri (script bunları okuyor) ---
+          CHANNEL_NAME: ${{ inputs.env }}
           MODE:         ${{ vars.MODE }}
-          LANG:         ${{ vars.LANG || vars.DEFAULT_LANG || 'en' }}
-          VISIBILITY:   ${{ vars.VISIBILITY || vars.DEFAULT_VISIBILITY || 'public' }}
-          ROTATION_SEED:${{ vars.ROTATION_SEED || '0' }}
-          USE_GEMINI:   ${{ vars.USE_GEMINI || vars.USE_GEMINI_REPO || '0' }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-          GEMINI_PROMPT:${{ vars.GEMINI_PROMPT || '' }}
-          TTS_VOICE:    ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
-          TTS_RATE:     ${{ vars.TTS_RATE  || '+10%' }}
-        run: |
-          echo "Generating & uploading for: $CHANNEL_NAME"
-          python autoshorts_daily.py
+          LANG:         ${{ vars.DEFAULT_LANG }}
+          VISIBILITY:   ${{ vars.DEFAULT_VISIBILITY }}
+        run: python autoshorts_daily.py
 
       - name: Save video artifact
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: last-video
+          name: ${{ inputs.env }}-last-video
           path: out/*.mp4
           if-no-files-found: ignore
