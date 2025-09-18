@@ -1,0 +1,87 @@
+name: Daily Shorts (all channels)
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # her gün 06:00 UTC
+  workflow_dispatch: {}
+
+env:
+  TZ: ${{ vars.TZ || secrets.TZ || 'Europe/Istanbul' }}
+
+jobs:
+  build-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.mk.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read channels.yml and build matrix
+        id: mk
+        run: |
+          python - << 'PY'
+import yaml, json, os
+with open('channels.yml','r',encoding='utf-8') as f:
+    data = yaml.safe_load(f)
+envs = [c['env'] for c in data.get('channels',[]) if 'env' in c]
+# istersen burada subset, shuffle vb. yapabilirsin
+print("Will run for envs:", envs)
+out = {'include': [{'env': e} for e in envs]}
+print("MATRIX_JSON="+json.dumps(out))
+with open(os.environ['GITHUB_OUTPUT'],'a') as g:
+    g.write(f"matrix={json.dumps(out)}\n")
+PY
+
+  run-all:
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+    environment: ${{ matrix.env }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install FFmpeg
+        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install edge-tts google-api-python-client google-auth-oauthlib requests nest-asyncio pyyaml
+
+      - name: Generate & Upload (${{ matrix.env }})
+        env:
+          # 🔐 SECRETS
+          PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          # 🧭 VARS
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
+          MODE:         ${{ vars.MODE }}
+          LANG:         ${{ vars.LANG || vars.DEFAULT_LANG || 'en' }}
+          VISIBILITY:   ${{ vars.VISIBILITY || vars.DEFAULT_VISIBILITY || 'public' }}
+          ROTATION_SEED:${{ vars.ROTATION_SEED || '0' }}
+          USE_GEMINI:   ${{ vars.USE_GEMINI || vars.USE_GEMINI_REPO || '0' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          GEMINI_PROMPT:${{ vars.GEMINI_PROMPT || '' }}
+          TTS_VOICE:    ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
+          TTS_RATE:     ${{ vars.TTS_RATE  || '+10%' }}
+        run: |
+          echo "Generating & uploading for environment: ${{ matrix.env }}"
+          mkdir -p out
+          python autoshorts_daily.py
+
+      - name: Save video artifact (${{ matrix.env }})
+        if: ${{ always() && hashFiles('out/*.mp4') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-video-${{ matrix.env }}
+          path: out/*.mp4
+          if-no-files-found: ignore
