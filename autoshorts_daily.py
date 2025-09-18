@@ -768,21 +768,39 @@ def main():
     clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
 
     # 4) Per sentence segment + text overlay (center, CapCut-ish)
-    segs=[]
-    for i,(s,d) in enumerate(metas):
-        base = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
-        make_segment(clips[i%len(clips)], d, base)
-        colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
-        draw_capcut_text(base, s, CAPTION_COLORS[i%len(CAPTION_COLORS)], font, colored, is_hook=(i==0))
+    segs = []
+    for i, (s, d) in enumerate(metas):
+        base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
+        make_segment(clips[i % len(clips)], d, base)
+        colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
+        # is_hook=(i==0) ile ilk cümle fontunu biraz büyütüyorsun
+        draw_capcut_text(base, s, CAPTION_COLORS[i % len(CAPTION_COLORS)], font, colored, is_hook=(i == 0))
         segs.append(colored)
 
     # 5) concat video & audio
-    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
-    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
+    concat_videos(segs, vcat)
 
-    # 6) mux + save
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav")
+    concat_audios(wavs, acat)
+
+    # 6) toplam süreyi hedef aralığa çek (BLOK BURADA OLMALI)
+    total_dur = ffprobe_dur(acat)
+    if total_dur < TARGET_MIN_SEC:
+        deficit = min(TARGET_MAX_SEC, TARGET_MIN_SEC) - total_dur
+        extra = max(0.0, deficit)
+        if extra > 0.05:
+            padded = str(pathlib.Path(tmp) / "audio_padded.wav")
+            run([
+                "ffmpeg", "-y",
+                "-f", "lavfi", "-t", f"{extra:.2f}", "-i", "anullsrc=r=44100:cl=mono",
+                "-i", acat, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1", padded
+            ])
+            acat = padded  # bundan sonra mux'ta bu kullanılacak
+
+    # 7) mux + save
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Daily_Short"
+    safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Daily_Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
     mux(vcat, acat, outp)
     print("Saved:", outp)
@@ -807,4 +825,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
