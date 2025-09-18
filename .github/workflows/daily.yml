@@ -1,56 +1,24 @@
-name: Daily Shorts (multi-channel)
+name: Daily Shorts (single channel)
 
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which Channel Environment?"
+        required: true
+        type: environment
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
-  workflow_dispatch:
+
+env:
+  TZ: ${{ vars.TZ || secrets.TZ || 'Europe/Istanbul' }}
 
 jobs:
-  # 1) channels.yml'den matrix üret
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.mk.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build matrix from channels.yml
-        id: mk
-        run: |
-          python - <<'PY'
-          import os, json, sys
-          try:
-              import yaml
-          except ImportError:
-              import subprocess
-              subprocess.run([sys.executable, "-m", "pip", "install", "PyYAML", "-q"], check=True)
-              import yaml
-
-          data = yaml.safe_load(open("channels.yml"))
-          chans = [c["name"] for c in data.get("channels", []) if c.get("enabled", True)]
-          if not chans:
-              raise SystemExit("No channels enabled in channels.yml")
-
-          matrix = {"channel": chans}
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"matrix={json.dumps(matrix)}\n")
-          print("Matrix:", matrix)
-          PY
-
-  # 2) Her kanal için üret & yükle
   build-upload:
-    needs: prepare
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
-    # ENVIRONMENT: kanal adıyla bire bir aynı olmalı
-    environment: ${{ matrix.channel }}
+    # 👇 manuel tetikte inputtan, cron'da "default" bir ortam kullanmak istersen ayarlayabilirsin
+    environment: ${{ inputs.environment }}
 
     steps:
       - uses: actions/checkout@v4
@@ -65,60 +33,83 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          # requirements.txt varsa ilk onu dener; yoksa tek tek kurar
-          (pip install -r requirements.txt) || \
-          pip install edge-tts google-api-python-client google-auth google-auth-oauthlib requests nest-asyncio
+          pip install edge-tts google-api-python-client google-auth-oauthlib requests nest-asyncio
 
-      - name: Sanity checks
+      - name: Sanity checks (secrets & vars)
         env:
-          # Repo secrets (genel)
-          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          # 🔐 SECRETS
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
-          # Environment secrets (kanala özel)
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          # Environment variables (kanala özel)
-          TZ:               ${{ vars.TZ }}
-          MODE:             ${{ vars.MODE }}
-          LANG:             ${{ vars.LANG }}
-          GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
-          ROTATION_SEED:    ${{ vars.ROTATION_SEED }}
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          # 🧭 VARS (ENVIRONMENT VARS)
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
+          MODE:         ${{ vars.MODE }}
+          LANG:         ${{ vars.LANG || vars.DEFAULT_LANG || 'en' }}
+          VISIBILITY:   ${{ vars.VISIBILITY || vars.DEFAULT_VISIBILITY || 'public' }}
+          ROTATION_SEED:${{ vars.ROTATION_SEED || '0' }}
+          USE_GEMINI:   ${{ vars.USE_GEMINI || vars.USE_GEMINI_REPO || '0' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          GEMINI_PROMPT:${{ vars.GEMINI_PROMPT || '' }}
+          TTS_VOICE:    ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
+          TTS_RATE:     ${{ vars.TTS_RATE  || '+10%' }}
         run: |
           set -e
-          echo "== Channel: ${{ matrix.channel }} =="
-          echo "Python: $(python -V)"
-          echo "FFmpeg: $(ffmpeg -version | head -n 1)"
+          python -V
+          ffmpeg -version | head -n 1
+          echo "ENVIRONMENT: ${{ inputs.environment }}"
+          python - << 'PY'
+import os, json
+print("Secrets:", json.dumps({
+  'PEXELS_API_KEY': 'OK' if os.getenv('PEXELS_API_KEY') else 'MISSING',
+  'YT_CLIENT_ID': 'OK' if os.getenv('YT_CLIENT_ID') else 'MISSING',
+  'YT_CLIENT_SECRET': 'OK' if os.getenv('YT_CLIENT_SECRET') else 'MISSING',
+  'YT_REFRESH_TOKEN': 'OK' if os.getenv('YT_REFRESH_TOKEN') else 'MISSING',
+  'GEMINI_API_KEY': 'OK' if os.getenv('GEMINI_API_KEY') else 'MISSING',
+}, indent=2))
+print("Vars:", json.dumps({
+  'CHANNEL_NAME': os.getenv('CHANNEL_NAME'),
+  'MODE': os.getenv('MODE'),
+  'LANG': os.getenv('LANG'),
+  'VISIBILITY': os.getenv('VISIBILITY'),
+  'ROTATION_SEED': os.getenv('ROTATION_SEED'),
+  'USE_GEMINI': os.getenv('USE_GEMINI'),
+  'GEMINI_MODEL': os.getenv('GEMINI_MODEL'),
+  'GEMINI_PROMPT': bool(os.getenv('GEMINI_PROMPT')),
+  'TTS_VOICE': os.getenv('TTS_VOICE'),
+  'TTS_RATE': os.getenv('TTS_RATE'),
+}, indent=2))
+PY
           mkdir -p out
-          python - <<'PY'
-          import os, json
-          ks = ["GEMINI_API_KEY","PEXELS_API_KEY","YT_CLIENT_ID","YT_CLIENT_SECRET","YT_REFRESH_TOKEN"]
-          print("SECRETS:", json.dumps({k:("OK" if os.getenv(k) else "MISSING") for k in ks}))
-          print("MODE:", os.getenv("MODE"))
-          print("LANG:", os.getenv("LANG"))
-          print("TZ:", os.getenv("TZ"))
-          PY
 
-      - name: Run generator & upload
+      - name: Generate & Upload
         env:
-          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          # 🔐 SECRETS
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          TZ:               ${{ vars.TZ }}
-          MODE:             ${{ vars.MODE }}
-          LANG:             ${{ vars.LANG }}
-          GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
-          ROTATION_SEED:    ${{ vars.ROTATION_SEED }}
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          # 🧭 VARS
+          CHANNEL_NAME: ${{ vars.CHANNEL_NAME }}
+          MODE:         ${{ vars.MODE }}
+          LANG:         ${{ vars.LANG || vars.DEFAULT_LANG || 'en' }}
+          VISIBILITY:   ${{ vars.VISIBILITY || vars.DEFAULT_VISIBILITY || 'public' }}
+          ROTATION_SEED:${{ vars.ROTATION_SEED || '0' }}
+          USE_GEMINI:   ${{ vars.USE_GEMINI || vars.USE_GEMINI_REPO || '0' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+          GEMINI_PROMPT:${{ vars.GEMINI_PROMPT || '' }}
+          TTS_VOICE:    ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
+          TTS_RATE:     ${{ vars.TTS_RATE  || '+10%' }}
         run: |
-          echo "Generating & uploading for: ${{ matrix.channel }}"
+          echo "Generating & uploading for: $CHANNEL_NAME"
           python autoshorts_daily.py
 
       - name: Save video artifact
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.channel }}-last-video
+          name: last-video
           path: out/*.mp4
           if-no-files-found: ignore
