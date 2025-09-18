@@ -3,6 +3,9 @@
 import os, sys, re, json, time, uuid, random, datetime, tempfile, pathlib, subprocess, hashlib
 from dataclasses import dataclass
 from typing import List, Optional
+VOICE_STYLE = os.getenv("TTS_STYLE", "narration-professional")
+TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
+TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "28"))
 
 # ---------------- deps (auto-install) ----------------
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
@@ -170,35 +173,82 @@ def tts_to_wav(text: str, wav_out: str) -> float:
 
     mp3 = wav_out.replace(".wav", ".mp3")
 
-    # 1) EDGE-TTS
+def tts_to_wav(text: str, wav_out: str) -> float:
+    import asyncio, urllib.parse
+
+    def _run_ff(args):
+        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
+
+    def _probe(path: str, default: float = 2.5) -> float:
+        try:
+            pr = subprocess.run(
+                ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
+                capture_output=True, text=True, check=True
+            )
+            return float(pr.stdout.strip())
+        except Exception:
+            return default
+
+    mp3 = wav_out.replace(".wav", ".mp3")
+
+    # 1) EDGE-TTS (daha doğal: style + yavaş tempo)
     try:
         nest_asyncio.apply()
+
         async def _edge():
-            comm = edge_tts.Communicate(text, voice=VOICE, rate=VOICE_RATE)
+            comm = edge_tts.Communicate(
+                text,
+                voice=VOICE,
+                rate=VOICE_RATE,            # örn. -10%
+                style=VOICE_STYLE           # narration-professional / newscast-casual
+            )
             await comm.save(mp3)
+
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            fut = loop.create_task(_edge())
-            loop.run_until_complete(fut)
+            fut = loop.create_task(_edge()); loop.run_until_complete(fut)
         else:
             loop.run_until_complete(_edge())
+
+        # WAV’a çevir
         _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
         pathlib.Path(mp3).unlink(missing_ok=True)
-        return _probe(wav_out, 2.5)
+
+        # cümle sonuna minik sessizlik (0.2s) ekle – daha doğal nefes hissi
+        pad = str(pathlib.Path(wav_out).with_suffix(".pad.wav"))
+        _run_ff([
+            "-f","lavfi","-t","0.20","-i","anullsrc=r=44100:cl=mono",
+            "-i", wav_out, "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", pad
+        ])
+        pathlib.Path(wav_out).unlink(missing_ok=True)
+        pathlib.Path(pad).rename(wav_out)
+
+        return _probe(wav_out, 2.8)
+
     except Exception as e:
         print("⚠️ edge-tts failed, falling back to Google TTS:", e)
 
-    # 2) GOOGLE TRANSLATE TTS
+    # 2) GOOGLE TRANSLATE fallback
     try:
         q = requests.utils.quote(text.replace('"','').replace("'",""))
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.9"
         headers = {"User-Agent":"Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=30)
-        r.raise_for_status()
+        r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
         open(mp3,"wb").write(r.content)
         _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
         pathlib.Path(mp3).unlink(missing_ok=True)
-        return _probe(wav_out, 2.5)
+
+        # aynı pad
+        pad = str(pathlib.Path(wav_out).with_suffix(".pad.wav"))
+        _run_ff([
+            "-f","lavfi","-t","0.20","-i","anullsrc=r=44100:cl=mono",
+            "-i", wav_out, "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", pad
+        ])
+        pathlib.Path(wav_out).unlink(missing_ok=True)
+        pathlib.Path(pad).rename(wav_out)
+
+        return _probe(wav_out, 2.8)
+
     except Exception as e2:
         pathlib.Path(mp3).unlink(missing_ok=True)
         raise RuntimeError(f"TTS failed on both Edge and Google: {e2}")
@@ -246,12 +296,13 @@ def make_segment(src: str, dur: float, outp: str):
     run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r",str(TARGET_FPS),"-an",
          "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),"-pix_fmt","yuv420p",outp])
 
-def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str):
+def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
     esc = escape_drawtext(wrapped)
     lines = wrapped.count("\n")+1
     maxchars = max(len(x) for x in wrapped.split("\n"))
-    fs = 40 if (lines>=3 or maxchars>=26) else (48 if (lines==2 or maxchars>=20) else 54)
+    base_fs = 40 if (lines>=3 or maxchars>=26) else (48 if (lines==2 or maxchars>=20) else 54)
+    fs = base_fs + (8 if is_hook else 0)   # HOOK boost
     common = f"text='{esc}':fontsize={fs}:x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=8"
     box = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55"
     main= f"drawtext={common}:fontcolor={color}:borderw=4:bordercolor=black"
@@ -272,6 +323,21 @@ def concat_audios(files: List[str], outp: str):
     with open(lst,"w") as f:
         for p in files: f.write(f"file '{p}'\n")
     run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-af","volume=0.95,dynaudnorm", outp])
+
+# toplam süreyi hedef aralığa çek
+total_dur = ffprobe_dur(acat)
+if total_dur < TARGET_MIN_SEC:
+    deficit = min(TARGET_MAX_SEC, TARGET_MIN_SEC) - total_dur
+    # sonda 0.5s zaten var; gerekirse extra sessizlik ekle
+    extra = max(0.0, deficit)
+    if extra > 0.05:
+        padded = str(pathlib.Path(tmp)/"audio_padded.wav")
+        run([
+            "ffmpeg","-y",
+            "-f","lavfi","-t",f"{extra:.2f}","-i","anullsrc=r=44100:cl=mono",
+            "-i", acat, "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", padded
+        ])
+        acat = padded
 
 def mux(video: str, audio: str, outp: str):
     run(["ffmpeg","-y","-i",video,"-i",audio,"-map","0:v:0","-map","1:a:0",
@@ -470,51 +536,55 @@ def fallback_content(mode: str, lang: str, seed: int) -> dict:
 
 # ---------------- Gemini helpers ----------------
 GEMINI_TEMPLATES = {
-    "_default": """You are a senior YouTube Shorts writer and SEO strategist.
-Write a tightly scripted 35–45s SHORT in ENGLISH.
-Return STRICT JSON with keys:
+  "_default": """You are a senior YouTube Shorts writer & SEO lead.
+Goal: a cohesive, cinematic 22–28s vertical short in ENGLISH.
+
+Write a 6–8 beat micro-script. Each beat = 1 sentence, 8–14 words.
+Structure:
+1) HOOK (problem, paradox, or bold claim)
+2) SETUP (where/when/context)
+3) TURN (complication / contrast)
+4) DETAIL (sensory or concrete image)
+5) REVEAL (insight or fact)
+6) PAYOFF (resolution or takeaway)
+7) CTA (reflective question)
+
+Return STRICT JSON only:
 {
- "country": "<optional, or thematic>",
- "topic": "<specific, punchy, unique>",
- "sentences": ["<3-5 short lines, max ~12 words each>", "..."],
- "search_terms": ["<6-10 pexels queries tuned for vertical b-roll>", "..."],
- "title": "<<=100 chars, hooks + relevant keywords, no emojis>",
- "description": "<~1000 chars, clean, no hashtags, no 'generated' wording>",
- "tags": ["<8-15 short SEO tags>", "..."]
+ "country": "<theme or 'World'>",
+ "topic": "<specific, unique title seed>",
+ "sentences": ["<beat1>", "<beat2>", "..."],   // 6–8 items
+ "search_terms": ["vertical 4k b-roll terms for generic stock"],
+ "title": "<<=95, SEO with primary keyphrase, no emojis>",
+ "description": "<900–1100 chars, natural, 2–3 keyphrases woven in, no hashtags>",
+ "tags": ["10–15 short SEO tags"]
 }
-Rules:
-- Family-friendly, neutral, no medical/financial advice.
-- Avoid repeating generic phrasing like '3 facts'.
-- Sentences must be visually matchable to generic stock b-roll (avoid niche references).
-- Description should be ~800–1100 chars, natural human tone, no emojis/hashtags.
-- JSON ONLY. No code fences.""",
-    "daily_news": """You are a concise global news editor for YouTube Shorts.
-Create a 35–45s English script with 3–4 crisp headlines and a call to action.
-Return STRICT JSON (country, topic, sentences, search_terms, title, description ~1000 chars, tags 10–15).
-B-roll terms generic: "newsroom 4k", "city skyline timelapse", etc. JSON only.""",
-    "tech_news":  """Summarize 3–4 tech/AI items for a 35–45s short.
-JSON only: country, topic, sentences, search_terms, title, description ~1000 chars, tags.""",
-    "space_news": """Summarize 3–4 space/astronomy items (missions, discoveries).
-JSON only: country, topic, sentences, search_terms, title, description ~1000 chars, tags.""",
-    "sports_news": """3–4 global sports headlines (no betting). JSON only with all fields.""",
-    "cricket_women": """3–4 headlines about women's cricket (WPL, ICC, national). JSON only with all fields.""",
-    "animal_facts": """Pick an animal and write 4–5 crisp, kid-safe facts + 1 CTA line.
-JSON only: country='Nature', topic, sentences, search_terms (avoid niche terms; prefer 'wildlife close-up','forest 4k'), title, description ~1000, tags.""",
-    "country_facts": """Pick a country or region and write 4 facts + 1 engaging question. JSON only with all fields.""",
-    "quotes": """Pick one famous quote (public domain or generic) and explain meaning in 2 lines + 1 reflection. JSON only.""",
-    "taxwise_usa": """Give 3–4 short US tax tips + 1 disclaimer ('education only'), no advice. JSON only.""",
-    "horror_story": """3-line eerie micro story (no gore). JSON only.""",
-    "myth_gods": """3 'what if myth gods met' lines; epic, concise. JSON only.""",
-    "post_apoc": """3 lines post-apocalyptic micro fiction; safe. JSON only.""",
-    "ai_alt": """3 lines imagining AI among us; witty, safe. JSON only.""",
-    "utopic_tech": """3 hopeful near-future tech lines. JSON only.""",
-    "history_story": """3 lines surprising historical anecdote. JSON only.""",
-    "fame_story": """3 lines about celebrity backstory without naming real individuals. JSON only.""",
-    "nostalgia_story": """3 lines of nostalgic retro observations. JSON only.""",
-    "kids_story": """3 lines wholesome kids micro-story. JSON only.""",
-    "fixit_fast": """3 quick repair tips; safe, household items. JSON only.""",
-    "alt_universe": """3 'if X were in Y universe' lines (generic). JSON only.""",
-    "if_lived_today": """3 'if a historical figure lived today' generic lines (no names). JSON only."""
+
+Constraints:
+- Family-friendly. No medical/financial advice. No copyrighted lyrics/scripts.
+- Lines must be matchable with generic stock b-roll (avoid niche proper nouns).
+- Never repeat recent topics.
+JSON ONLY.""",
+
+  "daily_news": """... (aynı yapı, 6–7 headline beat + neutral tone, newsroom b-roll terms)""",
+  "tech_news":  """...""",
+  "space_news": """...""",
+  "sports_news": """...""",
+  "cricket_women": """... include 'women cricket' etc.""",
+  "animal_facts": """Pick one animal; 6–7 beats (hook→facts→payoff→question); b-roll generic wildlife.""",
+  "country_facts": """Pick one country; 6–7 beats; b-roll: city skyline, culture close-ups, nature 4k.""",
+  "quotes": """One quote (public domain / generic). Explain via 6–7 beats; 'Wisdom' theme.""",
+  "taxwise_usa": """3–4 tips + examples + disclaimer among 6–7 beats; 'education only'.""",
+  "horror_story": """Eerie micro fiction, PG-13, 6–7 beats; abandoned interiors, dust beams, slow zooms.""",
+  "history_story": """Surprising anecdote (no sensitive live persons); 6–7 beats.""",
+  "fame_story": """Celebrity tropes without real names; 6–7 beats.""",
+  "nostalgia_story": """Retro vibes; 6–7 beats.""",
+  "kids_story": """Wholesome; 6–7 beats.""",
+  "fixit_fast": """3 quick repairs across 6–7 beats; household safe items.""",
+  "alt_universe": """What-if fun across 6–7 beats; generic references.""",
+  "if_lived_today": """Historical-style archetype without naming real people; 6–7 beats.""",
+  "utopic_tech": """Hopeful near-future across 6–7 beats; generic tech b-roll terms.""",
+  "ai_alt": """AI among us; witty but safe; 6–7 beats."""
 }
 
 def _gemini_call(prompt: str, model: str) -> dict:
@@ -703,7 +773,7 @@ def main():
         base = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
         make_segment(clips[i%len(clips)], d, base)
         colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
-        draw_capcut_text(base, s, CAPTION_COLORS[i%len(CAPTION_COLORS)], font, colored)
+        draw_capcut_text(base, s, CAPTION_COLORS[i%len(CAPTION_COLORS)], font, colored, is_hook=(i==0))
         segs.append(colored)
 
     # 5) concat video & audio
@@ -737,3 +807,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
