@@ -146,7 +146,7 @@ channels:
 
   - name: One Day Inside
     env: One Day Inside
-    enabled: true
+    enabled: false
     mode: post_apoc
     lang: en
     visibility: public
@@ -162,7 +162,7 @@ channels:
 
   - name: Microworld Stories
     env: Microworld Stories
-    enabled: true
+    enabled: false
     mode: kids_story
     lang: en
     visibility: public
