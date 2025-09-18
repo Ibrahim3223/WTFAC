@@ -10,7 +10,7 @@ channels:
 
   - name: Tales of The Forgetten Realms
     env: Tales of The Forgetten Realms
-    enabled: true
+    enabled: false
     mode: history_story
     lang: en
     visibility: public
@@ -26,7 +26,7 @@ channels:
 
   - name: TaxWise USA
     env: TaxWise USA
-    enabled: true
+    enabled: false
     mode: taxwise_usa
     lang: en
     visibility: public
@@ -66,7 +66,7 @@ channels:
 
   - name: If They Lived Today
     env: If They Lived Today
-    enabled: true
+    enabled: false
     mode: if_lived_today
     lang: en
     visibility: public
@@ -90,7 +90,7 @@ channels:
 
   - name: GalacticUpdate
     env: GalacticUpdate
-    enabled: true
+    enabled: false
     mode: space_news
     lang: en
     visibility: public
@@ -146,7 +146,7 @@ channels:
 
   - name: One Day Inside
     env: One Day Inside
-    enabled: false
+    enabled: true
     mode: post_apoc
     lang: en
     visibility: public
@@ -162,7 +162,7 @@ channels:
 
   - name: Microworld Stories
     env: Microworld Stories
-    enabled: false
+    enabled: true
     mode: kids_story
     lang: en
     visibility: public
@@ -194,7 +194,7 @@ channels:
 
   - name: GameDay 60
     env: GameDay 60
-    enabled: true
+    enabled: false
     mode: sports_news
     lang: en
     visibility: public
