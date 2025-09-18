@@ -10,7 +10,7 @@ channels:
 
   - name: Tales of The Forgetten Realms
     env: Tales of The Forgetten Realms
-    enabled: false
+    enabled: true
     mode: history_story
     lang: en
     visibility: public
@@ -26,7 +26,7 @@ channels:
 
   - name: TaxWise USA
     env: TaxWise USA
-    enabled: false
+    enabled: true
     mode: taxwise_usa
     lang: en
     visibility: public
@@ -66,7 +66,7 @@ channels:
 
   - name: If They Lived Today
     env: If They Lived Today
-    enabled: false
+    enabled: true
     mode: if_lived_today
     lang: en
     visibility: public
@@ -90,7 +90,7 @@ channels:
 
   - name: GalacticUpdate
     env: GalacticUpdate
-    enabled: false
+    enabled: true
     mode: space_news
     lang: en
     visibility: public
@@ -98,7 +98,7 @@ channels:
 
   - name: Cinematic Echo
     env: Cinematic Echo
-    enabled: true
+    enabled: false
     mode: quotes           # telif riskini azaltmak için yorum + stock b-roll
     lang: en
     visibility: public
@@ -186,7 +186,7 @@ channels:
 
   - name: FixIt Fast
     env: FixIt Fast
-    enabled: true
+    enabled: false
     mode: fixit_fast
     lang: en
     visibility: public
@@ -194,7 +194,7 @@ channels:
 
   - name: GameDay 60
     env: GameDay 60
-    enabled: false
+    enabled: true
     mode: sports_news
     lang: en
     visibility: public
