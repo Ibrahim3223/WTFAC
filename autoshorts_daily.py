@@ -30,26 +30,26 @@ except ImportError:
     from google.auth.transport.requests import Request
 
 # ---------------- config ----------------
-CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE         = os.getenv("MODE", "country_facts").strip().lower()
-LANG         = os.getenv("LANG", "en")
-VISIBILITY   = os.getenv("VISIBILITY", "public")  # public | unlisted | private
+CHANNEL_NAME  = os.getenv("CHANNEL_NAME", "DefaultChannel")
+MODE          = os.getenv("MODE", "country_facts").strip().lower()
+LANG          = os.getenv("LANG", "en")
+VISIBILITY    = os.getenv("VISIBILITY", "public")  # public | unlisted | private
 ROTATION_SEED = int(os.getenv("ROTATION_SEED", "0"))
 OUT_DIR = "out"
 pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
 # APIs / keys
-PEXELS_API_KEY  = os.getenv("PEXELS_API_KEY", "")
-GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
-USE_GEMINI      = os.getenv("USE_GEMINI", "0") == "1"
-GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  # e.g., gemini-1.5-flash, gemini-2.5-flash
-GEMINI_PROMPT   = os.getenv("GEMINI_PROMPT", "").strip() or None
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+USE_GEMINI     = os.getenv("USE_GEMINI", "0") == "1"
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  # e.g., gemini-1.5-flash, gemini-2.5-flash
+GEMINI_PROMPT  = os.getenv("GEMINI_PROMPT", "").strip() or None
 
-VOICE = os.getenv("TTS_VOICE", "en-US-AriaNeural")
+VOICE      = os.getenv("TTS_VOICE", "en-US-AriaNeural")
 VOICE_RATE = os.getenv("TTS_RATE", "+10%")
 
-TARGET_FPS = 30
-CRF_VISUAL = 20
+TARGET_FPS     = 30
+CRF_VISUAL     = 20
 CAPTION_COLORS = ["#FFD700","#FF6B35","#00F5FF","#32CD32","#FF1493","#1E90FF"]
 CAPTION_MAX_LINE = 25
 
@@ -94,6 +94,10 @@ def clean_caption_text(s: str) -> str:
     t = re.sub(r'\s+',' ', t)
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
+    # mobil okunabilirliği artır: çok uzun cümleleri kısalt
+    words = t.split()
+    if len(words) > 18:
+        t = " ".join(words[:18]).rstrip(",.;:") + "…"
     return t.strip()
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
@@ -273,7 +277,7 @@ def mux(video: str, audio: str, outp: str):
     run(["ffmpeg","-y","-i",video,"-i",audio,"-map","0:v:0","-map","1:a:0",
          "-c:v","copy","-c:a","aac","-b:a","192k","-movflags","+faststart","-shortest", outp])
 
-# ---------------- local fallback content (minimal) ----------------
+# ---------------- local fallback content (country bank) ----------------
 SCRIPT_BANK = {
     "Turkey": {
         "topic": "Amazing Turkey Facts",
@@ -340,14 +344,132 @@ def pick_country_for_today() -> dict:
     country = ROTATION[idx]
     return {"country": country, **SCRIPT_BANK[country]}
 
-def build_fallback_content():
-    info = pick_country_for_today()
-    return info["country"], info["topic"], info["sentences"], info["search_terms"], None, None, None
-    # returns (..., title, description, tags) as None → later built if needed
+# ---------------- robust per-mode fallback ----------------
+def _today_seeded_rng(extra_seed: int = 0):
+    base = datetime.date.today().toordinal()
+    return random.Random(base + int(extra_seed or 0))
+
+def fallback_content(mode: str, lang: str, seed: int) -> dict:
+    rng = _today_seeded_rng(seed)
+
+    def _mk(country, topic, sentences, terms):
+        return {
+            "country": country, "topic": topic,
+            "sentences": [clean_caption_text(s) for s in sentences][:5],
+            "search_terms": terms
+        }
+
+    if mode == "animal_facts":
+        animals = [
+            "Dolphin", "Elephant", "Cheetah", "Owl", "Gorilla",
+            "Red Panda", "Humpback Whale", "Sea Turtle", "Wolf", "Koala",
+            "Penguin", "Octopus", "Giraffe", "Tiger", "Polar Bear"
+        ]
+        a = rng.choice(animals)
+        s = [
+            f"{a}s communicate with distinct calls.",
+            f"They have unique adaptations for survival.",
+            f"They form social bonds and show learning.",
+            f"Their diet changes with habitat and season.",
+            f"Have you ever seen a {a} up close?"
+        ]
+        terms = [f"{a.lower()} 4k portrait", "wildlife 4k", "nature close up", "animal b-roll"]
+        return _mk(a, f"{a} Facts", s, terms)
+
+    if mode in ("daily_news","tech_news","space_news","sports_news","cricket_women"):
+        topic = {
+            "daily_news": "World Briefing",
+            "tech_news":  "Tech Briefing",
+            "space_news": "Space Briefing",
+            "sports_news":"Sports Briefing",
+            "cricket_women":"Women’s Cricket Briefing"
+        }[mode]
+        base = [
+            "Top headline today.",
+            "Another story shaping the day.",
+            "A development you should know.",
+            "One more quick update.",
+            "Which story matters most to you?"
+        ]
+        # kısalt
+        s = [clean_caption_text(x) for x in base][:5]
+        terms = ["newsroom 4k","city timelapse portrait","typing closeup 4k","press conference 4k"]
+        if mode == "cricket_women":
+            terms = ["cricket women 4k","stadium 4k portrait","sports crowd 4k","training 4k"]
+        if mode == "space_news":
+            terms = ["rocket launch 4k","night sky 4k portrait","mission control 4k","earth from space 4k"]
+        if mode == "tech_news":
+            terms = ["data center 4k","robotics lab 4k","coding closeup 4k","chip factory 4k"]
+        if mode == "sports_news":
+            terms = ["stadium 4k portrait","training 4k","scoreboard 4k","crowd 4k"]
+        return _mk("World", topic, s, terms)
+
+    if mode in ("quotes","history_story","fame_story","nostalgia_story","kids_story",
+                "horror_story","post_apoc","ai_alt","utopic_tech","alt_universe","if_lived_today","taxwise_usa","fixit_fast","country_facts","default"):
+        if mode == "country_facts" or mode == "default":
+            x = pick_country_for_today()
+            return _mk(x["country"], x["topic"], x["sentences"], x["search_terms"])
+
+        # kısa fallback’ler (görsel uyumlu)
+        if mode == "quotes":
+            s = ["'Knowledge is power' means using facts well.","It’s not about knowing everything.","It’s about action on what you know.","What will you do today?"]
+            terms = ["book closeup 4k","library 4k portrait","thinking person 4k","city walk 4k"]
+            return _mk("Wisdom","Famous Quote Explained",s,terms)
+        if mode == "history_story":
+            s = ["A hidden tunnel under a marketplace.","Smugglers once used it at night.","Decades later, it guided a rescue.","History still echoes under our feet."]
+            terms = ["old city 4k","archive 4k","narrow streets 4k","lantern 4k"]
+            return _mk("History","Forgotten Passage",s,terms)
+        if mode == "fame_story":
+            s = ["Before fame, the craft was everything.","Years of trial shaped the style.","One moment turned practice into legacy.","What discipline are you building today?"]
+            terms = ["stage lights 4k","studio 4k","microphone 4k","backstage 4k"]
+            return _mk("Story","Behind The Fame",s,terms)
+        if mode == "nostalgia_story":
+            s = ["Cassette wheels turning slowly.","Fuzzy TV glow on the wall.","Arcade coins in a pocket.","What do you miss most?"]
+            terms = ["retro tv 4k","arcade 4k portrait","cassette 4k","old radio 4k"]
+            return _mk("Retro","Rewind Feels",s,terms)
+        if mode == "kids_story":
+            s = ["A tiny seed wanted sunlight.","Clouds moved—and made space.","The seed grew brave and tall.","What will you grow today?"]
+            terms = ["cartoon clouds 4k","sunlight 4k","sprout 4k","kid drawing 4k"]
+            return _mk("Kids","Sunny Seed",s,terms)
+        if mode == "horror_story":
+            s = ["Keys rattled on the empty table.","A door sighed without wind.","Then my phone lit up: 'I’m home.'","I live alone."]
+            terms = ["dark hallway 4k","flicker light 4k","empty room 4k","rain window 4k"]
+            return _mk("Story","Three Quiet Sounds",s,terms)
+        if mode == "post_apoc":
+            s = ["We traded batteries like gold.","Maps were stories in our heads.","Silence had a weather.","Would you keep a journal?"]
+            terms = ["abandoned city 4k","dust road 4k","gas mask 4k portrait","rust 4k"]
+            return _mk("Story","After The Siren",s,terms)
+        if mode == "ai_alt":
+            s = ["The coffee machine knows my order.","It asks about my mood first.","I change it to 'surprise me.'","It smiles on the tiny screen."]
+            terms = ["robot 4k","smart home 4k","city tech 4k","typing 4k"]
+            return _mk("AI","Coffee Protocol",s,terms)
+        if mode == "utopic_tech":
+            s = ["Solar roads power free transit.","Clean air is a public utility.","Workweeks focus on learning.","What would you build first?"]
+            terms = ["futuristic city 4k","solar panels 4k","clean energy 4k","autonomous bus 4k"]
+            return _mk("Future","Better Tomorrow",s,terms)
+        if mode == "alt_universe":
+            s = ["If pirates coded in Java.","If wizards ran DNS.","If dragons loved patch notes.","Which universe do you ship?"]
+            terms = ["fantasy city 4k","computer code 4k","scrolls 4k","portal 4k"]
+            return _mk("WhatIf","Universe Jump",s,terms)
+        if mode == "if_lived_today":
+            s = ["A thinker would start a newsletter.","A conqueror would run logistics.","A painter would launch a channel.","How would you start?"]
+            terms = ["city coworking 4k","warehouse 4k","studio lights 4k","typing 4k"]
+            return _mk("WhatIf","If They Lived Today",s,terms)
+        if mode == "taxwise_usa":
+            s = ["Save receipts digitally.","Track deductible categories early.","Understand standard vs itemized.","Education only—no advice."]
+            terms = ["office desk 4k","calculator 4k","documents 4k","typing 4k"]
+            return _mk("USA","TaxWise USA",s,terms)
+        if mode == "fixit_fast":
+            s = ["Unplug before touching anything.","Take a phone photo before disassembly.","Label screws by step.","Test safely and reassemble slow."]
+            terms = ["toolbox 4k","workbench 4k","hands closeup 4k","screws 4k"]
+            return _mk("DIY","Fix It Fast",s,terms)
+
+    # son çare: country_facts
+    x = pick_country_for_today()
+    return _mk(x["country"], x["topic"], x["sentences"], x["search_terms"])
 
 # ---------------- Gemini helpers ----------------
 GEMINI_TEMPLATES = {
-    # Varsayılan şablon (mode'a özgü prompt yoksa)
     "_default": """You are a senior YouTube Shorts writer and SEO strategist.
 Write a tightly scripted 35–45s SHORT in ENGLISH.
 Return STRICT JSON with keys:
@@ -361,69 +483,64 @@ Return STRICT JSON with keys:
  "tags": ["<8-15 short SEO tags>", "..."]
 }
 Rules:
-- Family-friendly, no profanity, no medical/financial advice.
+- Family-friendly, neutral, no medical/financial advice.
 - Avoid repeating generic phrasing like '3 facts'.
 - Sentences must be visually matchable to generic stock b-roll (avoid niche references).
-- The description must read like a natural human writeup (~800–1100 chars), no hashtags, no emojis.
-- Do NOT include code fences or extra text, JSON only.
-""",
+- Description should be ~800–1100 chars, natural human tone, no emojis/hashtags.
+- JSON ONLY. No code fences.""",
     "daily_news": """You are a concise global news editor for YouTube Shorts.
 Create a 35–45s English script with 3–4 crisp headlines and a call to action.
-Return STRICT JSON: country, topic, sentences, search_terms, title, description (~1000 chars), tags (10–15 items).
-No emojis, no hashtags; neutral tone. B-roll terms should be generic newsroom visuals: "newsroom 4k", "city skyline timelapse", etc.
-JSON only.""",
-    "tech_news": """Summarize 3–4 tech/AI items for a 35–45s short.
-JSON only with fields: country, topic, sentences, search_terms, title, description (~1000 chars), tags (10–15).""",
+Return STRICT JSON (country, topic, sentences, search_terms, title, description ~1000 chars, tags 10–15).
+B-roll terms generic: "newsroom 4k", "city skyline timelapse", etc. JSON only.""",
+    "tech_news":  """Summarize 3–4 tech/AI items for a 35–45s short.
+JSON only: country, topic, sentences, search_terms, title, description ~1000 chars, tags.""",
     "space_news": """Summarize 3–4 space/astronomy items (missions, discoveries).
-Return JSON: country, topic, sentences, search_terms, title, description (~1000 chars), tags.""",
-    "sports_news": """3–4 global sports headlines (no betting).
-Return JSON: country, topic, sentences, search_terms, title, description (~1000 chars), tags.""",
-    "cricket_women": """3–4 headlines about women's cricket (WPL, ICC, national).
-Return JSON: country, topic, sentences, search_terms (include 'cricket women'), title, description (~1000 chars), tags.""",
+JSON only: country, topic, sentences, search_terms, title, description ~1000 chars, tags.""",
+    "sports_news": """3–4 global sports headlines (no betting). JSON only with all fields.""",
+    "cricket_women": """3–4 headlines about women's cricket (WPL, ICC, national). JSON only with all fields.""",
     "animal_facts": """Pick an animal and write 4–5 crisp, kid-safe facts + 1 CTA line.
-Return JSON: country='Nature', topic, sentences, search_terms, title, description (~1000 chars), tags.
-Avoid niche species names in search_terms; prefer 'wildlife close-up', 'forest 4k', 'savannah 4k'.""",
-    "country_facts": """Pick a country or region and write 4 facts + 1 engaging question.
-Return JSON: country, topic, sentences, search_terms, title, description (~1000 chars), tags.
-Facts must be b-roll friendly and generally known; no obscure claims.""",
-    "quotes": """Pick one famous quote (public domain or generic) and explain meaning in 2 lines + 1 reflection line.
-Return JSON: country='Wisdom', topic, sentences, search_terms, title, description (~1000 chars), tags.""",
-    "taxwise_usa": """Give 3–4 short US tax tips + 1 disclaimer ('education only'), no advice.
-Return JSON: country='USA', topic, sentences, search_terms, title, description (~1000 chars), tags.""",
-    "horror_story": """Write a 3-line eerie micro story (no gore). JSON: country='Story', topic, sentences, search_terms, title, description (~1000), tags.""",
-    "myth_gods": """Write 3 'what if myth gods met' lines; epic, concise. JSON as above.""",
-    "post_apoc": """Write 3 lines post-apocalyptic micro fiction; safe. JSON as above.""",
-    "ai_alt": """Write 3 lines imagining AI among us; witty, safe. JSON as above.""",
-    "utopic_tech": """Write 3 hopeful near-future tech lines. JSON as above.""",
-    "history_story": """3 lines surprising historical anecdote (no real persons' sensitive info). JSON as above.""",
-    "fame_story": """3 lines about celebrity backstory without naming real individuals. JSON as above.""",
-    "nostalgia_story": """3 lines of nostalgic retro observations. JSON as above.""",
-    "kids_story": """3 lines wholesome kids micro-story. JSON as above.""",
-    "fixit_fast": """3 quick repair tips; safe, household items. JSON as above.""",
-    "alt_universe": """3 'if X were in Y universe' lines (generic). JSON as above.""",
-    "if_lived_today": """3 'if a historical figure lived today' generic lines (no names). JSON as above."""
+JSON only: country='Nature', topic, sentences, search_terms (avoid niche terms; prefer 'wildlife close-up','forest 4k'), title, description ~1000, tags.""",
+    "country_facts": """Pick a country or region and write 4 facts + 1 engaging question. JSON only with all fields.""",
+    "quotes": """Pick one famous quote (public domain or generic) and explain meaning in 2 lines + 1 reflection. JSON only.""",
+    "taxwise_usa": """Give 3–4 short US tax tips + 1 disclaimer ('education only'), no advice. JSON only.""",
+    "horror_story": """3-line eerie micro story (no gore). JSON only.""",
+    "myth_gods": """3 'what if myth gods met' lines; epic, concise. JSON only.""",
+    "post_apoc": """3 lines post-apocalyptic micro fiction; safe. JSON only.""",
+    "ai_alt": """3 lines imagining AI among us; witty, safe. JSON only.""",
+    "utopic_tech": """3 hopeful near-future tech lines. JSON only.""",
+    "history_story": """3 lines surprising historical anecdote. JSON only.""",
+    "fame_story": """3 lines about celebrity backstory without naming real individuals. JSON only.""",
+    "nostalgia_story": """3 lines of nostalgic retro observations. JSON only.""",
+    "kids_story": """3 lines wholesome kids micro-story. JSON only.""",
+    "fixit_fast": """3 quick repair tips; safe, household items. JSON only.""",
+    "alt_universe": """3 'if X were in Y universe' lines (generic). JSON only.""",
+    "if_lived_today": """3 'if a historical figure lived today' generic lines (no names). JSON only."""
 }
 
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
-    payload = {
-        "contents":[{"parts":[{"text": prompt}]}],
-        "generationConfig":{"temperature":0.8}
-    }
+    payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.8}}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     r = requests.post(url, headers=headers, json=payload, timeout=60)
     if r.status_code != 200:
         raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
     data = r.json()
+    # metni çıkar
+    txt = ""
     try:
         txt = data["candidates"][0]["content"]["parts"][0]["text"]
-        txt = re.sub(r"^```json\s*|\s*```$", "", txt.strip(), flags=re.MULTILINE)
-        parsed = json.loads(txt)
-        return parsed
     except Exception:
-        raise RuntimeError("Gemini response parse error")
+        # bazı yanıt formatları farklı
+        txt = json.dumps(data)
+    # JSON parçayı bul
+    m = re.search(r"\{(?:.|\n)*\}", txt)
+    if not m:
+        raise RuntimeError("Gemini response parse error (no JSON)")
+    raw = m.group(0).strip()
+    raw = re.sub(r"^```json\s*|\s*```$", "", raw, flags=re.MULTILINE)
+    return json.loads(raw)
 
 def _gemini_prompt_for_mode(mode: str, channel_name: str, banlist: List[str], custom: Optional[str]) -> str:
     base = custom if custom else GEMINI_TEMPLATES.get(mode, GEMINI_TEMPLATES["_default"])
@@ -440,14 +557,20 @@ Return JSON ONLY. No code fences, no extra text.
 def build_via_gemini(mode: str, channel_name: str, banlist: List[str]) -> tuple:
     prompt = _gemini_prompt_for_mode(mode, channel_name, banlist, GEMINI_PROMPT)
     data = _gemini_call(prompt, GEMINI_MODEL)
+
     country = str(data.get("country") or "World").strip()
-    topic = str(data.get("topic") or "Daily Short").strip()
+    topic   = str(data.get("topic") or "Daily Short").strip()
+
+    # sentences
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
     sentences = [s for s in sentences if s][:5] or ["This is a short.","Please retry.","Thanks."]
+
+    # search terms
     terms = data.get("search_terms") or []
     terms = [t.strip() for t in terms if t.strip()]
     if not terms:
         terms = ["city skyline 4k","typing closeup","nature 4k","silhouette","timelapse","drone 4k"]
+
     title = (data.get("title") or "").strip()
     description = (data.get("description") or "").strip()
     tags = data.get("tags") or []
@@ -499,7 +622,6 @@ def build_metadata_fallback(country: str, topic: str, sentences: list, visibilit
     title = f"{hook} — {country}"
     if len(title) > 95:
         title = f"{topic} — {country}"
-    # daha doğal açıklama, ~700-1000 karakter hedef; burada kısa tutuyoruz, Gemini varken kullanılmayacak çoğunlukla
     description = (
         f"{topic} — {country}. "
         f"{' '.join(sentences[:4])}\n\n"
@@ -521,7 +643,7 @@ def build_metadata_fallback(country: str, topic: str, sentences: list, visibilit
 def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE}")
 
-    # 1) İçerik seçimi (Gemini → de-dup; fallback yerel)
+    # 1) İçerik seçimi (Gemini → de-dup; moda uygun fallback)
     if USE_GEMINI and GEMINI_API_KEY:
         banlist = _recent_topics_for_prompt()
         MAX_TRIES = 6
@@ -544,19 +666,26 @@ def main():
                 print("⚠️ Gemini failed once:", str(e)[:200])
                 time.sleep(1.0)
         if chosen is None:
-            # Yine de son geleni kullan
-            ctry, tpc, sents, terms, ttl, desc, tags = last if last else build_fallback_content()
-        else:
-            ctry, tpc, sents, terms, ttl, desc, tags = chosen
+            if last is not None:
+                print("Gemini returned but all were recent → using last unique-ish result.")
+                ctry, tpc, sents, terms, ttl, desc, tags = last
+            else:
+                print("Gemini unavailable → using mode-specific fallback.")
+                fb = fallback_content(MODE, LANG, ROTATION_SEED)
+                ctry, tpc, sents, terms = fb["country"], fb["topic"], fb["sentences"], fb["search_terms"]
+                ttl = desc = ""; tags = []
     else:
-        ctry, tpc, sents, terms, ttl, desc, tags = build_fallback_content()
+        print("USE_GEMINI disabled or API key missing → using mode-specific fallback.")
+        fb = fallback_content(MODE, LANG, ROTATION_SEED)
+        ctry, tpc, sents, terms = fb["country"], fb["topic"], fb["sentences"], fb["search_terms"]
+        ttl = desc = ""; tags = []
 
     print(f"   Content: {ctry} | {tpc}")
-    sentences = sents
+    sentences    = sents
     search_terms = terms
 
     # 2) TTS per sentence
-    tmp = tempfile.mkdtemp(prefix="shorts_")
+    tmp  = tempfile.mkdtemp(prefix="shorts_")
     font = font_path()
     wavs=[]; metas=[]
     for i, s in enumerate(sentences):
@@ -564,8 +693,10 @@ def main():
         dur = tts_to_wav(s, w)
         wavs.append(w); metas.append((s,dur))
         time.sleep(0.25)  # rate limit
+
     # 3) Pexels
     clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
+
     # 4) Per sentence segment + text overlay (center, CapCut-ish)
     segs=[]
     for i,(s,d) in enumerate(metas):
@@ -574,9 +705,11 @@ def main():
         colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
         draw_capcut_text(base, s, CAPTION_COLORS[i%len(CAPTION_COLORS)], font, colored)
         segs.append(colored)
+
     # 5) concat video & audio
     vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
     acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
+
     # 6) mux + save
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Daily_Short"
