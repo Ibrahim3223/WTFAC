@@ -3,7 +3,8 @@
 import os, sys, re, json, time, uuid, random, datetime, tempfile, pathlib, subprocess, hashlib
 from dataclasses import dataclass
 from typing import List, Optional
-VOICE_STYLE = os.getenv("TTS_STYLE", "narration-professional")
+
+VOICE_STYLE = os.getenv("TTS_STYLE", "narration-professional")  # not used by edge-tts; kept for future SSML
 TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "28"))
 
@@ -45,7 +46,7 @@ pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "0") == "1"
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  # e.g., gemini-1.5-flash, gemini-2.5-flash
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_PROMPT  = os.getenv("GEMINI_PROMPT", "").strip() or None
 
 VOICE      = os.getenv("TTS_VOICE", "en-US-AriaNeural")
@@ -82,7 +83,6 @@ def font_path():
     return ""
 
 def escape_drawtext(s: str) -> str:
-    # drawtext güvenli kaçış + \n desteği
     return (s.replace("\\","\\\\")
              .replace(":", "\\:")
              .replace(",", "\\,")
@@ -97,7 +97,6 @@ def clean_caption_text(s: str) -> str:
     t = re.sub(r'\s+',' ', t)
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
-    # mobil okunabilirliği artır: çok uzun cümleleri kısalt
     words = t.split()
     if len(words) > 18:
         t = " ".join(words[:18]).rstrip(",.;:") + "…"
@@ -156,8 +155,11 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
 
 # ---------------- TTS (Edge → Google fallback) ----------------
 def tts_to_wav(text: str, wav_out: str) -> float:
-    import asyncio, urllib.parse
-    # local helpers
+    """
+    Edge-TTS ile MP3 üret, WAV'a çevir; başarısız olursa Google Translate TTS fallback.
+    Sonuna 0.2s sessizlik pad ekler. WAV süresini döndürür.
+    """
+    import asyncio
     def _run_ff(args):
         subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
 
@@ -173,48 +175,28 @@ def tts_to_wav(text: str, wav_out: str) -> float:
 
     mp3 = wav_out.replace(".wav", ".mp3")
 
-def tts_to_wav(text: str, wav_out: str) -> float:
-    import asyncio, urllib.parse
-
-    def _run_ff(args):
-        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
-
-    def _probe(path: str, default: float = 2.5) -> float:
-        try:
-            pr = subprocess.run(
-                ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
-                capture_output=True, text=True, check=True
-            )
-            return float(pr.stdout.strip())
-        except Exception:
-            return default
-
-    mp3 = wav_out.replace(".wav", ".mp3")
-
-    # 1) EDGE-TTS (daha doğal: style + yavaş tempo)
+    # 1) EDGE-TTS (style parametresi edge-tts'te yok; rate/voice kullan)
     try:
-        nest_asyncio.apply()
-
-        async def _edge():
+        async def _edge_save():
             comm = edge_tts.Communicate(
                 text,
                 voice=VOICE,
-                rate=VOICE_RATE,            # örn. -10%
-                style=VOICE_STYLE           # narration-professional / newscast-casual
+                rate=VOICE_RATE
             )
             await comm.save(mp3)
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            fut = loop.create_task(_edge()); loop.run_until_complete(fut)
-        else:
-            loop.run_until_complete(_edge())
+        try:
+            asyncio.run(_edge_save())
+        except RuntimeError:
+            # already running loop (e.g., notebooks)
+            nest_asyncio.apply()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(_edge_save())
 
-        # WAV’a çevir
         _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
         pathlib.Path(mp3).unlink(missing_ok=True)
 
-        # cümle sonuna minik sessizlik (0.2s) ekle – daha doğal nefes hissi
+        # 0.2s pad
         pad = str(pathlib.Path(wav_out).with_suffix(".pad.wav"))
         _run_ff([
             "-f","lavfi","-t","0.20","-i","anullsrc=r=44100:cl=mono",
@@ -238,7 +220,6 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le", wav_out])
         pathlib.Path(mp3).unlink(missing_ok=True)
 
-        # aynı pad
         pad = str(pathlib.Path(wav_out).with_suffix(".pad.wav"))
         _run_ff([
             "-f","lavfi","-t","0.20","-i","anullsrc=r=44100:cl=mono",
@@ -302,7 +283,7 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     lines = wrapped.count("\n")+1
     maxchars = max(len(x) for x in wrapped.split("\n"))
     base_fs = 40 if (lines>=3 or maxchars>=26) else (48 if (lines==2 or maxchars>=20) else 54)
-    fs = base_fs + (8 if is_hook else 0)   # HOOK boost
+    fs = base_fs + (8 if is_hook else 0)
     common = f"text='{esc}':fontsize={fs}:x=(w-text_w)/2:y=(h-text_h)/2:line_spacing=8"
     box = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55"
     main= f"drawtext={common}:fontcolor={color}:borderw=4:bordercolor=black"
@@ -317,35 +298,6 @@ def concat_videos(files: List[str], outp: str):
     with open(lst,"w") as f:
         for p in files: f.write(f"file '{p}'\n")
     run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-c","copy", outp])
-
-    # 5) concat video & audio
-    vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
-    concat_videos(segs, vcat)
-
-    acat = str(pathlib.Path(tmp) / "audio_concat.wav")
-    concat_audios(wavs, acat)
-
-    # 6) toplam süreyi hedef aralığa çek (audio'ya sessiz pad)
-    total_dur = ffprobe_dur(acat)
-    if total_dur < TARGET_MIN_SEC:
-        deficit = min(TARGET_MAX_SEC, TARGET_MIN_SEC) - total_dur
-        extra = max(0.0, deficit)
-        if extra > 0.05:
-            padded = str(pathlib.Path(tmp) / "audio_padded.wav")
-            run([
-                "ffmpeg","-y",
-                "-f","lavfi","-t", f"{extra:.2f}", "-i", "anullsrc=r=44100:cl=mono",
-                "-i", acat, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1",
-                padded
-            ])
-            acat = padded  # mux'ta bunu kullan
-
-    # 7) mux + save
-    ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Daily_Short"
-    outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
-    mux(vcat, acat, outp)
-    print("Saved:", outp)
 
 def concat_audios(files: List[str], outp: str):
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -471,7 +423,6 @@ def fallback_content(mode: str, lang: str, seed: int) -> dict:
             "One more quick update.",
             "Which story matters most to you?"
         ]
-        # kısalt
         s = [clean_caption_text(x) for x in base][:5]
         terms = ["newsroom 4k","city timelapse portrait","typing closeup 4k","press conference 4k"]
         if mode == "cricket_women":
@@ -490,7 +441,6 @@ def fallback_content(mode: str, lang: str, seed: int) -> dict:
             x = pick_country_for_today()
             return _mk(x["country"], x["topic"], x["sentences"], x["search_terms"])
 
-        # kısa fallback’ler (görsel uyumlu)
         if mode == "quotes":
             s = ["'Knowledge is power' means using facts well.","It’s not about knowing everything.","It’s about action on what you know.","What will you do today?"]
             terms = ["book closeup 4k","library 4k portrait","thinking person 4k","city walk 4k"]
@@ -544,7 +494,6 @@ def fallback_content(mode: str, lang: str, seed: int) -> dict:
             terms = ["toolbox 4k","workbench 4k","hands closeup 4k","screws 4k"]
             return _mk("DIY","Fix It Fast",s,terms)
 
-    # son çare: country_facts
     x = pick_country_for_today()
     return _mk(x["country"], x["topic"], x["sentences"], x["search_terms"])
 
@@ -567,7 +516,7 @@ Return STRICT JSON only:
 {
  "country": "<theme or 'World'>",
  "topic": "<specific, unique title seed>",
- "sentences": ["<beat1>", "<beat2>", "..."],   // 6–8 items
+ "sentences": ["<beat1>", "<beat2>", "..."],
  "search_terms": ["vertical 4k b-roll terms for generic stock"],
  "title": "<<=95, SEO with primary keyphrase, no emojis>",
  "description": "<900–1100 chars, natural, 2–3 keyphrases woven in, no hashtags>",
@@ -611,14 +560,11 @@ def _gemini_call(prompt: str, model: str) -> dict:
     if r.status_code != 200:
         raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
     data = r.json()
-    # metni çıkar
     txt = ""
     try:
         txt = data["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:
-        # bazı yanıt formatları farklı
         txt = json.dumps(data)
-    # JSON parçayı bul
     m = re.search(r"\{(?:.|\n)*\}", txt)
     if not m:
         raise RuntimeError("Gemini response parse error (no JSON)")
@@ -645,11 +591,9 @@ def build_via_gemini(mode: str, channel_name: str, banlist: List[str]) -> tuple:
     country = str(data.get("country") or "World").strip()
     topic   = str(data.get("topic") or "Daily Short").strip()
 
-    # sentences
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
     sentences = [s for s in sentences if s][:5] or ["This is a short.","Please retry.","Thanks."]
 
-    # search terms
     terms = data.get("search_terms") or []
     terms = [t.strip() for t in terms if t.strip()]
     if not terms:
@@ -781,13 +725,12 @@ def main():
     # 3) Pexels
     clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
 
-    # 4) Per sentence segment + text overlay (center, CapCut-ish)
+    # 4) Per sentence segment + text overlay
     segs = []
     for i, (s, d) in enumerate(metas):
         base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(clips[i % len(clips)], d, base)
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
-        # is_hook=(i==0) ile ilk cümle fontunu biraz büyütüyorsun
         draw_capcut_text(base, s, CAPTION_COLORS[i % len(CAPTION_COLORS)], font, colored, is_hook=(i == 0))
         segs.append(colored)
 
@@ -798,7 +741,7 @@ def main():
     acat = str(pathlib.Path(tmp) / "audio_concat.wav")
     concat_audios(wavs, acat)
 
-    # 6) toplam süreyi hedef aralığa çek (BLOK BURADA OLMALI)
+    # 6) toplam süre hedef aralığına çek (audio pad)
     total_dur = ffprobe_dur(acat)
     if total_dur < TARGET_MIN_SEC:
         deficit = min(TARGET_MAX_SEC, TARGET_MIN_SEC) - total_dur
@@ -806,20 +749,21 @@ def main():
         if extra > 0.05:
             padded = str(pathlib.Path(tmp) / "audio_padded.wav")
             run([
-                "ffmpeg", "-y",
-                "-f", "lavfi", "-t", f"{extra:.2f}", "-i", "anullsrc=r=44100:cl=mono",
-                "-i", acat, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1", padded
+                "ffmpeg","-y",
+                "-f","lavfi","-t", f"{extra:.2f}", "-i", "anullsrc=r=44100:cl=mono",
+                "-i", acat, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1",
+                padded
             ])
-            acat = padded  # bundan sonra mux'ta bu kullanılacak
+            acat = padded
 
     # 7) mux + save
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Daily_Short"
+    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Daily_Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
     mux(vcat, acat, outp)
     print("Saved:", outp)
 
-    # 7) metadata (prefer Gemini’s title/desc/tags if present and sane)
+    # 8) metadata (Gemini varsa onu, yoksa fallback)
     def _ok_str(x): return isinstance(x,str) and len(x.strip())>0
     if _ok_str(ttl) and _ok_str(desc):
         meta = {
@@ -833,12 +777,9 @@ def main():
     else:
         meta = build_metadata_fallback(ctry, tpc, sentences, visibility=VISIBILITY, lang=LANG)
 
-    # 8) upload
+    # 9) upload
     vid_id = upload_youtube(outp, meta)
     print("YouTube Video ID:", vid_id)
 
 if __name__ == "__main__":
     main()
-
-
-
