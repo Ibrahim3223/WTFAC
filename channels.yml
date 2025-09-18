@@ -42,7 +42,7 @@ channels:
 
   - name: World Briefing
     env: World Briefing
-    enabled: true
+    enabled: false
     mode: daily_news
     lang: en
     visibility: public
@@ -50,7 +50,7 @@ channels:
 
   - name: Flashback Minute
     env: Flashback Minute
-    enabled: true
+    enabled: false
     mode: history_story   # istersen on_this_day yapabiliriz
     lang: en
     visibility: public
@@ -82,7 +82,7 @@ channels:
 
   - name: Cricket Queens
     env: Cricket Queens
-    enabled: true
+    enabled: false
     mode: cricket_women
     lang: en
     visibility: public
@@ -98,7 +98,7 @@ channels:
 
   - name: Cinematic Echo
     env: Cinematic Echo
-    enabled: false
+    enabled: true
     mode: quotes           # telif riskini azaltmak için yorum + stock b-roll
     lang: en
     visibility: public
@@ -106,7 +106,7 @@ channels:
 
   - name: CritterFact
     env: CritterFact
-    enabled: true
+    enabled: false
     mode: animal_facts
     lang: en
     visibility: public
@@ -122,7 +122,7 @@ channels:
 
   - name: NextGen Update
     env: NextGen Update
-    enabled: true
+    enabled: false
     mode: tech_news
     lang: en
     visibility: public
@@ -138,7 +138,7 @@ channels:
 
   - name: BehindTheFame
     env: BehindTheFame
-    enabled: true
+    enabled: false
     mode: fame_story
     lang: en
     visibility: public
@@ -162,7 +162,7 @@ channels:
 
   - name: Microworld Stories
     env: Microworld Stories
-    enabled: true
+    enabled: false
     mode: kids_story
     lang: en
     visibility: public
@@ -186,7 +186,7 @@ channels:
 
   - name: FixIt Fast
     env: FixIt Fast
-    enabled: false
+    enabled: true
     mode: fixit_fast
     lang: en
     visibility: public
