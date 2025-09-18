@@ -1,79 +1,87 @@
-name: Daily Shorts (single channel)
+name: Daily Shorts (ALL channels)
 
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
   workflow_dispatch:
-    inputs:
-      env:
-        description: "Environment (channel) name"
-        required: true
-        default: "WT Facts About Countries"
-
-env:
-  TZ: ${{ vars.TZ }}
 
 jobs:
   build-upload:
     runs-on: ubuntu-latest
 
-    # Burada seçtiğin environment'ın (kanalın) secrets/vars'ı bağlanır
-    environment:
-      name: ${{ inputs.env }}
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Read channel matrix from channels.yml
+        id: matrix
+        run: |
+          python - << 'PY'
+          import yaml, json, sys, pathlib
+          p = pathlib.Path("channels.yml")
+          if not p.exists():
+              print("::error::channels.yml not found")
+              sys.exit(1)
+          data = yaml.safe_load(p.read_text(encoding="utf-8"))
+          chans = data.get("channels", [])
+          # sadece aktif kanalları seçmek istersen (opsiyonel): chans = [c for c in chans if c.get("active", True)]
+          print("Found channels:", len(chans))
+          print(f"::set-output name=value::{json.dumps(chans)}")
+          PY
+        shell: bash
+
+      - name: Run all channels sequentially
+        uses: nick-fields/retry@v3
         with:
-          python-version: "3.11"
+          max_attempts: 1
+          command: |
+            python -V
+            ffmpeg -version | head -n 1
+            python - << 'PY'
+            import os, json, subprocess, sys, textwrap
+            chans = json.loads(r"""${{ steps.matrix.outputs.value }}""")
+            if not isinstance(chans, list) or not chans:
+                print("No channels found in channels.yml")
+                sys.exit(1)
 
-      - name: Install FFmpeg
-        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
+            def run_one(ch):
+                env_name = ch.get("env") or ch.get("name")
+                print(f"\n=== {env_name} ===")
+                # Actions environment bağlamına geç ve secret/vars’ı al
+                # Bunu yapmak için her kanal için ayrı bir job çalıştırmak idealdir;
+                # tek job içinde sırayla çalıştırdığımız için gerekli değerleri repo secrets/vars’tan okuyacağız.
+                # Kanal bazlı YT_* değerleri environment secrets’taysa, daily.yml (tek-kanal) şablonunu kullan.
+                # Buradaki toplu koşu, **repo secrets** ile çalışan kanallar içindir.
 
-      - name: Install Python deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install edge-tts google-api-python-client google-auth google-auth-oauthlib requests nest-asyncio pyyaml
+                env = os.environ.copy()
+                env["CHANNEL_NAME"] = ch.get("name", "")
+                env["MODE"]         = ch.get("mode", "")
+                env["LANG"]         = ch.get("lang", os.getenv("DEFAULT_LANG","en"))
+                env["VISIBILITY"]   = ch.get("visibility", os.getenv("DEFAULT_VISIBILITY","public"))
+                env["ROTATION_SEED"]= str(ch.get("seed","0"))
 
-      - name: Sanity checks
-        run: |
-          python -V
-          ffmpeg -version | head -n 1
-          mkdir -p out
+                # repo-level secrets
+                # (YouTube bilgileri environment’a özelse -> bu toplu workflow yerine tek-kanal daily.yml ile çalıştırın)
+                need = ["PEXELS_API_KEY", "GEMINI_API_KEY",
+                        "YT_CLIENT_ID","YT_CLIENT_SECRET","YT_REFRESH_TOKEN"]
+                missing = [k for k in need if not os.getenv(k)]
+                if missing:
+                    print(f"Skipping {env['CHANNEL_NAME']} (missing repo secrets: {missing})")
+                    return
 
-      - name: Run generator & upload
-        env:
-          # --- ENVIRONMENT (channel) SECRETS ---
-          PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
-          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
-          YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
-          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
-          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+                print(f"-> Generating & uploading for: {env['CHANNEL_NAME']}")
+                r = subprocess.run([sys.executable, "autoshorts_daily.py"], env=env)
+                if r.returncode != 0:
+                    print(f"::warning::{env['CHANNEL_NAME']} failed with code {r.returncode}")
 
-          # --- VARS (environment vars repo vars üzerine yazılır) ---
-          USE_GEMINI:        ${{ vars.USE_GEMINI }}
-          GEMINI_MODEL:      ${{ vars.GEMINI_MODEL }}
-          TTS_VOICE:         ${{ vars.TTS_VOICE }}
-          TTS_RATE:          ${{ vars.TTS_RATE }}
-          DEFAULT_LANG:      ${{ vars.DEFAULT_LANG }}
-          DEFAULT_VISIBILITY:${{ vars.DEFAULT_VISIBILITY }}
-          ROTATION_SEED:     ${{ vars.ROTATION_SEED }}
-          GEMINI_PROMPT:     ${{ vars.GEMINI_PROMPT }}
+            for ch in chans:
+                run_one(ch)
+            PY
 
-          # --- Kanal bilgileri (script bunları okuyor) ---
-          CHANNEL_NAME: ${{ inputs.env }}
-          MODE:         ${{ vars.MODE }}
-          LANG:         ${{ vars.DEFAULT_LANG }}
-          VISIBILITY:   ${{ vars.DEFAULT_VISIBILITY }}
-        run: python autoshorts_daily.py
-
-      - name: Save video artifact
+      - name: Upload artifacts (last video if exists)
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.env }}-last-video
+          name: last-videos
           path: out/*.mp4
           if-no-files-found: ignore
