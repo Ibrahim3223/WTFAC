@@ -1,87 +1,94 @@
-name: Daily Shorts (ALL channels)
+name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 06:00 UTC ≈ 09:00 Türkiye
+    - cron: "0 6 * * *"   # 06:00 UTC
   workflow_dispatch:
 
 jobs:
-  build-upload:
+  make-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: build
+        run: |
+          python - <<'PY'
+          import os, json, yaml
+          with open("channels.yml", "r", encoding="utf-8") as f:
+              data = yaml.safe_load(f) or {}
+          items = []
+          for c in (data.get("channels") or []):
+              items.append({
+                  "name":       c.get("name"),
+                  "env":        c.get("env", c.get("name")),
+                  "mode":       c.get("mode", "country_facts"),
+                  "lang":       c.get("lang", "en"),
+                  "visibility": c.get("visibility", "public")
+              })
+          matrix = {"include": items}
+          print("Matrix size:", len(items))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as g:
+              g.write(f"matrix={json.dumps(matrix)}\n")
+          PY
+
+  build-upload:
+    needs: make-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
+
+    environment: ${{ matrix.env }}
+
+    env:
+      TZ:                ${{ vars.TZ || 'UTC' }}
+      CHANNEL_NAME:      ${{ matrix.name }}
+      MODE:              ${{ vars.MODE || matrix.mode }}
+      LANG:              ${{ vars.DEFAULT_LANG || matrix.lang }}
+      VISIBILITY:        ${{ vars.DEFAULT_VISIBILITY || matrix.visibility }}
+      TTS_VOICE:         ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
+      TTS_RATE:          ${{ vars.TTS_RATE || '+10%' }}
+      USE_GEMINI:        ${{ vars.USE_GEMINI || '0' }}
+      GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      GEMINI_PROMPT:     ${{ vars.GEMINI_PROMPT }}
+      ROTATION_SEED:     ${{ vars.ROTATION_SEED || '0' }}
+
+      PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
+      GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
+      YT_CLIENT_ID:      ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET:  ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN:  ${{ secrets.YT_REFRESH_TOKEN }}
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Read channel matrix from channels.yml
-        id: matrix
-        run: |
-          python - << 'PY'
-          import yaml, json, sys, pathlib
-          p = pathlib.Path("channels.yml")
-          if not p.exists():
-              print("::error::channels.yml not found")
-              sys.exit(1)
-          data = yaml.safe_load(p.read_text(encoding="utf-8"))
-          chans = data.get("channels", [])
-          # sadece aktif kanalları seçmek istersen (opsiyonel): chans = [c for c in chans if c.get("active", True)]
-          print("Found channels:", len(chans))
-          print(f"::set-output name=value::{json.dumps(chans)}")
-          PY
-        shell: bash
-
-      - name: Run all channels sequentially
-        uses: nick-fields/retry@v3
+      - uses: actions/setup-python@v5
         with:
-          max_attempts: 1
-          command: |
-            python -V
-            ffmpeg -version | head -n 1
-            python - << 'PY'
-            import os, json, subprocess, sys, textwrap
-            chans = json.loads(r"""${{ steps.matrix.outputs.value }}""")
-            if not isinstance(chans, list) or not chans:
-                print("No channels found in channels.yml")
-                sys.exit(1)
+          python-version: "3.11"
 
-            def run_one(ch):
-                env_name = ch.get("env") or ch.get("name")
-                print(f"\n=== {env_name} ===")
-                # Actions environment bağlamına geç ve secret/vars’ı al
-                # Bunu yapmak için her kanal için ayrı bir job çalıştırmak idealdir;
-                # tek job içinde sırayla çalıştırdığımız için gerekli değerleri repo secrets/vars’tan okuyacağız.
-                # Kanal bazlı YT_* değerleri environment secrets’taysa, daily.yml (tek-kanal) şablonunu kullan.
-                # Buradaki toplu koşu, **repo secrets** ile çalışan kanallar içindir.
+      - name: Install FFmpeg
+        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
 
-                env = os.environ.copy()
-                env["CHANNEL_NAME"] = ch.get("name", "")
-                env["MODE"]         = ch.get("mode", "")
-                env["LANG"]         = ch.get("lang", os.getenv("DEFAULT_LANG","en"))
-                env["VISIBILITY"]   = ch.get("visibility", os.getenv("DEFAULT_VISIBILITY","public"))
-                env["ROTATION_SEED"]= str(ch.get("seed","0"))
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -q edge-tts google-api-python-client google-auth google-auth-oauthlib requests nest-asyncio pyyaml
 
-                # repo-level secrets
-                # (YouTube bilgileri environment’a özelse -> bu toplu workflow yerine tek-kanal daily.yml ile çalıştırın)
-                need = ["PEXELS_API_KEY", "GEMINI_API_KEY",
-                        "YT_CLIENT_ID","YT_CLIENT_SECRET","YT_REFRESH_TOKEN"]
-                missing = [k for k in need if not os.getenv(k)]
-                if missing:
-                    print(f"Skipping {env['CHANNEL_NAME']} (missing repo secrets: {missing})")
-                    return
+      - name: Echo channel
+        run: |
+          echo "Generating & uploading for: ${{ matrix.name }}"
+          mkdir -p out
 
-                print(f"-> Generating & uploading for: {env['CHANNEL_NAME']}")
-                r = subprocess.run([sys.executable, "autoshorts_daily.py"], env=env)
-                if r.returncode != 0:
-                    print(f"::warning::{env['CHANNEL_NAME']} failed with code {r.returncode}")
+      - name: Run generator & upload
+        run: python autoshorts_daily.py
 
-            for ch in chans:
-                run_one(ch)
-            PY
-
-      - name: Upload artifacts (last video if exists)
+      - name: Save video artifact
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: last-videos
+          name: ${{ matrix.env }}-last-video
           path: out/*.mp4
           if-no-files-found: ignore
