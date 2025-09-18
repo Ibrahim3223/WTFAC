@@ -318,26 +318,40 @@ def concat_videos(files: List[str], outp: str):
         for p in files: f.write(f"file '{p}'\n")
     run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-c","copy", outp])
 
+    # 5) concat video & audio
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
+    concat_videos(segs, vcat)
+
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav")
+    concat_audios(wavs, acat)
+
+    # 6) toplam süreyi hedef aralığa çek (audio'ya sessiz pad)
+    total_dur = ffprobe_dur(acat)
+    if total_dur < TARGET_MIN_SEC:
+        deficit = min(TARGET_MAX_SEC, TARGET_MIN_SEC) - total_dur
+        extra = max(0.0, deficit)
+        if extra > 0.05:
+            padded = str(pathlib.Path(tmp) / "audio_padded.wav")
+            run([
+                "ffmpeg","-y",
+                "-f","lavfi","-t", f"{extra:.2f}", "-i", "anullsrc=r=44100:cl=mono",
+                "-i", acat, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1",
+                padded
+            ])
+            acat = padded  # mux'ta bunu kullan
+
+    # 7) mux + save
+    ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Daily_Short"
+    outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
+    mux(vcat, acat, outp)
+    print("Saved:", outp)
+
 def concat_audios(files: List[str], outp: str):
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst,"w") as f:
         for p in files: f.write(f"file '{p}'\n")
     run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-af","volume=0.95,dynaudnorm", outp])
-
-# toplam süreyi hedef aralığa çek
-total_dur = ffprobe_dur(acat)
-if total_dur < TARGET_MIN_SEC:
-    deficit = min(TARGET_MAX_SEC, TARGET_MIN_SEC) - total_dur
-    # sonda 0.5s zaten var; gerekirse extra sessizlik ekle
-    extra = max(0.0, deficit)
-    if extra > 0.05:
-        padded = str(pathlib.Path(tmp)/"audio_padded.wav")
-        run([
-            "ffmpeg","-y",
-            "-f","lavfi","-t",f"{extra:.2f}","-i","anullsrc=r=44100:cl=mono",
-            "-i", acat, "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", padded
-        ])
-        acat = padded
 
 def mux(video: str, audio: str, outp: str):
     run(["ffmpeg","-y","-i",video,"-i",audio,"-map","0:v:0","-map","1:a:0",
@@ -825,5 +839,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
