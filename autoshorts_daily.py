@@ -100,7 +100,7 @@ def create_ssml(text: str, voice: str, rate: str = "+25%", pitch: str = "+0Hz") 
     return ssml.strip()
 
 def tts_to_wav(text: str, wav_out: str) -> float:
-    """Geliştirilmiş TTS - SSML desteği ve daha doğal ses"""
+    """Agresif süre kontrollü TTS - MAX 6s per sentence"""
     import asyncio
     
     def _run_ff(args):
@@ -112,80 +112,72 @@ def tts_to_wav(text: str, wav_out: str) -> float:
                 ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
                 capture_output=True, text=True, check=True
             )
-            return float(pr.stdout.strip())
+            duration = float(pr.stdout.strip())
+            return min(duration, 6.0)  # ABSOLUTE MAX 6 seconds
         except Exception:
-            return default
+            return min(default, 6.0)
 
     mp3 = wav_out.replace(".wav", ".mp3")
 
-    # SSML ile Edge-TTS
+    # Önce basit, hızlı Edge-TTS dene (SSML'siz)
     try:
-        # SSML oluştur
-        ssml_text = create_ssml(text, VOICE, VOICE_RATE, VOICE_PITCH)
-        
-        async def _edge_save():
-            comm = edge_tts.Communicate(ssml_text, voice=VOICE)
+        async def _edge_save_fast():
+            # Çok hızlı konuşma + kısa text
+            short_text = text[:200] if len(text) > 200 else text  # Max 200 karakter
+            comm = edge_tts.Communicate(short_text, voice=VOICE, rate="+40%")  # ÇOK HIZLI
             await comm.save(mp3)
 
         try:
-            asyncio.run(_edge_save())
+            asyncio.run(_edge_save_fast())
         except RuntimeError:
             nest_asyncio.apply()
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(_edge_save())
+            loop.run_until_complete(_edge_save_fast())
 
-        # WAV'a çevir ve ses kalitesini artır
+        # WAV'a çevir + AGRESIF KESME
         _run_ff([
             "-i", mp3, 
-            "-ar", "48000",  # Daha yüksek sample rate
+            "-ar", "44100",  # Standart sample rate
             "-ac", "1", 
             "-acodec", "pcm_s16le",
-            "-af", "volume=0.9,highpass=f=80,lowpass=f=12000,dynaudnorm=g=3:f=250",  # Ses filtreleri
+            "-af", "volume=0.85,highpass=f=100,lowpass=f=8000",  # Ses temizleme
+            "-t", "6.0",  # ZORLA MAX 6s KES
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
 
-        # Daha kısa pad (0.15s)
-        pad = str(pathlib.Path(wav_out).with_suffix(".pad.wav"))
-        _run_ff([
-            "-f","lavfi","-t","0.15","-i","anullsrc=r=48000:cl=mono",
-            "-i", wav_out, "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", pad
-        ])
-        pathlib.Path(wav_out).unlink(missing_ok=True)
-        pathlib.Path(pad).rename(wav_out)
-
-        return _probe(wav_out, 2.8)
+        final_duration = _probe(wav_out, 3.0)
+        print(f"   ✅ TTS: {final_duration:.1f}s (max 6s)")
+        return final_duration
 
     except Exception as e:
-        print("⚠️ SSML TTS başarısız, normal edge-tts deneniyor:", e)
-        # Fallback to normal edge-tts
+        print(f"⚠️ Edge-TTS başarısız, Google TTS deneniyor: {e}")
+        # Google TTS fallback - ÇOOK KISA
         try:
-            async def _edge_save_simple():
-                comm = edge_tts.Communicate(text, voice=VOICE, rate=VOICE_RATE)
-                await comm.save(mp3)
-
-            try:
-                asyncio.run(_edge_save_simple())
-            except RuntimeError:
-                nest_asyncio.apply()
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(_edge_save_simple())
-
-            _run_ff(["-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le", wav_out])
-            pathlib.Path(mp3).unlink(missing_ok=True)
-            return _probe(wav_out, 2.8)
-
-        except Exception as e2:
-            print("⚠️ Edge-TTS tamamen başarısız, Google TTS fallback:", e2)
-            # Google TTS fallback (eski kod)
-            q = requests.utils.quote(text.replace('"','').replace("'",""))
-            url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.9"
+            short_text = text[:150] if len(text) > 150 else text  # Max 150 karakter
+            q = requests.utils.quote(short_text.replace('"','').replace("'",""))
+            url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=1.5"
             headers = {"User-Agent":"Mozilla/5.0"}
             r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
             open(mp3,"wb").write(r.content)
-            _run_ff(["-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le", wav_out])
+            
+            _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le",
+                     "-af", "volume=0.85,highpass=f=100,lowpass=f=8000",
+                     "-t", "6.0", wav_out])  # Max 6s limit
             pathlib.Path(mp3).unlink(missing_ok=True)
-            return _probe(wav_out, 2.8)
+            
+            final_duration = _probe(wav_out, 3.0)
+            print(f"   ✅ Google TTS: {final_duration:.1f}s")
+            return final_duration
+
+        except Exception as e2:
+            print(f"⚠️ Tüm TTS başarısız, sessizlik oluşturuluyor: {e2}")
+            # Son çare - 3 saniyelik sessizlik
+            _run_ff([
+                "-f","lavfi","-t","3.0","-i","anullsrc=r=44100:cl=mono",
+                wav_out
+            ])
+            return 3.0
 
 # ---------------- geliştirilmiş Pexels (daha kaliteli videolar) ----------------
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
@@ -235,23 +227,24 @@ def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
 
 # ---------------- geliştirilmiş video işleme ----------------
 def make_segment(src: str, dur: float, outp: str):
-    """Daha sinematik video segmenti oluştur"""
-    dur = max(0.8, dur)
-    fade = max(0.08, min(0.22, dur/5))
+    """Süre kontrollü video segmenti oluştur (ABSOLUTE MAX 5s)"""
+    # 20-40s toplam için segment başına ABSOLUTE MAX 5s
+    dur = max(0.8, min(dur, 5.0))  # Minimum 0.8s, ABSOLUTE MAX 5s
+    fade = max(0.05, min(0.12, dur/8))
     
-    # Geliştirilmiş video filtreleri
+    print(f"      📹 Segment: {dur:.1f}s (max 5s)")
+    
+    # Basit video filtreleri (hızlı işlem için)
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
-        "eq=brightness=0.03:contrast=1.12:saturation=1.15:gamma=0.95,"  # Daha canlı renkler
-        "unsharp=5:5:1.0:5:5:0.3,"  # Keskinlik artışı
-        f"fade=t=in:st=0:d={fade:.2f}:alpha=1,"
-        f"fade=t=out:st={max(0.0,dur-fade):.2f}:d={fade:.2f}:alpha=1"
+        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"  # Basit renk düzeltme
+        f"fade=t=in:st=0:d={fade:.2f},"
+        f"fade=t=out:st={max(0.0,dur-fade):.2f}:d={fade:.2f}"
     )
     
-    run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r",str(TARGET_FPS),"-an",
-         "-c:v","libx264","-preset","slow","-crf",str(CRF_VISUAL),"-pix_fmt","yuv420p",
-         "-movflags","+faststart", outp])
+    run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r","25","-an",
+         "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """Geliştirilmiş metin overlay - CapCut tarzı animasyonlu"""
@@ -337,85 +330,60 @@ ENHANCED_SCRIPT_BANK = {
 
 # Geliştirilmiş Gemini promptları
 ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """You are an elite YouTube Shorts scriptwriter with 50M+ views experience.
+    "_default": """Create a simple 20-30 second YouTube Short.
 
-GOAL: Create a viral 45-55 second vertical short that will get 1M+ views.
+REQUIREMENTS:
+- EXACTLY 5 sentences total
+- Each sentence: 4-8 words maximum
+- Simple language, no complex numbers or technical terms
+- Family-friendly content only
 
-STRUCTURE (8-12 beats, each 4-6 seconds):
-1. HOOK: Start with shocking fact/question that stops scrolling
-2. SETUP: Brief context/location 
-3. DETAIL 1: First fascinating detail with specific numbers/facts
-4. TWIST: Unexpected revelation that changes everything
-5. DETAIL 2: More mind-blowing specifics
-6. DETAIL 3: Additional compelling information
-7. CONSEQUENCE: What this means/why it matters
-8. PAYOFF: Final surprising fact or connection
-9. CTA: Question that drives engagement
-
-WRITING RULES:
-- Each sentence: 6-12 words maximum
-- Use specific numbers, dates, measurements
-- Include sensory details (sounds, colors, textures)
-- Create curiosity gaps between sentences
-- End sentences with cliffhangers when possible
-- Use "power words": secret, hidden, forbidden, ancient, impossible
-
-VIRAL ELEMENTS:
-- Start with "Did you know..." or "This is the only..."
-- Include at least 3 specific statistics
-- Reference something "scientists can't explain"
-- Mention time periods (thousands of years, centuries)
-- Use superlatives (biggest, oldest, only, most dangerous)
+STRUCTURE:
+1. Hook: "Did you know..." (something surprising)
+2. Location: "In [place]..." (brief context)
+3. Fact 1: Simple amazing fact
+4. Fact 2: Another simple fact
+5. Question: "What do you think?"
 
 Return ONLY this JSON:
 {
-  "country": "<location or theme>",
-  "topic": "<compelling title with numbers/superlatives>", 
-  "sentences": ["<8-12 sentences following structure>"],
-  "search_terms": ["<6-8 specific b-roll terms for portrait videos>"],
-  "title": "<viral title 60-80 chars with numbers/emojis>",
-  "description": "<1200-1500 chars with storytelling, 3+ related keywords>",
-  "tags": ["<15 trending hashtag-style tags>"]
+  "country": "<simple location name>",
+  "topic": "<simple title>", 
+  "sentences": ["<exactly 5 simple sentences>"],
+  "search_terms": ["<4 simple search terms>"],
+  "title": "<simple title under 80 chars>",
+  "description": "<simple description 500-800 chars>",
+  "tags": ["<10 simple tags>"]
 }
 
-AVOID: Generic facts everyone knows, medical advice, political content.
-FOCUS: Mysterious, ancient, scientific, geographical secrets.
-""",
+AVOID: Numbers over 100, complex words, technical terms, long sentences.
+FOCUS: Simple, clear, amazing facts everyone can understand.""",
 
-    "country_facts": """Create viral country secrets that 99% of people don't know.
+    "alt_universe": """Create a simple fictional multiverse short.
 
-Focus on:
-- Hidden underground locations
-- Ancient unexplained structures  
-- Scientific anomalies
-- Forbidden or restricted areas
-- Government secrets (declassified)
-- Geographic impossibilities
-- Archaeological mysteries
+EXACTLY 5 sentences:
+1. "Imagine a world where..." (simple premise)
+2. "People there..." (one difference)
+3. "Everything looks..." (visual difference)
+4. "Life would be..." (how it feels)
+5. "Would you visit this place?"
 
-Structure: Hook about secret → Location → Multiple shocking details → Why it's hidden → Final revelation → Engagement question
+Keep sentences under 8 words each. No complex concepts.""",
 
-Include specific measurements, dates, and "scientists say" credibility.
-""",
+    "country_facts": """Create simple country facts.
 
-    "animal_facts": """Create mind-blowing animal abilities that seem impossible.
+EXACTLY 5 sentences:
+1. "Did you know about [country]?"
+2. "This place has..." (one amazing thing)
+3. "People there..." (cultural fact)
+4. "The nature is..." (nature fact)
+5. "Want to visit someday?"
 
-Focus on:
-- Superhuman abilities (echolocation, magnetism, time perception)
-- Evolutionary impossibilities 
-- Communication methods
-- Survival tactics
-- Predator-prey relationships
-- Environmental adaptations
-
-Structure: Impossible ability → Specific example → How it works → Comparison to humans → Multiple examples → Scientific explanation → Engagement
-
-Use specific numbers, speeds, distances, measurements.
-"""
+Keep it simple and clear."""
 }
 
 def build_via_gemini(mode: str, channel_name: str, banlist: List[str]) -> tuple:
-    """Geliştirilmiş Gemini entegrasyonu"""
+    """Geliştirilmiş Gemini entegrasyonu - 20-40s için optimize edildi"""
     template = ENHANCED_GEMINI_TEMPLATES.get(mode, ENHANCED_GEMINI_TEMPLATES["_default"])
     
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
@@ -428,12 +396,13 @@ Language: {LANG}
 AVOID these recent topics:
 {avoid}
 
-REQUIREMENTS:
-- 8-12 sentences (45-55 seconds total)
-- Each sentence 6-12 words
-- Include 3+ specific numbers/statistics
-- Start with shocking hook
-- End with engagement question
+CRITICAL REQUIREMENTS for 20-40 second shorts:
+- EXACTLY 5-6 sentences (no more, no less!)
+- Each sentence 6-12 words maximum
+- Total speaking time should be 20-40 seconds
+- Fast-paced, punchy delivery
+- Include 2-3 specific numbers/statistics
+- End with short engagement question
 - Family-friendly content only
 
 Return ONLY valid JSON. No code blocks or extra text.
@@ -448,15 +417,15 @@ Return ONLY valid JSON. No code blocks or extra text.
         sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
         sentences = [s for s in sentences if s]
         
-        # Minimum 8, maksimum 12 cümle
-        if len(sentences) < 8:
+        # KRITIK: Cümle sayısını 5-6'ya sınırla (20-40s için)
+        if len(sentences) < 5:
             sentences.extend([
-                "This phenomenon baffles scientists worldwide.",
-                "Research continues to unlock these mysteries.", 
-                "What other secrets are waiting to be discovered?",
-                "Share your thoughts in the comments below."
+                "Scientists are still studying this mystery.",
+                "What do you think about this discovery?"
             ])
-        sentences = sentences[:12]  # Maximum 12 sentence
+        sentences = sentences[:6]  # Maksimum 6 cümle
+        
+        print(f"✅ Gemini {len(sentences)} cümle üretti (hedef: 5-6)")
         
         terms = data.get("search_terms") or []
         terms = [t.strip() for t in terms if t.strip()]
@@ -471,13 +440,23 @@ Return ONLY valid JSON. No code blocks or extra text.
         return country, topic, sentences, terms, title, description, tags
         
     except Exception as e:
-        print(f"⚠️ Gemini gelişmiş içerik üretimi başarısız: {e}")
-        # Enhanced fallback
-        enhanced_fallback = ENHANCED_SCRIPT_BANK.get(
-            random.choice(list(ENHANCED_SCRIPT_BANK.keys()))
-        )
-        return (enhanced_fallback["country"], enhanced_fallback["topic"], 
-                enhanced_fallback["sentences"], enhanced_fallback["search_terms"], "", "", [])
+        print(f"⚠️ Gemini başarısız, fallback kullanıyoruz: {e}")
+        # Kısa fallback (5-6 cümle)
+        fallback_countries = list(ENHANCED_SCRIPT_BANK.keys())
+        if fallback_countries:
+            enhanced_key = random.choice(fallback_countries)
+            enhanced_fallback = ENHANCED_SCRIPT_BANK[enhanced_key]
+            return (enhanced_fallback["country"], enhanced_fallback["topic"], 
+                    enhanced_fallback["sentences"][:6], enhanced_fallback["search_terms"], "", "", [])
+        else:
+            return ("World", "Quick Facts", [
+                "Did you know this amazing fact?",
+                "Scientists recently discovered something incredible.",
+                "This discovery changes everything we knew.",
+                "The implications are truly mind-blowing.",
+                "Research continues to unlock more secrets.",
+                "What do you think about this?"
+            ], ["science 4k", "research lab", "discovery", "microscope 4k"], "", "", [])
 
 # ---------------- ana fonksiyon güncellemeleri ----------------
 def main():
@@ -695,15 +674,25 @@ def escape_drawtext(s: str) -> str:
              .replace("%","\\%"))
 
 def clean_caption_text(s: str) -> str:
+    """Agresif metin temizleme - MAX 80 karakter per sentence"""
     t = (s or "").strip().replace("'","'").replace("—","-").replace('"',"").replace("`","")
     t = re.sub(r'(\d+)([A-Za-z])', r'\1 \2', t)
     t = re.sub(r'([A-Za-z])(\d+)', r'\1 \2', t)
     t = re.sub(r'\s+',' ', t)
+    
+    # Sayısal detayları basitleştir (TTS sorunları için)
+    t = re.sub(r'\d{2,}', lambda m: "many" if int(m.group()) > 100 else m.group(), t)
+    t = re.sub(r'\d+\s*-\s*meter', "massive", t)
+    t = re.sub(r'\d+\s*years?', "decades", t)
+    
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
-    words = t.split()
-    if len(words) > 20:  # Daha uzun cümleler için artırıldı
-        t = " ".join(words[:20]).rstrip(",.;:") + "…"
+    
+    # AGRESIF uzunluk kısıtlaması
+    if len(t) > 80:  # MAX 80 karakter
+        words = t.split()
+        t = " ".join(words[:12]) + "."  # MAX 12 kelime
+    
     return t.strip()
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
@@ -788,14 +777,89 @@ def concat_videos(files: List[str], outp: str):
     run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-c","copy", outp])
 
 def concat_audios(files: List[str], outp: str):
+    """Ses dosyalarını birleştir - MAX 40s toplam"""
+    # Önce toplam süreyi kontrol et
+    total_dur = sum(ffprobe_dur(f) for f in files)
+    print(f"📊 Audio toplam süre: {total_dur:.1f}s")
+    
+    if total_dur > TARGET_MAX_SEC:
+        print(f"⚠️ Audio çok uzun ({total_dur:.1f}s), kesiliyor...")
+        # Her dosyayı proporsiyone göre kısalt
+        ratio = TARGET_MAX_SEC / total_dur
+        temp_files = []
+        
+        for i, f in enumerate(files):
+            if total_dur <= TARGET_MAX_SEC:
+                temp_files.append(f)
+                continue
+                
+            orig_dur = ffprobe_dur(f)
+            new_dur = min(orig_dur * ratio, 6.0)  # Max 6s per segment
+            
+            if new_dur < 1.0:  # Çok kısa olursa atla
+                continue
+                
+            temp_f = f.replace(".wav", f"_cut_{i}.wav")
+            run(["ffmpeg","-y","-i",f,"-t",f"{new_dur:.2f}","-c","copy",temp_f])
+            temp_files.append(temp_f)
+        
+        files = temp_files[:6]  # Max 6 segment
+    
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst,"w") as f:
-        for p in files: f.write(f"file '{p}'\n")
-    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-af","volume=0.95,dynaudnorm", outp])
+        for p in files[:6]:  # MAX 6 dosya
+            f.write(f"file '{p}'\n")
+    
+    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+         "-af","volume=0.9,dynaudnorm","-t",f"{TARGET_MAX_SEC}",outp])  # ZORLA KES
+    
+    # Temp dosyaları temizle
+    for f in files:
+        if "_cut_" in f:
+            pathlib.Path(f).unlink(missing_ok=True)
 
 def mux(video: str, audio: str, outp: str):
-    run(["ffmpeg","-y","-i",video,"-i",audio,"-map","0:v:0","-map","1:a:0",
-         "-c:v","copy","-c:a","aac","-b:a","256k","-movflags","+faststart","-shortest", outp])
+    """Güvenli video/audio birleştirme - FFmpeg hata önleme"""
+    try:
+        # Önce süreleri kontrol et
+        video_dur = ffprobe_dur(video)
+        audio_dur = ffprobe_dur(audio)
+        
+        print(f"🔍 Video: {video_dur:.1f}s | Audio: {audio_dur:.1f}s")
+        
+        # Süre uyumsuzluğu varsa düzelt
+        if abs(video_dur - audio_dur) > 1.0:
+            print("⚠️ Video/Audio süre uyumsuzluğu düzeltiliyor...")
+            min_dur = min(video_dur, audio_dur, 45.0)  # Max 45s
+            
+            # Video'yu kırp
+            temp_video = video.replace(".mp4", "_temp.mp4")
+            run(["ffmpeg","-y","-i",video,"-t",f"{min_dur:.2f}","-c","copy",temp_video])
+            
+            # Audio'yu kırp  
+            temp_audio = audio.replace(".wav", "_temp.wav")
+            run(["ffmpeg","-y","-i",audio,"-t",f"{min_dur:.2f}","-c","copy",temp_audio])
+            
+            video, audio = temp_video, temp_audio
+        
+        # Güvenli birleştirme
+        run(["ffmpeg","-y","-i",video,"-i",audio,
+             "-map","0:v:0","-map","1:a:0",
+             "-c:v","copy","-c:a","aac","-b:a","256k",
+             "-movflags","+faststart",
+             "-shortest",  # Kısa olanı kullan
+             "-avoid_negative_ts","make_zero",  # Sync problemi önleme
+             outp])
+        
+        # Temp dosyaları temizle
+        for temp_file in [video, audio]:
+            if "_temp" in temp_file:
+                pathlib.Path(temp_file).unlink(missing_ok=True)
+                
+    except Exception as e:
+        print(f"⚠️ Mux hatası: {e}")
+        # Son çare - basit copy
+        run(["ffmpeg","-y","-i",video,"-i",audio,"-c","copy","-shortest",outp])
 
 # YouTube functions
 def yt_service():
