@@ -1,201 +1,150 @@
 channels:
-  - name: WT Facts About Countries
-    env: WT Facts About Countries
-    enabled: false
-    mode: country_facts
-    lang: en
-    visibility: public
-    seed: "0"
-    # prompt: ""   # opsiyonel
-
-  - name: Tales of The Forgetten Realms
-    env: Tales of The Forgetten Realms
-    enabled: false
-    mode: history_story
-    lang: en
-    visibility: public
-    seed: "1"
-
-  - name: Famous Quotes Explained
-    env: Famous Quotes Explained
-    enabled: false
-    mode: quotes
-    lang: en
-    visibility: public
-    seed: "2"
-
-  - name: TaxWise USA
-    env: TaxWise USA
-    enabled: false
-    mode: taxwise_usa
-    lang: en
-    visibility: public
-    seed: "3"
-
-  - name: Echo of the Unknown
-    env: Echo of the Unknown
-    enabled: false
-    mode: horror_story
-    lang: en
-    visibility: public
-    seed: "4"
-
-  - name: World Briefing
-    env: World Briefing
-    enabled: false
-    mode: daily_news
-    lang: en
-    visibility: public
-    seed: "5"
-
-  - name: Flashback Minute
-    env: Flashback Minute
-    enabled: false
-    mode: history_story   # istersen on_this_day yapabiliriz
-    lang: en
-    visibility: public
-    seed: "6"
-
-  - name: Universe Jumper
-    env: Universe Jumper
-    enabled: false
-    mode: alt_universe
-    lang: en
-    visibility: public
-    seed: "7"
-
-  - name: If They Lived Today
-    env: If They Lived Today
-    enabled: false
-    mode: if_lived_today
-    lang: en
-    visibility: public
-    seed: "8"
-
-  - name: Rewind Retro Media
-    env: Rewind Retro Media
-    enabled: false
-    mode: nostalgia_story
-    lang: en
-    visibility: public
-    seed: "9"
-
-  - name: Cricket Queens
-    env: Cricket Queens
-    enabled: false
-    mode: cricket_women
-    lang: en
-    visibility: public
-    seed: "10"
-
-  - name: GalacticUpdate
-    env: GalacticUpdate
-    enabled: false
-    mode: space_news
-    lang: en
-    visibility: public
-    seed: "11"
-
-  - name: Cinematic Echo
-    env: Cinematic Echo
-    enabled: false
-    mode: quotes           # telif riskini azaltmak için yorum + stock b-roll
-    lang: en
-    visibility: public
-    seed: "12"
-
-  - name: CritterFact
-    env: CritterFact
-    enabled: false
-    mode: animal_facts
-    lang: en
-    visibility: public
-    seed: "13"
-
-  - name: WildWonderCaps
-    env: WildWonderCaps
-    enabled: false
-    mode: animal_facts
-    lang: en
-    visibility: public
-    seed: "14"
-
-  - name: NextGen Update
-    env: NextGen Update
-    enabled: false
-    mode: tech_news
-    lang: en
-    visibility: public
-    seed: "15"
-
-  - name: BeyondAxis
-    env: BeyondAxis
-    enabled: false
-    mode: utopic_tech
-    lang: en
-    visibility: public
-    seed: "16"
-
-  - name: BehindTheFame
-    env: BehindTheFame
-    enabled: false
-    mode: fame_story
-    lang: en
-    visibility: public
-    seed: "17"
-
-  - name: One Day Inside
-    env: One Day Inside
-    enabled: false
-    mode: post_apoc
-    lang: en
-    visibility: public
-    seed: "18"
-
-  - name: Gods Unleashed
-    env: Gods Unleashed
-    enabled: false
-    mode: myth_gods
-    lang: en
-    visibility: public
-    seed: "19"
-
-  - name: Microworld Stories
-    env: Microworld Stories
-    enabled: false
-    mode: kids_story
-    lang: en
-    visibility: public
-    seed: "20"
-
-  - name: Bot Gone Wild
-    env: Bot Gone Wild
-    enabled: false
-    mode: ai_alt
-    lang: en
-    visibility: public
-    seed: "21"
-
-  - name: SkySynthLab
-    env: SkySynthLab
-    enabled: false
-    mode: utopic_tech
-    lang: en
-    visibility: public
-    seed: "22"
-
-  - name: FixIt Fast
-    env: FixIt Fast
-    enabled: false
-    mode: fixit_fast
-    lang: en
-    visibility: public
-    seed: "23"
-
-  - name: GameDay 60
-    env: GameDay 60
-    enabled: false
-    mode: sports_news
-    lang: en
-    visibility: public
-    seed: "24"
+  - name: "WT Facts About Countries"
+    mode: "country_facts"
+    topic: "Amazing Country Secrets & Cultural Facts"
+    search_terms: ["country landscape 4k", "cultural heritage", "city skyline", "world travel", "monuments"]
+    content_focus: "Surprising facts about different countries, their culture, geography, and hidden secrets"
+    
+  - name: "Tales of The Forgotten Realms"
+    mode: "history_story"
+    topic: "Forgotten Historical Tales & Lost Stories"
+    search_terms: ["ancient ruins 4k", "historical manuscripts", "old castle", "medieval", "archaeology"]
+    content_focus: "Lesser-known historical events, ancient civilizations, and forgotten stories from the past"
+    
+  - name: "Famous Quotes Explained"
+    mode: "quotes"
+    topic: "Wisdom Behind Famous Quotes"
+    search_terms: ["library books 4k", "thinking person", "wisdom concept", "philosophy", "writing"]
+    content_focus: "Breaking down famous quotes, their origins, meanings, and life applications"
+    
+  - name: "TaxWise USA"
+    mode: "taxwise_usa"
+    topic: "US Tax Tips & Money Saving Strategies"
+    search_terms: ["calculator 4k", "office desk", "documents", "money", "business"]
+    content_focus: "Educational tax tips, deductions, and financial planning for US taxpayers"
+    
+  - name: "Echo of the Unknown"
+    mode: "horror_story"
+    topic: "Mysterious & Spine-Chilling Tales"
+    search_terms: ["dark forest 4k", "mysterious fog", "old house", "candle light", "shadows"]
+    content_focus: "Family-friendly mysterious stories, urban legends, and unexplained phenomena"
+    
+  - name: "World Briefing"
+    mode: "daily_news"
+    topic: "Today's Most Important Global News"
+    search_terms: ["newsroom 4k", "world map", "city timelapse", "press conference", "global"]
+    content_focus: "Daily international news summaries and important global developments"
+    
+  - name: "Flashback Minute"
+    mode: "history_story"
+    topic: "This Day in History - Important Events"
+    search_terms: ["historical photos", "vintage documents", "timeline", "calendar", "archive"]
+    content_focus: "Significant historical events that happened on today's date throughout history"
+    
+  - name: "Universe Jumper"
+    mode: "alt_universe"
+    topic: "What If Different Characters Lived in Other Worlds"
+    search_terms: ["space universe 4k", "portal effects", "cosmic background", "dimension", "multiverse"]
+    content_focus: "Creative scenarios imagining how different character types would adapt to alternate universes"
+    
+  - name: "If They Lived Today"
+    mode: "if_lived_today"
+    topic: "Historical Figures in Modern Times"
+    search_terms: ["modern city 4k", "technology", "smartphone", "contemporary life", "social media"]
+    content_focus: "Imagining how famous historical figures would adapt to and influence today's world"
+    
+  - name: "Rewind Retro Media"
+    mode: "nostalgia_story"
+    topic: "Nostalgic Memories & Retro Culture"
+    search_terms: ["vintage tv 4k", "retro games", "old radio", "cassette tapes", "80s 90s"]
+    content_focus: "Nostalgic content about past decades, retro technology, and childhood memories"
+    
+  - name: "Cricket Queens"
+    mode: "cricket_women"
+    topic: "Women's Cricket Highlights & Stories"
+    search_terms: ["women cricket 4k", "female athletes", "cricket stadium", "sports action", "champions"]
+    content_focus: "Women's cricket achievements, player stories, and match highlights"
+    
+  - name: "GalacticUpdate"
+    mode: "space_news"
+    topic: "Latest Space Discoveries & Cosmic News"
+    search_terms: ["space station 4k", "rocket launch", "planets", "astronaut", "telescope"]
+    content_focus: "Daily space exploration news, astronomical discoveries, and cosmic phenomena"
+    
+  - name: "Cinematic Echo"
+    mode: "movie_secrets"
+    topic: "Hidden Movie Facts & Behind-the-Scenes Secrets"
+    search_terms: ["movie theater 4k", "film set", "cinema camera", "director", "hollywood"]
+    content_focus: "Movie trivia, behind-the-scenes facts, filmmaking secrets, and cinema history"
+    
+  - name: "CritterFact"
+    mode: "animal_facts"
+    topic: "Amazing Animal Abilities & Wildlife Secrets"
+    search_terms: ["wildlife 4k", "animal close up", "nature documentary", "safari", "zoo"]
+    content_focus: "Fascinating animal behaviors, abilities, and surprising facts about wildlife"
+    
+  - name: "WildWonderCaps"
+    mode: "animal_facts"
+    topic: "Incredible Wildlife Moments & Animal Wonders"
+    search_terms: ["wild animals 4k", "nature reserve", "animal behavior", "wildlife photography", "jungle"]
+    content_focus: "Spectacular wildlife footage, animal intelligence, and nature's amazing moments"
+    
+  - name: "NextGen Update"
+    mode: "tech_news"
+    topic: "Latest Technology Breakthroughs & Innovations"
+    search_terms: ["technology 4k", "innovation lab", "gadgets", "AI research", "tech conference"]
+    content_focus: "Current technology news, gadget reviews, and breakthrough innovations"
+    
+  - name: "BeyondAxis"
+    mode: "utopic_tech"
+    topic: "Future Utopian Technology & Tomorrow's Innovations"
+    search_terms: ["futuristic city 4k", "hologram", "flying cars", "clean energy", "smart home"]
+    content_focus: "Positive visions of future technology that could improve humanity's quality of life"
+    
+  - name: "BehindTheFame"
+    mode: "fame_story"
+    topic: "Celebrity Success Stories & Behind-the-Fame Tales"
+    search_terms: ["red carpet 4k", "stage lights", "studio", "paparazzi", "awards ceremony"]
+    content_focus: "Inspiring stories of how celebrities achieved success, using generic examples and archetypes"
+    
+  - name: "One Day Inside"
+    mode: "post_apoc"
+    topic: "Post-Apocalyptic Survival Stories & Future Scenarios"
+    search_terms: ["abandoned city 4k", "survival gear", "wasteland", "bunker", "rebuilding"]
+    content_focus: "Family-friendly post-apocalyptic scenarios focusing on resilience, hope, and human adaptation"
+    
+  - name: "Gods Unleashed"
+    mode: "mythology_battle"
+    topic: "Epic Mythological Battles & Divine Encounters"
+    search_terms: ["ancient temple 4k", "mythology art", "divine light", "epic battle", "legends"]
+    content_focus: "Epic mythological scenarios and divine encounters from various world mythologies"
+    
+  - name: "Microworld Stories"
+    mode: "kids_story"
+    topic: "Fun Educational Stories for Young Minds"
+    search_terms: ["children playing 4k", "colorful animation", "playground", "learning", "imagination"]
+    content_focus: "Educational and entertaining stories designed to inspire and teach children"
+    
+  - name: "Bot Gone Wild"
+    mode: "ai_alt"
+    topic: "AI Integration in Daily Life & Future Scenarios"
+    search_terms: ["robot assistant 4k", "smart home", "AI interface", "automation", "helpful robots"]
+    content_focus: "Positive scenarios about AI integration, focusing on helpful and beneficial applications"
+    
+  - name: "SkySynthLab"
+    mode: "ai_future"
+    topic: "AI Development Theories & Future Possibilities"
+    search_terms: ["AI laboratory 4k", "computer code", "neural networks", "research lab", "innovation"]
+    content_focus: "Educational content about AI development, focusing on verified research and realistic possibilities"
+    
+  - name: "FixIt Fast"
+    mode: "fixit_fast"
+    topic: "Quick DIY Repair Tips & Household Solutions"
+    search_terms: ["toolbox 4k", "repair work", "DIY project", "workshop", "fixing"]
+    content_focus: "Safe and practical repair tips for common household problems and maintenance"
+    
+  - name: "GameDay 60"
+    mode: "sports_news"
+    topic: "Daily Sports Updates & Athletic Highlights"
+    search_terms: ["sports stadium 4k", "athletes training", "scoreboard", "sports crowd", "championship"]
+    content_focus: "Daily sports news, game highlights, and athletic achievements across various sports"
