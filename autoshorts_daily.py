@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 VOICE_STYLE = os.getenv("TTS_STYLE", "narration-professional")
-TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "45"))  # Daha uzun içerik için artırıldı
-TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "58"))  # YouTube Shorts limiti
+TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "20"))  # 20-40 saniye arası
+TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "40"))  # Kısa ve etkili
 
 # ---------------- deps (auto-install) ----------------
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
@@ -65,7 +65,7 @@ VOICE_OPTIONS = {
 }
 
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
-VOICE_RATE = os.getenv("TTS_RATE", "+5%")  # Daha doğal hız
+VOICE_RATE = os.getenv("TTS_RATE", "+25%")  # Daha hızlı konuşma (20-40s için)
 VOICE_PITCH = os.getenv("TTS_PITCH", "+0Hz")  # Pitch kontrolü
 
 TARGET_FPS     = 30
@@ -77,13 +77,13 @@ CAPTION_MAX_LINE = 22  # Daha kısa satırlar için
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 
 # ---------------- geliştirilmiş TTS (SSML desteği) ----------------
-def create_ssml(text: str, voice: str, rate: str = "+5%", pitch: str = "+0Hz") -> str:
-    """SSML ile daha doğal seslendirme oluştur"""
-    # Noktalama işaretlerine göre duraklamalar ekle
-    text = re.sub(r'\.(?=\s)', '.<break time="500ms"/>', text)
-    text = re.sub(r',(?=\s)', ',<break time="300ms"/>', text)
-    text = re.sub(r'\?(?=\s)', '?<break time="600ms"/>', text)
-    text = re.sub(r'!(?=\s)', '!<break time="500ms"/>', text)
+def create_ssml(text: str, voice: str, rate: str = "+25%", pitch: str = "+0Hz") -> str:
+    """SSML ile daha doğal ama hızlı seslendirme oluştur"""
+    # Kısa duraklamalar (20-40s için optimize)
+    text = re.sub(r'\.(?=\s)', '.<break time="200ms"/>', text)
+    text = re.sub(r',(?=\s)', ',<break time="100ms"/>', text)
+    text = re.sub(r'\?(?=\s)', '?<break time="250ms"/>', text)
+    text = re.sub(r'!(?=\s)', '!<break time="200ms"/>', text)
     
     # Sayıları daha doğal okutma
     text = re.sub(r'\b(\d+)\b', r'<say-as interpret-as="number">\1</say-as>', text)
