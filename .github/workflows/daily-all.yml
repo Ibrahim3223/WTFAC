@@ -15,6 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyYAML
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
       - id: build
         run: |
           python - <<'PY'
@@ -72,24 +81,15 @@ jobs:
         id: etdate
         run: |
           python - <<'PY'
-          import datetime
+          import datetime, os
           try:
               from zoneinfo import ZoneInfo
               now = datetime.datetime.now(ZoneInfo("America/New_York"))
           except Exception:
               now = datetime.datetime.utcnow()
-          print(f"date={now.strftime('%Y-%m-%d')}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"date={now.strftime('%Y-%m-%d')}\n")
           PY
-          echo "date=$(python - <<'PY'
-import datetime
-try:
-    from zoneinfo import ZoneInfo
-    now = datetime.datetime.now(ZoneInfo("America/New_York"))
-    print(now.strftime('%Y-%m-%d'))
-except Exception:
-    print(datetime.datetime.utcnow().strftime('%Y-%m-%d'))
-PY
-)" >> "$GITHUB_OUTPUT"
 
       - name: Restore daily-run cache (skip if already ran)
         id: cache
@@ -109,7 +109,9 @@ PY
           python-version: "3.11"
 
       - name: Install FFmpeg
-        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg
 
       - name: Install Python deps
         run: |
