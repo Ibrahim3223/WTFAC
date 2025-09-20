@@ -217,123 +217,247 @@ def _top_keywords(sentences: List[str], lang: str="en", k: int=8) -> List[str]:
     out = (list(dict.fromkeys([bg for bg,_ in bigrams.most_common(6)] + out)))
     return out[:k+4]
 def build_search_terms_per_video(sentences: List[str], topic: str, mode: str, lang: str,
-                                 hints: Optional[List[str]] = None, max_terms: int = 8) -> List[str]:
-    keywords = _top_keywords(sentences + [topic], lang=lang, k=8)
-    domain_boosters = {
-        "space_news": ["space","rocket launch","telescope","galaxy","nasa","astronaut"],
-        "tech_news": ["technology","lab","robot","ai","microchip","innovation"],
-        "history_story": ["ancient","ruins","manuscript","archaeology","museum"],
-        "country_facts": ["landmark","city skyline","culture","nature","travel"],
-        "animal_facts": ["wildlife","close up","nature","habitat"],
-        "movie_secrets": ["film set","behind the scenes","cinema","director"],
-        "cricket_women": ["women cricket","stadium","crowd","celebration"],
-        "fixit_fast": ["workshop","tools","repair","step by step"]
+                                 hints: Optional[List[str]] = None, max_terms: int = 10) -> List[str]:
+    """
+    Her video için: cümlelerden (özellikle ilk 3 cümle + topic) anahtar kelimeler çıkar,
+    mod'a göre görsel bağlam (booster) ekle, 4:5/9:16 dikey kullanım için varyantlar yarat.
+    """
+    from collections import Counter
+
+    def normalize_words(text: str) -> List[str]:
+        words = re.findall(r"[A-Za-z][A-Za-z\-]{2,}", text or "")
+        words = [w.lower() for w in words]
+        stop = {
+            "the","a","an","and","or","but","of","in","on","to","for","with","by","from","as","at",
+            "is","are","was","were","be","been","being","has","have","had","do","does","did",
+            "this","that","these","those","it","its","you","your","we","our","they","their","i","me",
+            "today","now","then","there","here","very","more","most","over","under","into","out","about",
+            "just","also","once","still","even","literally","completely","nearby","therefore","however"
+        }
+        return [w for w in words if w not in stop]
+
+    core_texts = []
+    core_texts.extend(sentences[:3])  # hook + 1-2 detay
+    core_texts.append(topic)
+
+    # MODE bazlı görsel bağlam (relevance için)
+    boosters_map = {
+        "space_news":   ["space","telescope","galaxy","nebula","rocket","nasa","observatory"],
+        "tech_news":    ["technology","robot","microchip","lab","server room","ai","electronics"],
+        "history_story":["ancient","ruins","archaeology","scrolls","museum","stone carving"],
+        "country_facts":["landmark","city skyline","old town","culture","nature","travel","street"],
+        "animal_facts": ["wildlife","close up","habitat","safari","ocean","forest"],
+        "movie_secrets":["film set","behind the scenes","cinema","studio","director"],
+        "cricket_women":["women cricket","stadium","pitch","crowd","celebration","training"],
+        "fixit_fast":   ["workshop","tools","repair","step by step","bench"]
     }
-    boosters = domain_boosters.get(mode, [])
-    hints = [re.sub(r"\s+"," ", h.strip().lower()) for h in (hints or []) if isinstance(h,str) and h.strip()]
-    candidates: List[str] = []
-    for kw in keywords:
-        if " " in kw: candidates.append(kw)
-        else:
-            for bx in boosters[:3] or ["highlight"]: candidates.append(f"{kw} {bx}")
-            candidates.append(kw)
-    for h in hints[:6]:
-        if h not in candidates: candidates.append(h)
-    decorated: List[str] = []
+    boosters = boosters_map.get(mode, ["b-roll","cinematic","portrait"])
+
+    # Ağırlıklı kelime listesi
+    weights = Counter()
+    for idx, s in enumerate(core_texts):
+        for token in normalize_words(s):
+            weights[token] += (3 if idx == 0 else 2 if idx == 1 else 1)
+
+    # İkili kelime öbekleri (bigram) – bağlamı güçlendirir
+    bigrams = Counter()
+    for s in core_texts:
+        w = normalize_words(s)
+        for a, b in zip(w, w[1:]):
+            if a != b:
+                bigrams[f"{a} {b}"] += 1
+
+    # Adayları topla
+    unigrams = [t for t, _ in weights.most_common(12)]
+    candidates = [bg for bg, _ in bigrams.most_common(10)] + unigrams
+
+    # İpuçlarını ekle
+    hint_list = [re.sub(r"\s+", " ", h.strip().lower()) for h in (hints or []) if isinstance(h, str) and h.strip()]
+    for h in hint_list:
+        if h not in candidates:
+            candidates.append(h)
+
+    # Varyantlandır (portrait/vertical/4k)
+    decorated = []
+    primary = boosters[0] if boosters else "cinematic"
     for c in candidates:
-        base = c.strip()
-        if not base: continue
-        if " " not in base and boosters: base = f"{base} {boosters[0]}"
-        decorated.extend([f"{base} 4k", f"{base} portrait", f"{base} vertical 4k"])
-    unique: List[str] = []
+        c = re.sub(r"\s+", " ", c.strip())
+        if not c:
+            continue
+        # Tek kelimeler için bağlam enjekte et
+        if " " not in c:
+            c = f"{c} {primary}"
+        decorated.extend([
+            f"{c} 4k",
+            f"{c} portrait",
+            f"{c} vertical 4k"
+        ])
+
+    # Sıralama: bigramlı olanları öne al
+    unique = []
     for t in decorated:
-        t = re.sub(r"\s+"," ", t).strip()
-        if t not in unique: unique.append(t)
-    bigram_first = [t for t in unique if " " in t]
-    final = (bigram_first + [t for t in unique if t not in bigram_first])[:max_terms]
-    final = [t for t in final if len(t.split()) >= 2] or final[:4]
+        t = re.sub(r"\s+", " ", t).strip()
+        if t not in unique:
+            unique.append(t)
+
+    bigram_first = [t for t in unique if " " in t.split(" 4k")[0]]
+    final = bigram_first + [t for t in unique if t not in bigram_first]
+
+    # Kanal bazında farklılık için deterministic shuffle (kanal adına göre)
+    rnd = random.Random(hash(CHANNEL_NAME) % (10**9))
+    rnd.shuffle(final)
+
+    # En az iki kelime içerenleri tercih et
+    final = [t for t in final if len(t.split()) >= 2] or final[:6]
     return final[:max_terms]
 
 # ---------------- Pexels ----------------
-def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
+def _title_tokens_from_url(url: str) -> List[str]:
+    # https://www.pexels.com/video/ancient-underground-tunnel-123456/ → tokenlar
+    try:
+        slug = url.strip("/").split("/")[-2]
+    except Exception:
+        slug = url
+    slug = re.sub(r"[-_]+", " ", slug.lower())
+    return re.findall(r"[a-z][a-z\-]{2,}", slug)
+
+def pexels_download_strict(terms: List[str], need: int, tmp: str,
+                           required_keywords: List[str], mode: str) -> List[str]:
+    """
+    2 faz:
+      - STRICT: başlık/URL slug içinde required_keywords eşleşmesi şart.
+      - RELAX: eşleşme şartı yok; ama hâlâ skorlamaya tabi.
+    Ayrıca pHash tabanlı dedup + ID dedup + portre/dikey tercih.
+    """
     if not PEXELS_API_KEY:
         raise RuntimeError("PEXELS_API_KEY missing")
-    out, seen = [], set()
-    headers = {"Authorization": PEXELS_API_KEY}
 
-    def _score(meta):
+    headers = {"Authorization": PEXELS_API_KEY}
+    out: List[str] = []
+    seen_urls: set = set()
+
+    def score_video(meta, url_tokens: List[str]) -> float:
+        # Boyut, çözünürlük, süre yakınlığı, url-token eşleşmesi
         w, h = meta.get("width", 0), meta.get("height", 0)
         dur = meta.get("duration", 0)
         size = meta.get("size", 0) or 0
         aspect = (h > 0 and abs((9/16) - (w / h)) < 0.08)
-        dur_bonus = -abs(dur - 9) + 9  # 9sn civarı tepe
-        return (2000 * (1 if aspect else 0)) + (w * h / 1e4) + (size / 2e5) + (120 * max(dur_bonus, 0))
+        dur_bonus = -abs(dur - 8.5) + 8.5  # 7-10sn civarı iyi segment çıkar
+        kw_match = len(set(url_tokens) & set(required_keywords))
+        return (2500 * (1 if aspect else 0)) + (w * h / 1e4) + (size / 2e5) + (200 * max(dur_bonus, 0)) + (600 * kw_match)
 
-    for term in terms:
-        if len(out) >= need:
-            break
-        try:
-            r = requests.get(
-                "https://api.pexels.com/videos/search",
-                headers=headers,
-                params={
-                    "query": term,
-                    "per_page": 30,
-                    "orientation": "portrait",
-                    "size": "large",
-                    "min_width": "1080",
-                    "min_height": "1920",
-                },
-                timeout=30,
-            )
-            vids = r.json().get("videos", []) if r.status_code == 200 else []
-            cand = []
-
-            for v in vids:
-                files = v.get("video_files", [])
-                if not files:
+    def fetch_candidates(strict: bool) -> List[tuple]:
+        cands = []
+        for term in terms:
+            if len(cands) > need * 5:
+                break
+            try:
+                r = requests.get(
+                    "https://api.pexels.com/videos/search",
+                    headers=headers,
+                    params={
+                        "query": term,
+                        "per_page": 30,
+                        "orientation": "portrait",
+                        "size": "large",
+                        "min_width": "1080",
+                        "min_height": "1920",
+                    },
+                    timeout=30,
+                )
+                if r.status_code != 200:
                     continue
+                for v in r.json().get("videos", []):
+                    url = v.get("url", "")
+                    if not url or url in seen_urls:
+                        continue
+                    files = v.get("video_files", [])
+                    if not files:
+                        continue
+                    best = max(files, key=lambda x: x.get("width", 0) * x.get("height", 0))
+                    if best.get("height", 0) < 1080:
+                        continue
 
-                best = max(files, key=lambda x: x.get("width", 0) * x.get("height", 0))
-                if best.get("height", 0) < 1080:
-                    continue
+                    url_tokens = _title_tokens_from_url(url)
+                    # STRICT modda anahtar kelime eşleşmesi zorunlu
+                    if strict:
+                        if len(set(url_tokens) & set(required_keywords)) == 0:
+                            continue
 
-                url = best.get("link")
-                if not url or url in seen:
-                    continue
+                    meta = {
+                        "id": v.get("id"),
+                        "width": best.get("width", 0),
+                        "height": best.get("height", 0),
+                        "duration": v.get("duration", 0),
+                        "size": best.get("file_size", 0) or 0,
+                        "link": best.get("link"),
+                        "url": url,
+                        "tokens": url_tokens,
+                    }
+                    cands.append((score_video(meta, url_tokens), meta))
+            except Exception:
+                continue
+        cands.sort(key=lambda x: x[0], reverse=True)
+        return cands
 
-                meta = {
-                    "width": best.get("width", 0),
-                    "height": best.get("height", 0),
-                    "duration": v.get("duration", 0),
-                    "size": best.get("file_size", 0) or 0,
-                    "url": url,
-                }
-                cand.append((_score(meta), meta))
+    # Required keywords: normalize & kısalt
+    req = [w for w in {w.lower() for w in required_keywords} if len(w) >= 3][:10]
 
-            for _, m in sorted(cand, key=lambda x: x[0], reverse=True):
-                if len(out) >= need:
-                    break
-                url = m["url"]
-                seen.add(url)
+    chosen_ids = set()
+    chosen_phashes = []
 
-                fpath = str(pathlib.Path(tmp) / f"clip_{len(out):02d}_{uuid.uuid4().hex[:6]}.mp4")
-                with requests.get(url, stream=True, timeout=180) as rr:
+    for strict in (True, False):  # önce sıkı, yetmezse gevşek
+        candidates = fetch_candidates(strict=strict)
+        for _, m in candidates:
+            if len(out) >= need:
+                break
+            vid_id = m["id"]; link = m["link"]; url = m["url"]
+            if not link or not url:
+                continue
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+
+            # indir
+            fpath = str(pathlib.Path(tmp) / f"clip_{len(out):02d}_{uuid.uuid4().hex[:6]}.mp4")
+            try:
+                with requests.get(link, stream=True, timeout=180) as rr:
                     rr.raise_for_status()
                     with open(fpath, "wb") as w:
                         for ch in rr.iter_content(1 << 14):
                             w.write(ch)
+            except Exception:
+                continue
 
-                ok_size = pathlib.Path(fpath).stat().st_size > 1_200_000
-                ok_dur = 4 <= m["duration"] <= 20
-                if ok_size and ok_dur:
-                    out.append(fpath)
+            # temel filtreler
+            ok_size = pathlib.Path(fpath).stat().st_size > 1_200_000
+            ok_dur = 4 <= m["duration"] <= 20
+            if not (ok_size and ok_dur):
+                pathlib.Path(fpath).unlink(missing_ok=True)
+                continue
 
-        except Exception:
-            continue
+            # pHash dedup + ID dedup (kanallar arası)
+            ph = _phash_frame(fpath, when_sec=1.0)
+            if _is_seen(vid_id, ph, max_hamming=5):
+                pathlib.Path(fpath).unlink(missing_ok=True)
+                continue
+            # aynı işte ikinci kez seçmeyelim
+            if vid_id in chosen_ids:
+                pathlib.Path(fpath).unlink(missing_ok=True)
+                continue
+
+            # seç
+            out.append(fpath)
+            chosen_ids.add(vid_id)
+            chosen_phashes.append(ph)
+            _mark_seen(vid_id, ph)
+
+        if len(out) >= need:
+            break
 
     if len(out) < max(3, need // 2):
-        raise RuntimeError("Yeterli kaliteli Pexels video bulunamadı")
+        raise RuntimeError("Yeterli kaliteli ve ilgili Pexels video bulunamadı")
+
     return out[:need]
 
 # ---------------- Video işleme ----------------
@@ -520,18 +644,23 @@ def main():
     sentences = sents
 
     search_terms = build_search_terms_per_video(sentences=sentences, topic=tpc, mode=MODE, lang=LANG, hints=terms)
-    print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
+print("🔎 Search terms (per-video):", ", ".join(search_terms[:10]))
 
-    tmp = tempfile.mkdtemp(prefix="enhanced_shorts_"); font = font_path()
-    wavs=[]; metas=[]
-    print("🎤 Geliştirilmiş TTS işlemi başlıyor...")
-    for i, s in enumerate(sentences):
-        print(f"   Cümle {i+1}/{len(sentences)}: {s[:50]}...")
-        w = str(pathlib.Path(tmp)/f"sent_{i:02d}.wav"); dur = tts_to_wav(s, w)
-        wavs.append(w); metas.append((s,dur)); time.sleep(0.2)
+# STRICT seçime yardımcı olmak için "required keywords" çıkar
+def _required_from_texts(txts: List[str]) -> List[str]:
+    toks = re.findall(r"[A-Za-z][A-Za-z\-]{2,}", " ".join(txts).lower())
+    stop = {"the","a","an","and","or","of","in","on","to","for","with","by","from","as","at","this","that","these","those"}
+    toks = [t for t in toks if t not in stop]
+    # en çok geçen 6 kelime
+    from collections import Counter
+    return [t for t,_ in Counter(toks).most_common(6)]
 
-    print("🎬 Yüksek kaliteli video indiriliyor...")
-    clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
+required_keywords = _required_from_texts(sentences[:3] + [tpc])
+
+print("🧭 Required keywords for STRICT match:", ", ".join(required_keywords))
+
+clips = pexels_download_strict(search_terms, need=len(sentences), tmp=tmp,
+                               required_keywords=required_keywords, mode=MODE)
 
     print("✨ Sinematik video segmentleri oluşturuluyor...")
     segs=[]
@@ -647,5 +776,71 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 if __name__ == "__main__":
     main()
+
+# === Dedup DB (kanallar arası da) ===
+_SEEN_DB_PATH = "state_seen_videos.json"
+
+def _seen_load():
+    try:
+        return json.load(open(_SEEN_DB_PATH, "r", encoding="utf-8"))
+    except:
+        return {"ids": set(), "phashes": []}  # ids: str, phashes: list[str]
+
+def _seen_save(d):
+    # JSON set desteklemez -> listele
+    data = {"ids": list(d.get("ids", [])), "phashes": d.get("phashes", [])[:1200]}
+    pathlib.Path(_SEEN_DB_PATH).write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+def _mark_seen(vid_id: str, phash: Optional[str]):
+    d = _seen_load()
+    ids = set(d.get("ids", []))
+    ids.add(str(vid_id))
+    phs = d.get("phashes", [])
+    if phash:
+        phs.append(phash)
+        phs[:] = phs[-1200:]
+    _seen_save({"ids": ids, "phashes": phs})
+
+def _is_seen(vid_id: str, phash: Optional[str], max_hamming: int = 5) -> bool:
+    d = _seen_load()
+    if str(vid_id) in set(d.get("ids", [])):
+        return True
+    if phash:
+        for old in d.get("phashes", []):
+            # aynı/çok benzer sahne?
+            if len(old) == len(phash):
+                # hamming
+                if sum(a != b for a, b in zip(old, phash)) <= max_hamming:
+                    return True
+    return False
+
+# === Perceptual hash (ffmpeg + Pillow + imagehash) ===
+def _pip_quiet(p):
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
+
+try:
+    from PIL import Image
+except ImportError:
+    _pip_quiet("Pillow"); from PIL import Image
+try:
+    import imagehash
+except ImportError:
+    _pip_quiet("ImageHash"); import imagehash
+
+def _phash_frame(video_path: str, when_sec: float = 1.0) -> Optional[str]:
+    try:
+        frame = str(pathlib.Path(video_path).with_suffix(f".frame{int(when_sec*10)}.jpg"))
+        run([
+            "ffmpeg","-y","-ss",f"{when_sec:.2f}","-i",video_path,"-frames:v","1",
+            "-vf","scale=320:-1","-q:v","3", frame
+        ])
+        with Image.open(frame) as im:
+            ph = str(imagehash.phash(im))
+        pathlib.Path(frame).unlink(missing_ok=True)
+        return ph
+    except Exception:
+        return None
+
+
 
 
