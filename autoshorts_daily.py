@@ -59,8 +59,6 @@ VOICE_OPTIONS = {
         "en-AU-NatashaNeural",  # Avustralya aksanı (çok doğal)
         "en-GB-SoniaNeural",    # İngiliz aksanı
         "en-CA-LiamNeural",     # Kanada aksanı
-        "en-US-DavisNeural",    # Erkek, samimi
-        "en-US-AmberNeural",    # Kadın, enerjik
     ],
     "tr": [
         "tr-TR-EmelNeural",   
@@ -72,8 +70,24 @@ VOICE_OPTIONS = {
 TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))  
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))  # 22-42s arası
 
-# SABİT SES SEÇİMİ - Videoda tek kişi seslendirme için
-SELECTED_VOICE = None  # Global değişken - video başında seçilecek
+# Geliştirilmiş TTS ayarları - ElevenLabs kalitesinde Edge-TTS
+VOICE_OPTIONS = {
+    "en": [
+        "en-US-JennyNeural",    # En doğal kadın ses
+        "en-US-JasonNeural",    # Çok doğal erkek ses  
+        "en-US-AriaNeural",     # Profesyonel kadın
+        "en-US-GuyNeural",      # Warm erkek ses
+        "en-AU-NatashaNeural",  # Avustralya aksanı (çok doğal)
+        "en-GB-SoniaNeural",    # İngiliz aksanı
+        "en-CA-LiamNeural",     # Kanada aksanı
+        "en-US-DavisNeural",    # Erkek, samimi
+        "en-US-AmberNeural",    # Kadın, enerjik
+    ],
+    "tr": [
+        "tr-TR-EmelNeural",   
+        "tr-TR-AhmetNeural",  
+    ]
+}
 
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
 VOICE_RATE = os.getenv("TTS_RATE", "+10%")  # Doğal hız
@@ -81,12 +95,13 @@ VOICE_RATE = os.getenv("TTS_RATE", "+10%")  # Doğal hız
 TARGET_FPS     = 25
 CRF_VISUAL     = 22
 CAPTION_COLORS = ["#FFD700","#FF6B35","#00F5FF","#32CD32","#FF1493","#1E90FF","#FFA500","#FF69B4"]
-CAPTION_MAX_LINE = 18  # Daha kısa satır limiti - sığma garantisi için
+CAPTION_MAX_LINE = 22
 
 # State management
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 
 # ---------------- geliştirilmiş TTS (SSML desteği) ----------------
+# TTS ayarları (SSML kaldırıldı - ses kalitesi için)
 def create_advanced_ssml(text: str, voice: str) -> str:
     """ElevenLabs kalitesinde SSML oluştur"""
     # Metni doğal konuşma için optimize et
@@ -135,26 +150,8 @@ def create_advanced_ssml(text: str, voice: str) -> str:
     
     return ssml
 
-def select_consistent_voice(text_sample: str) -> str:
-    """Video için tek ses seçimi - tutarlılık için"""
-    global SELECTED_VOICE
-    
-    if SELECTED_VOICE is not None:
-        return SELECTED_VOICE
-    
-    # İlk kez seçim yapılıyor
-    voice_options = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
-    
-    # Metin bazlı sabit seçim (her video için aynı ses)
-    import hashlib
-    text_hash = int(hashlib.md5(text_sample.encode()).hexdigest()[:4], 16)
-    SELECTED_VOICE = voice_options[text_hash % len(voice_options)]
-    
-    print(f"🎤 Seçilen tutarlı ses: {SELECTED_VOICE.split('-')[-1]}")
-    return SELECTED_VOICE
-
-def tts_to_wav(text: str, wav_out: str, video_text_sample: str = "") -> float:
-    """Tutarlı ses ile TTS - video boyunca aynı kişi"""
+def tts_to_wav(text: str, wav_out: str) -> float:
+    """ElevenLabs kalitesinde Edge-TTS - ücretsiz ama çok doğal"""
     import asyncio
     
     def _run_ff(args):
@@ -189,10 +186,13 @@ def tts_to_wav(text: str, wav_out: str, video_text_sample: str = "") -> float:
     for abbr, full in abbreviations.items():
         clean_text = re.sub(rf'\b{abbr}\b', full, clean_text)
     
-    # TUTARLI SES SEÇİMİ - video boyunca aynı kişi
-    selected_voice = select_consistent_voice(video_text_sample or clean_text)
+    # En doğal ses seçimi (çeşitlilik için rotation)
+    voice_rotation = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
+    import hashlib
+    text_hash = int(hashlib.md5(clean_text.encode()).hexdigest()[:4], 16)
+    selected_voice = voice_rotation[text_hash % len(voice_rotation)]
     
-    print(f"      🎤 Consistent Voice: {selected_voice.split('-')[-1]} | {clean_text[:30]}...")
+    print(f"      🎤 Natural Voice: {selected_voice.split('-')[-1]} | {clean_text[:30]}...")
 
     # Edge-TTS ile premium kalite
     try:
@@ -210,13 +210,13 @@ def tts_to_wav(text: str, wav_out: str, video_text_sample: str = "") -> float:
             loop = asyncio.get_event_loop()
             loop.run_until_complete(_edge_save_premium())
 
-        # Basit ama etkili ses işleme (hızlı ve güvenilir)
+        # Premium kalite ses işleme (ElevenLabs seviyesinde)
         _run_ff([
             "-i", mp3, 
             "-ar", "48000",  # Yüksek kalite sample rate
             "-ac", "1", 
             "-acodec", "pcm_s16le",
-            "-af", "volume=0.9,highpass=f=80,lowpass=f=12000,dynaudnorm=g=5:f=200,acompressor=threshold=-18dB:ratio=2:attack=3:release=30",
+            "-af", "volume=0.92,highpass=f=75,lowpass=f=15000,dynaudnorm=g=7:f=300:r=0.95,acompressor=threshold=-20dB:ratio=2:attack=5:release=50,deesser=i=0.5:m=0.5:f=6000:s=o,equalizer=f=2000:t=h:w=200:g=2,equalizer=f=100:t=h:w=50:g=1",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
@@ -244,13 +244,13 @@ def tts_to_wav(text: str, wav_out: str, video_text_sample: str = "") -> float:
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(_edge_save_simple())
 
-            # Hızlı ve güvenilir ses filtreleri
+            # Yine kaliteli ses filtreleri
             _run_ff([
                 "-i", mp3, 
                 "-ar", "44100",  
                 "-ac", "1", 
                 "-acodec", "pcm_s16le",
-                "-af", "volume=0.9,dynaudnorm=g=3:f=200,acompressor=threshold=-16dB:ratio=2:attack=3:release=15",
+                "-af", "volume=0.9,dynaudnorm=g=5:f=250,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=15",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
@@ -330,58 +330,57 @@ def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
 
 # ---------------- geliştirilmiş video işleme ----------------
 def make_segment(src: str, dur: float, outp: str):
-    """Tam süre video segmenti oluştur - kesinti yok"""
-    # Minimum süre garantisi
-    dur = max(2.0, min(dur, 8.0))  # 2-8 saniye arası
-    fade = max(0.1, min(0.2, dur/10))
+    """Süre kontrollü video segmenti oluştur (ABSOLUTE MAX 5s)"""
+    # 20-40s toplam için segment başına ABSOLUTE MAX 5s
+    dur = max(0.8, min(dur, 5.0))  # Minimum 0.8s, ABSOLUTE MAX 5s
+    fade = max(0.05, min(0.12, dur/8))
     
-    print(f"      📹 Full Segment: {dur:.1f}s")
+    print(f"      📹 Segment: {dur:.1f}s (max 5s)")
     
-    # Hızlı video işleme - basit filtreler
+    # Basit video filtreleri (hızlı işlem için)
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
-        "eq=brightness=0.01:contrast=1.05,"  # Basit renk düzeltme
+        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"  # Basit renk düzeltme
         f"fade=t=in:st=0:d={fade:.2f},"
         f"fade=t=out:st={max(0.0,dur-fade):.2f}:d={fade:.2f}"
     )
     
     run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r","25","-an",
-         "-c:v","libx264","-preset","fast","-crf","24","-pix_fmt","yuv420p", outp])
+         "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    """Tutarlı çok satırlı metin overlay - her zaman 2+ satır"""
-    # HER ZAMAN çok satırlı yap
-    wrapped = wrap_mobile_lines_consistent(clean_caption_text(text), CAPTION_MAX_LINE)
+    """Geliştirilmiş metin overlay - CapCut tarzı animasyonlu"""
+    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
     esc = escape_drawtext(wrapped)
     lines = wrapped.count("\n")+1
     maxchars = max(len(x) for x in wrapped.split("\n"))
     
     # Hook için daha büyük ve bold
     if is_hook:
-        base_fs = 50 if lines >= 3 else 54
+        base_fs = 52 if lines >= 3 else 58
         border_w = 5
-        box_border = 18
+        box_border = 20
     else:
-        base_fs = 40 if lines >= 3 else 44
+        base_fs = 42 if lines >= 3 else 48
         border_w = 4
-        box_border = 14
+        box_border = 16
     
-    # Font boyutunu karakter sayısına göre ayarla - sığma garantisi
-    if maxchars > 20:
-        base_fs -= 8
-    elif maxchars > 16:
-        base_fs -= 4
+    # Font boyutunu karakter sayısına göre ayarla
+    if maxchars > 25:
+        base_fs -= 6
+    elif maxchars > 20:
+        base_fs -= 3
     
-    # Pozisyon hesaplama - ekranın alt 1/3'ünde - güvenli alan
-    y_pos = "h-h/3-text_h/2-20"  # 20px daha yukarı - sığma garantisi
+    # Pozisyon hesaplama - ekranın alt 1/3'ünde
+    y_pos = "h-h/3-text_h/2"
     
-    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=8"
+    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
     
     # Gölge efekti
     shadow = f"drawtext={common}:fontcolor=black@0.8:borderw=0"
     # Ana arka plan kutusu
-    box = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.7"
+    box = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.65"
     # Ana metin
     main = f"drawtext={common}:fontcolor={color}:borderw={border_w}:bordercolor=black@0.9"
     
@@ -394,68 +393,8 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     # Animasyon efekti için offset
     vf = f"{shadow},{box},{main}"
     
-    run(["ffmpeg","-y","-i",seg,"-vf",vf,"-c:v","libx264","-preset","fast",
-         "-crf","26", "-movflags","+faststart", outp])
-
-def wrap_mobile_lines_consistent(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
-    """HER ZAMAN çok satırlı metin oluştur - tek satır yasaklı"""
-    words = text.split()
-    W = len(words)
-    
-    # Çok kısa metinler için zorla çok satır
-    if W <= 3:
-        # 3 kelime veya daha az - 2 satıra böl
-        mid = max(1, W//2)
-        line1 = " ".join(words[:mid])
-        line2 = " ".join(words[mid:])
-        return f"{line1}\n{line2}" if line2 else line1
-    
-    if W <= 8:
-        # 4-8 kelime - 2 satıra böl
-        mid = W//2
-        line1 = " ".join(words[:mid])
-        line2 = " ".join(words[mid:])
-        return f"{line1}\n{line2}"
-    
-    # 9+ kelime - 3 satıra böl
-    lines = 3
-    per = (W + lines - 1) // lines
-    chunks = []
-    for i in range(lines):
-        start = i * per
-        end = min(W, (i + 1) * per)
-        if start < W:
-            chunk = " ".join(words[start:end])
-            if chunk:
-                chunks.append(chunk)
-    
-    # Satır uzunluğu kontrolü - çok uzunsa yeniden böl
-    while chunks and max(len(c) for c in chunks) > max_line_length:
-        # Daha fazla satıra böl
-        if len(chunks) < 4:
-            # 4 satıra çık
-            lines = 4
-            per = (W + lines - 1) // lines
-            chunks = []
-            for i in range(lines):
-                start = i * per
-                end = min(W, (i + 1) * per)
-                if start < W:
-                    chunk = " ".join(words[start:end])
-                    if chunk:
-                        chunks.append(chunk)
-        else:
-            break
-    
-    # En az 2 satır garantisi
-    if len(chunks) < 2 and W > 1:
-        mid = max(1, W//2)
-        chunks = [" ".join(words[:mid]), " ".join(words[mid:])]
-    
-    result = "\n".join(chunks[:4])  # Maksimum 4 satır
-    print(f"      📝 Text wrap: {len(chunks)} satır | Max len: {max(len(c) for c in chunks) if chunks else 0}")
-    
-    return result
+    run(["ffmpeg","-y","-i",seg,"-vf",vf,"-c:v","libx264","-preset","medium",
+         "-crf",str(max(16,CRF_VISUAL-3)), "-movflags","+faststart", outp])
 
 # ---------------- geliştirilmiş içerik üretimi ----------------
 ENHANCED_SCRIPT_BANK = {
@@ -782,10 +721,6 @@ Return ONLY valid JSON:
 # ---------------- ana fonksiyon güncellemeleri ----------------
 def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | Enhanced Version")
-    
-    # SABİT SES SEÇİMİ SIFIRLAMA - her video için yeniden seçim
-    global SELECTED_VOICE
-    SELECTED_VOICE = None
 
     # 1) Geliştirilmiş içerik üretimi
     if USE_GEMINI and GEMINI_API_KEY:
@@ -840,20 +775,16 @@ def main():
     sentences = sents
     search_terms = terms
 
-    # Video için tutarlı ses seçimi - İLK CÜMLEYE GÖRE
-    full_script = " ".join(sentences)
-    select_consistent_voice(full_script)
-
-    # 2) TAMAMLANMIŞ TTS işlemi - her cümle seslendirilecek
-    tmp = tempfile.mkdtemp(prefix="complete_shorts_")
+    # 2) Geliştirilmiş TTS işlemi
+    tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
     wavs = []; metas = []
     
-    print("🎤 TAMAMLANMIŞ TTS işlemi - her cümle seslendirilir...")
+    print("🎤 Geliştirilmiş TTS işlemi başlıyor...")
     for i, s in enumerate(sentences):
         print(f"   Cümle {i+1}/{len(sentences)}: {s[:50]}...")
         w = str(pathlib.Path(tmp)/f"sent_{i:02d}.wav")
-        dur = tts_to_wav(s, w, full_script)  # Tutarlı ses için tam script gönder
+        dur = tts_to_wav(s, w)
         wavs.append(w)
         metas.append((s, dur))
         time.sleep(0.3)  # Rate limiting
@@ -862,11 +793,11 @@ def main():
     print("🎬 Yüksek kaliteli video indiriliyor...")
     clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
 
-    # 4) TAMAMLANMIŞ video segmentleri - her cümle için segment
-    print("✨ TAMAMLANMIŞ video segmentleri oluşturuluyor...")
+    # 4) Geliştirilmiş video segmentleri
+    print("✨ Sinematik video segmentleri oluşturuluyor...")
     segs = []
     for i, (s, d) in enumerate(metas):
-        print(f"   Segment {i+1}/{len(metas)} - {d:.1f}s")
+        print(f"   Segment {i+1}/{len(metas)}")
         base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(clips[i % len(clips)], d, base)
         
@@ -875,22 +806,21 @@ def main():
         draw_capcut_text(base, s, color, font, colored, is_hook=(i == 0))
         segs.append(colored)
 
-    # 5) TAMAMLANMIŞ video assembly - kesinti yok
-    print("🎞️ TAMAMLANMIŞ video oluşturuluyor...")
+    # 5) Final video assembly
+    print("🎞️ Final video oluşturuluyor...")
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
-    concat_videos_complete(segs, vcat)
+    concat_videos(segs, vcat)
 
     acat = str(pathlib.Path(tmp) / "audio_concat.wav")
-    concat_audios_complete(wavs, acat)
+    concat_audios(wavs, acat)
 
-    # 6) Süre kontrolü - tam seslendirme
+    # 6) Süre optimizasyonu
     total_dur = ffprobe_dur(acat)
-    print(f"📏 TAMAMLANMIŞ toplam süre: {total_dur:.1f}s")
+    print(f"📏 Toplam süre: {total_dur:.1f}s (Hedef: {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
     
-    # Minimum süre için padding (sadece çok kısa ise)
-    if total_dur < 15.0:  # 15 saniyeden kısa ise
-        deficit = 15.0 - total_dur
-        extra = min(deficit, 3.0)  # Maksimum 3s ekleme
+    if total_dur < TARGET_MIN_SEC:
+        deficit = TARGET_MIN_SEC - total_dur
+        extra = min(deficit, 5.0)  # Maksimum 5s ekleme
         if extra > 0.1:
             print(f"⏱️ {extra:.1f}s sessizlik ekleniyor...")
             padded = str(pathlib.Path(tmp) / "audio_padded.wav")
@@ -902,15 +832,15 @@ def main():
             ])
             acat = padded
 
-    # 7) FINAL export - kesintisiz
+    # 7) Final export
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Complete_Short"
+    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Enhanced_Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
     
-    print("🔄 TAMAMLANMIŞ video ve ses birleştiriliyor...")
-    mux_complete(vcat, acat, outp)
+    print("🔄 Video ve ses birleştiriliyor...")
+    mux(vcat, acat, outp)
     final_dur = ffprobe_dur(outp)
-    print(f"✅ TAMAMLANMIŞ video kaydedildi: {outp} ({final_dur:.1f}s)")
+    print(f"✅ Video kaydedildi: {outp} ({final_dur:.1f}s)")
 
     # 8) Geliştirilmiş metadata
     def _ok_str(x): return isinstance(x,str) and len(x.strip()) > 0
@@ -974,86 +904,6 @@ def main():
     except:
         pass
 
-# TAMAMLANMIŞ video birleştirme fonksiyonları
-def concat_videos_complete(files: List[str], outp: str):
-    """Tüm video segmentlerini tam olarak birleştir - kesinti yok"""
-    lst = str(pathlib.Path(outp).with_suffix(".txt"))
-    with open(lst,"w") as f:
-        for p in files: 
-            f.write(f"file '{p}'\n")
-    
-    # Hızlı birleştirme - her segmenti tam kullan
-    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,
-         "-c:v","libx264","-preset","fast","-crf","24",  # Hızlı encode
-         "-movflags","+faststart", outp])
-
-def concat_audios_complete(files: List[str], outp: str):
-    """Tüm ses dosyalarını tam olarak birleştir - KESME YOK"""
-    print(f"📊 {len(files)} ses dosyası birleştiriliyor...")
-    
-    lst = str(pathlib.Path(outp).with_suffix(".txt"))
-    with open(lst,"w") as f:
-        for p in files:
-            f.write(f"file '{p}'\n")
-    
-    # TAM BİRLEŞTİRME - hiçbir kısıtlama yok
-    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,
-         "-af","volume=0.9,dynaudnorm=g=3:f=250:r=0.95",  # Sadece normalize
-         outp])  # SÜRE KISITLAMASI YOK
-
-def mux_complete(video: str, audio: str, outp: str):
-    """TAMAMLANMIŞ video/audio birleştirme - hiç kesme yok"""
-    try:
-        # Süreleri kontrol et ama kesme
-        video_dur = ffprobe_dur(video)
-        audio_dur = ffprobe_dur(audio)
-        
-        print(f"🔍 Video: {video_dur:.1f}s | Audio: {audio_dur:.1f}s")
-        
-        # EN UZUN OLANINA GÖRE SENKRONİZE ET (kesme değil, uzat)
-        max_dur = max(video_dur, audio_dur)
-        
-        if video_dur < audio_dur:
-            # Video kısa - video'yu uzat (son kareyi tut)
-            print(f"⚠️ Video kısa ({video_dur:.1f}s), {audio_dur:.1f}s'ye uzatılıyor...")
-            temp_video = video.replace(".mp4", "_extended.mp4")
-            
-            run(["ffmpeg","-y","-i",video,
-                 "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={audio_dur-video_dur:.3f}[v]",
-                 "-map","[v]","-r","25","-c:v","libx264","-preset","fast","-crf","22",
-                 temp_video])
-            video = temp_video
-            
-        elif audio_dur < video_dur:
-            # Audio kısa - audio'yu uzat (sessizlik ekle)
-            print(f"⚠️ Audio kısa ({audio_dur:.1f}s), {video_dur:.1f}s'ye uzatılıyor...")
-            temp_audio = audio.replace(".wav", "_extended.wav")
-            
-            silence_dur = video_dur - audio_dur
-            run(["ffmpeg","-y",
-                 "-f","lavfi","-t", f"{silence_dur:.3f}", "-i", "anullsrc=r=48000:cl=mono",
-                 "-i", audio, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1",
-                 temp_audio])
-            audio = temp_audio
-        
-        # PERFECT SYNC ile birleştirme
-        run(["ffmpeg","-y","-i",video,"-i",audio,
-             "-map","0:v:0","-map","1:a:0",
-             "-c:v","copy","-c:a","aac","-b:a","256k",
-             "-movflags","+faststart",
-             "-avoid_negative_ts","make_zero",  # Sync problemi önleme
-             outp])
-        
-        # Temp dosyaları temizle
-        for temp_file in [video, audio]:
-            if "_extended" in temp_file:
-                pathlib.Path(temp_file).unlink(missing_ok=True)
-                
-    except Exception as e:
-        print(f"⚠️ Mux hatası: {e}")
-        # Son çare - basit copy ama HİÇ KESME
-        run(["ffmpeg","-y","-i",video,"-i",audio,"-c","copy",outp])
-
 # Diğer fonksiyonlar aynı kalıyor (utils, state management, etc.)
 def run(cmd, check=True):
     res = subprocess.run(cmd, text=True, capture_output=True)
@@ -1084,7 +934,7 @@ def escape_drawtext(s: str) -> str:
              .replace("%","\\%"))
 
 def clean_caption_text(s: str) -> str:
-    """Agresif metin temizleme - çok satırlı görünüm için optimize"""
+    """Agresif metin temizleme - MAX 80 karakter per sentence"""
     t = (s or "").strip().replace("'","'").replace("—","-").replace('"',"").replace("`","")
     t = re.sub(r'(\d+)([A-Za-z])', r'\1 \2', t)
     t = re.sub(r'([A-Za-z])(\d+)', r'\1 \2', t)
@@ -1098,12 +948,27 @@ def clean_caption_text(s: str) -> str:
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
     
-    # Çok satır için optimal uzunluk - 60 karakter max
-    if len(t) > 60:  
+    # AGRESIF uzunluk kısıtlaması
+    if len(t) > 80:  # MAX 80 karakter
         words = t.split()
-        t = " ".join(words[:10]) + "."  # MAX 10 kelime - çok satır garantisi
+        t = " ".join(words[:12]) + "."  # MAX 12 kelime
     
     return t.strip()
+
+def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
+    words = text.split()
+    W = len(words)
+    if W <= 6:
+        return text
+    lines = 2 if W <= 12 else 3
+    per = (W + lines - 1)//lines
+    chunks = [" ".join(words[i*per:min(W,(i+1)*per)]) for i in range(lines)]
+    chunks = [c for c in chunks if c]
+    if chunks and max(len(c) for c in chunks) > max_line_length and len(chunks) < 3:
+        lines=3; per=(W+lines-1)//lines
+        chunks=[" ".join(words[i*per:min(W,(i+1)*per)]) for i in range(lines)]
+        chunks=[c for c in chunks if c]
+    return "\n".join(chunks[:3])
 
 # State management functions
 def _state_load():
@@ -1163,6 +1028,98 @@ def _gemini_call(prompt: str, model: str) -> dict:
     raw = m.group(0).strip()
     raw = re.sub(r"^```json\s*|\s*```$", "", raw, flags=re.MULTILINE)
     return json.loads(raw)
+
+# Video processing functions
+def concat_videos(files: List[str], outp: str):
+    lst = str(pathlib.Path(outp).with_suffix(".txt"))
+    with open(lst,"w") as f:
+        for p in files: f.write(f"file '{p}'\n")
+    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-c","copy", outp])
+
+def concat_audios(files: List[str], outp: str):
+    """Ses dosyalarını birleştir - MAX 40s toplam"""
+    # Önce toplam süreyi kontrol et
+    total_dur = sum(ffprobe_dur(f) for f in files)
+    print(f"📊 Audio toplam süre: {total_dur:.1f}s")
+    
+    if total_dur > TARGET_MAX_SEC:
+        print(f"⚠️ Audio çok uzun ({total_dur:.1f}s), kesiliyor...")
+        # Her dosyayı proporsiyone göre kısalt
+        ratio = TARGET_MAX_SEC / total_dur
+        temp_files = []
+        
+        for i, f in enumerate(files):
+            if total_dur <= TARGET_MAX_SEC:
+                temp_files.append(f)
+                continue
+                
+            orig_dur = ffprobe_dur(f)
+            new_dur = min(orig_dur * ratio, 6.0)  # Max 6s per segment
+            
+            if new_dur < 1.0:  # Çok kısa olursa atla
+                continue
+                
+            temp_f = f.replace(".wav", f"_cut_{i}.wav")
+            run(["ffmpeg","-y","-i",f,"-t",f"{new_dur:.2f}","-c","copy",temp_f])
+            temp_files.append(temp_f)
+        
+        files = temp_files[:6]  # Max 6 segment
+    
+    lst = str(pathlib.Path(outp).with_suffix(".txt"))
+    with open(lst,"w") as f:
+        for p in files[:6]:  # MAX 6 dosya
+            f.write(f"file '{p}'\n")
+    
+    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+         "-af","volume=0.9,dynaudnorm","-t",f"{TARGET_MAX_SEC}",outp])  # ZORLA KES
+    
+    # Temp dosyaları temizle
+    for f in files:
+        if "_cut_" in f:
+            pathlib.Path(f).unlink(missing_ok=True)
+
+def mux(video: str, audio: str, outp: str):
+    """Güvenli video/audio birleştirme - FFmpeg hata önleme"""
+    try:
+        # Önce süreleri kontrol et
+        video_dur = ffprobe_dur(video)
+        audio_dur = ffprobe_dur(audio)
+        
+        print(f"🔍 Video: {video_dur:.1f}s | Audio: {audio_dur:.1f}s")
+        
+        # Süre uyumsuzluğu varsa düzelt
+        if abs(video_dur - audio_dur) > 1.0:
+            print("⚠️ Video/Audio süre uyumsuzluğu düzeltiliyor...")
+            min_dur = min(video_dur, audio_dur, 45.0)  # Max 45s
+            
+            # Video'yu kırp
+            temp_video = video.replace(".mp4", "_temp.mp4")
+            run(["ffmpeg","-y","-i",video,"-t",f"{min_dur:.2f}","-c","copy",temp_video])
+            
+            # Audio'yu kırp  
+            temp_audio = audio.replace(".wav", "_temp.wav")
+            run(["ffmpeg","-y","-i",audio,"-t",f"{min_dur:.2f}","-c","copy",temp_audio])
+            
+            video, audio = temp_video, temp_audio
+        
+        # Güvenli birleştirme
+        run(["ffmpeg","-y","-i",video,"-i",audio,
+             "-map","0:v:0","-map","1:a:0",
+             "-c:v","copy","-c:a","aac","-b:a","256k",
+             "-movflags","+faststart",
+             "-shortest",  # Kısa olanı kullan
+             "-avoid_negative_ts","make_zero",  # Sync problemi önleme
+             outp])
+        
+        # Temp dosyaları temizle
+        for temp_file in [video, audio]:
+            if "_temp" in temp_file:
+                pathlib.Path(temp_file).unlink(missing_ok=True)
+                
+    except Exception as e:
+        print(f"⚠️ Mux hatası: {e}")
+        # Son çare - basit copy
+        run(["ffmpeg","-y","-i",video,"-i",audio,"-c","copy","-shortest",outp])
 
 # YouTube functions
 def yt_service():
