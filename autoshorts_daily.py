@@ -90,68 +90,105 @@ def create_advanced_ssml(text: str, voice: str) -> str:
     return ssml
 
 def tts_to_wav(text: str, wav_out: str) -> float:
+    """
+    Edge-TTS ile TTS. SSML dalında ssml=True kullanılır (aksi halde SSML etiketlerini okur).
+    Basit dal düz metindir.
+    """
     import asyncio
-    def _run_ff(args): subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
+    def _run_ff(args):
+        subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
     def _probe(path: str, default: float = 3.5) -> float:
         try:
-            pr = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
-                                capture_output=True, text=True, check=True)
+            pr = subprocess.run(
+                ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
+                capture_output=True, text=True, check=True
+            )
             return float(pr.stdout.strip())
         except Exception:
             return default
+
     mp3 = wav_out.replace(".wav", ".mp3")
-    clean = text[:400] if len(text) > 400 else text
-    for abbr, full in {"AI":"Artificial Intelligence","USA":"United States","UK":"United Kingdom","NASA":"NASA","DIY":"Do It Yourself"}.items():
-        clean = re.sub(rf'\b{abbr}\b', full, clean)
+
+    # Metni kısalt/temizle (düzgün heceleme için)
+    clean_text = text[:400] if len(text) > 400 else text
+    abbr = {"AI":"Artificial Intelligence","USA":"United States","UK":"United Kingdom","NASA":"NASA","DIY":"Do It Yourself"}
+    for k,v in abbr.items():
+        clean_text = re.sub(rf"\b{k}\b", v, clean_text)
+
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
-    selected = VOICE if VOICE in available else available[0]
-    print(f"      🎤 Voice: {selected} | {clean[:30]}...")
+    selected_voice = VOICE if VOICE in available else available[0]
+    print(f"      🎤 Voice: {selected_voice} | {clean_text[:30]}...")
+
     try:
+        # ----- PREMIUM: SSML ile (KRİTİK: ssml=True) -----
         async def _edge_save_premium():
-            ssml_text = create_advanced_ssml(clean, selected)
-            comm = edge_tts.Communicate(ssml_text, voice=selected)
+            ssml_text = create_advanced_ssml(clean_text, selected_voice)
+            comm = edge_tts.Communicate(ssml_text, voice=selected_voice, ssml=True)
             await comm.save(mp3)
+
         try:
             asyncio.run(_edge_save_premium())
         except RuntimeError:
-            nest_asyncio.apply(); asyncio.get_event_loop().run_until_complete(_edge_save_premium())
-        # —— Güvenli filtre zinciri: de-esser YOK (sürüm farkı çakıyordu)
+            nest_asyncio.apply()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(_edge_save_premium())
+
+        # Güvenli filtre zinciri (de-esser yok)
         _run_ff([
-            "-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
             "-af","volume=0.92,highpass=f=75,lowpass=f=15000,dynaudnorm=g=7:f=250:r=0.95,acompressor=threshold=-20dB:ratio=2:attack=5:release=50,equalizer=f=2000:t=h:w=200:g=2,equalizer=f=100:t=h:w=50:g=1",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
-        d = _probe(wav_out, 3.5); print(f"      ✅ Premium Edge-TTS: {d:.1f}s"); return d
+        d = _probe(wav_out, 3.5)
+        print(f"      ✅ Premium Edge-TTS (SSML): {d:.1f}s")
+        return d
+
     except Exception as e:
-        print(f"      ⚠️ SSML başarısız, basit Edge-TTS: {e}")
+        print(f"      ⚠️ SSML dalı başarısız, düz metne düşüyorum: {e}")
+
+        # ----- BASİT: düz metin (ssml=False) -----
         try:
             async def _edge_save_simple():
-                comm = edge_tts.Communicate(clean, voice=selected, rate=VOICE_RATE)
+                comm = edge_tts.Communicate(clean_text, voice=selected_voice, rate=VOICE_RATE)
                 await comm.save(mp3)
+
             try:
                 asyncio.run(_edge_save_simple())
             except RuntimeError:
-                nest_asyncio.apply(); asyncio.get_event_loop().run_until_complete(_edge_save_simple())
+                nest_asyncio.apply()
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(_edge_save_simple())
+
             _run_ff([
-                "-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le",
+                "-i", mp3,
+                "-ar","44100","-ac","1","-acodec","pcm_s16le",
                 "-af","volume=0.9,dynaudnorm=g=5:f=200,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=15",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
-            d = _probe(wav_out, 3.5); print(f"      ✅ Simple Edge-TTS: {d:.1f}s"); return d
+            d = _probe(wav_out, 3.5)
+            print(f"      ✅ Simple Edge-TTS: {d:.1f}s")
+            return d
+
         except Exception as e2:
-            print(f"      ⚠️ Edge-TTS ve filtre fallback: {e2}")
+            print(f"      ⚠️ Edge-TTS fallback da hata: {e2}")
+            # ---- Son çare: Google TTS ----
             try:
-                q = requests.utils.quote(clean.replace('"','').replace("'",""))
+                q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
                 url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.85"
                 r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}, timeout=30); r.raise_for_status()
                 open(mp3,"wb").write(r.content)
                 _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le","-af","volume=0.9,dynaudnorm", wav_out])
                 pathlib.Path(mp3).unlink(missing_ok=True)
-                d = _probe(wav_out, 3.5); print(f"      ✅ Google TTS: {d:.1f}s"); return d
+                d = _probe(wav_out, 3.5)
+                print(f"      ✅ Google TTS: {d:.1f}s")
+                return d
             except Exception as e3:
-                print(f"      ❌ Tüm TTS başarısız: {e3}"); _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out]); return 4.0
+                print(f"      ❌ Tüm TTS yolları çöktü: {e3}")
+                _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out])
+                return 4.0
 
 # ---------------- video-özel arama terimleri ----------------
 _STOPWORDS_EN = {
@@ -610,4 +647,5 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 if __name__ == "__main__":
     main()
+
 
