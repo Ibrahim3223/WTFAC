@@ -190,6 +190,123 @@ def tts_to_wav(text: str, wav_out: str) -> float:
                 print(f"      ❌ Tüm TTS başarısız: {e3}")
                 _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out]); return 4.0
 
+# ---------------- video-özel arama terimleri (search_terms) ----------------
+_STOPWORDS_EN = {
+    "the","a","an","and","or","but","of","in","on","to","for","with","by","from","as","at","is","are","was","were",
+    "this","that","these","those","it","its","be","been","being","you","your","we","our","they","their","i","me",
+    "today","now","then","there","here","very","more","most","over","under","into","out","about","just","also"
+}
+
+def _normalize_words(text: str, lang: str="en") -> List[str]:
+    words = re.findall(r"[A-Za-z][A-Za-z\-]{2,}", text or "")
+    words = [w.lower() for w in words]
+    if lang.startswith("en"):
+        words = [w for w in words if w not in _STOPWORDS_EN]
+    return words
+
+def _top_keywords(sentences: List[str], lang: str="en", k: int=8) -> List[str]:
+    """Basit TF + ilk cümlelere ağırlık; özel isimler ve sayılar korunur."""
+    from collections import Counter
+    # İlk cümleler daha önemli
+    weights = Counter()
+    for idx, s in enumerate(sentences):
+        w = _normalize_words(s, lang)
+        for token in w:
+            weights[token] += (3 if idx == 0 else 2 if idx == 1 else 1)
+    # Bileşik ifadeler (iki kelime) – örn: "space telescope"
+    bigrams = Counter()
+    for s in sentences:
+        w = _normalize_words(s, lang)
+        for a, b in zip(w, w[1:]):
+            if a != b:
+                bigrams[f"{a} {b}"] += 1
+    out = [t for t,_ in weights.most_common(k+4)]
+    # Bigramları öne al
+    out = (list(dict.fromkeys([bg for bg,_ in bigrams.most_common(4)] + out)))
+    return out[:k+4]
+
+def build_search_terms_per_video(
+    sentences: List[str],
+    topic: str,
+    mode: str,
+    lang: str,
+    hints: Optional[List[str]] = None,
+    max_terms: int = 8
+) -> List[str]:
+    """
+    Cümlelerden konuya özgü search terms üretir.
+    - Dikey & kaliteli sonuçlar için otomatik niteleyici ekler: 'portrait', '4k'
+    - Mod'a göre alan terimleri ekler: ('space_news' -> rocket, telescope, nasa ...)
+    - 'hints' (Gemini veya channel terms) sadece yedek/çeşitlilik için kullanılır.
+    """
+    keywords = _top_keywords(sentences + [topic], lang=lang, k=8)
+
+    # Mod tabanlı alan sözlüğü
+    domain_boosters = {
+        "space_news": ["space", "rocket launch", "telescope", "galaxy", "nasa", "astronaut"],
+        "tech_news": ["technology", "lab", "robot", "ai", "microchip", "innovation"],
+        "history_story": ["ancient", "ruins", "manuscript", "archaeology", "museum"],
+        "country_facts": ["landmark", "city skyline", "culture", "nature", "travel"],
+        "animal_facts": ["wildlife", "close up", "nature", "habitat"],
+        "movie_secrets": ["film set", "behind the scenes", "cinema", "director"],
+        "cricket_women": ["women cricket", "stadium", "crowd", "celebration"],
+        "fixit_fast": ["workshop", "tools", "repair", "step by step"]
+    }
+    boosters = domain_boosters.get(mode, [])
+
+    # Hints (kanal/Gemini) → düşük ağırlıkla eklenecek
+    hints = [h for h in (hints or []) if isinstance(h, str) and h.strip()]
+    hints = [re.sub(r"\s+", " ", h.strip().lower()) for h in hints]
+
+    # Aday seti: bigramları öne al, ardından tekil kelimeler
+    candidates: List[str] = []
+    for kw in keywords:
+        # Birebir keyword zaten bigrams ise ekle; değilse anlamlı birleşimler yarat
+        if " " in kw:
+            candidates.append(kw)
+        else:
+            # tekil kelime -> bağlama göre kombinasyon
+            for bx in boosters[:3] or ["highlight"]:
+                candidates.append(f"{kw} {bx}")
+            candidates.append(kw)
+
+    # Hints serpiştir
+    for h in hints[:6]:
+        if h not in candidates:
+            candidates.append(h)
+
+    # Görsel niteleyiciler (kalite/format)
+    decorated = []
+    for c in candidates:
+        base = c.strip()
+        if not base:
+            continue
+        # Tek kelime ise alan terimi ekle
+        if " " not in base and boosters:
+            base = f"{base} {boosters[0]}"
+        decorated.extend([
+            f"{base} 4k",
+            f"{base} portrait",
+            f"{base} vertical 4k"
+        ])
+
+    # Dedupe + kısalt
+    unique = []
+    for t in decorated:
+        t = re.sub(r"\s+", " ", t).strip()
+        if t not in unique:
+            unique.append(t)
+
+    # En alakalıları seç: önce bigram içerenler, sonra uzunluk/çeşitlilik
+    bigram_first = [t for t in unique if " " in t.split(" ")[0] or " " in t]  # kaba ama işlevsel
+    tail = [t for t in unique if t not in bigram_first]
+    final = (bigram_first + tail)[:max_terms]
+
+    # Aşırı genel kalanları at, en az 4 terim bırak
+    final = [t for t in final if len(t.split()) >= 2] or final[:4]
+    return final[:max_terms]
+
+
 # ---------------- geliştirilmiş Pexels (daha kaliteli videolar) ----------------
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
     if not PEXELS_API_KEY:
@@ -568,7 +685,18 @@ def main():
         ctry, tpc, sents, terms = fb["country"], fb["topic"], fb["sentences"], fb["search_terms"]; ttl = desc = ""; tags = []
 
     print(f"📝 İçerik: {ctry} | {tpc}"); print(f"📊 Cümle sayısı: {len(sents)}")
-    sentences = sents; search_terms = terms
+    sentences = sents
+    # Video-özel arama terimleri: cümlelerden türet
+    search_terms = build_search_terms_per_video(
+    sentences=sentences,
+    topic=tpc,
+    mode=MODE,
+    lang=LANG,
+    hints=terms  # Gemini/kanal’dan gelen olur ise düşük ağırlıkla karışır
+)
+
+print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
+    
 
     # 2) Geliştirilmiş TTS işlemi
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_"); font = font_path()
@@ -722,3 +850,4 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 if __name__ == "__main__":
     main()
+
