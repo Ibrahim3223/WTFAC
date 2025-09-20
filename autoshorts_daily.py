@@ -205,15 +205,12 @@ def _normalize_words(text: str, lang: str="en") -> List[str]:
     return words
 
 def _top_keywords(sentences: List[str], lang: str="en", k: int=8) -> List[str]:
-    """Basit TF + ilk cümlelere ağırlık; özel isimler ve sayılar korunur."""
     from collections import Counter
-    # İlk cümleler daha önemli
     weights = Counter()
     for idx, s in enumerate(sentences):
         w = _normalize_words(s, lang)
         for token in w:
             weights[token] += (3 if idx == 0 else 2 if idx == 1 else 1)
-    # Bileşik ifadeler (iki kelime) – örn: "space telescope"
     bigrams = Counter()
     for s in sentences:
         w = _normalize_words(s, lang)
@@ -221,7 +218,6 @@ def _top_keywords(sentences: List[str], lang: str="en", k: int=8) -> List[str]:
             if a != b:
                 bigrams[f"{a} {b}"] += 1
     out = [t for t,_ in weights.most_common(k+4)]
-    # Bigramları öne al
     out = (list(dict.fromkeys([bg for bg,_ in bigrams.most_common(4)] + out)))
     return out[:k+4]
 
@@ -233,15 +229,8 @@ def build_search_terms_per_video(
     hints: Optional[List[str]] = None,
     max_terms: int = 8
 ) -> List[str]:
-    """
-    Cümlelerden konuya özgü search terms üretir.
-    - Dikey & kaliteli sonuçlar için otomatik niteleyici ekler: 'portrait', '4k'
-    - Mod'a göre alan terimleri ekler: ('space_news' -> rocket, telescope, nasa ...)
-    - 'hints' (Gemini veya channel terms) sadece yedek/çeşitlilik için kullanılır.
-    """
     keywords = _top_keywords(sentences + [topic], lang=lang, k=8)
 
-    # Mod tabanlı alan sözlüğü
     domain_boosters = {
         "space_news": ["space", "rocket launch", "telescope", "galaxy", "nasa", "astronaut"],
         "tech_news": ["technology", "lab", "robot", "ai", "microchip", "innovation"],
@@ -254,34 +243,27 @@ def build_search_terms_per_video(
     }
     boosters = domain_boosters.get(mode, [])
 
-    # Hints (kanal/Gemini) → düşük ağırlıkla eklenecek
     hints = [h for h in (hints or []) if isinstance(h, str) and h.strip()]
     hints = [re.sub(r"\s+", " ", h.strip().lower()) for h in hints]
 
-    # Aday seti: bigramları öne al, ardından tekil kelimeler
     candidates: List[str] = []
     for kw in keywords:
-        # Birebir keyword zaten bigrams ise ekle; değilse anlamlı birleşimler yarat
         if " " in kw:
             candidates.append(kw)
         else:
-            # tekil kelime -> bağlama göre kombinasyon
             for bx in boosters[:3] or ["highlight"]:
                 candidates.append(f"{kw} {bx}")
             candidates.append(kw)
 
-    # Hints serpiştir
     for h in hints[:6]:
         if h not in candidates:
             candidates.append(h)
 
-    # Görsel niteleyiciler (kalite/format)
-    decorated = []
+    decorated: List[str] = []
     for c in candidates:
         base = c.strip()
         if not base:
             continue
-        # Tek kelime ise alan terimi ekle
         if " " not in base and boosters:
             base = f"{base} {boosters[0]}"
         decorated.extend([
@@ -290,63 +272,79 @@ def build_search_terms_per_video(
             f"{base} vertical 4k"
         ])
 
-    # Dedupe + kısalt
-    unique = []
+    unique: List[str] = []
     for t in decorated:
         t = re.sub(r"\s+", " ", t).strip()
         if t not in unique:
             unique.append(t)
 
-    # En alakalıları seç: önce bigram içerenler, sonra uzunluk/çeşitlilik
-    bigram_first = [t for t in unique if " " in t.split(" ")[0] or " " in t]  # kaba ama işlevsel
+    bigram_first = [t for t in unique if " " in t]  # bigram/phrase öne
     tail = [t for t in unique if t not in bigram_first]
     final = (bigram_first + tail)[:max_terms]
-
-    # Aşırı genel kalanları at, en az 4 terim bırak
     final = [t for t in final if len(t.split()) >= 2] or final[:4]
     return final[:max_terms]
-
 
 # ---------------- geliştirilmiş Pexels (daha kaliteli videolar) ----------------
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
     if not PEXELS_API_KEY:
         raise RuntimeError("PEXELS_API_KEY missing")
-    out, seen = [], set(); headers={"Authorization": PEXELS_API_KEY}
+    out, seen = [], set()
+    headers = {"Authorization": PEXELS_API_KEY}
 
     def _score(meta):
         w,h = meta.get("width",0), meta.get("height",0)
-        dur = meta.get("duration",0); size = meta.get("size",0) or 0
-        aspect = (h>0 and abs((9/16)-(w/h))<0.08)  # 9:16
+        dur = meta.get("duration",0)
+        size = meta.get("size",0) or 0
+        aspect = (h>0 and abs((9/16)-(w/h))<0.08)
         dur_bonus = -abs(dur-9)+9   # 9 sn çevresi tepe
         return (2000*(1 if aspect else 0)) + (w*h/1e4) + (size/2e5) + (120*max(dur_bonus,0))
 
     for term in terms:
-        if len(out) >= need: break
+        if len(out) >= need:
+            break
         try:
-            r = requests.get("https://api.pexels.com/videos/search", headers=headers,
-                             params={"query":term,"per_page":30,"orientation":"portrait","size":"large",
-                                     "min_width":"1080","min_height":"1920"}, timeout=30)
+            r = requests.get(
+                "https://api.pexels.com/videos/search",
+                headers=headers,
+                params={"query":term,"per_page":30,"orientation":"portrait","size":"large",
+                        "min_width":"1080","min_height":"1920"},
+                timeout=30
+            )
             vids = r.json().get("videos", []) if r.status_code==200 else []
-            cand=[]
+            cand = []
             for v in vids:
-                files = v.get("video_files",[]); if not files: continue
+                files = v.get("video_files",[])
+                if not files:
+                    continue
                 best = max(files, key=lambda x: x.get("width",0)*x.get("height",0))
-                if best.get("height",0) < 1080: continue
-                url = best["link"]; if url in seen: continue
-                meta = {"width":best.get("width",0),"height":best.get("height",0),
-                        "duration":v.get("duration",0),"size":best.get("file_size",0) or 0,"url":url}
+                if best.get("height",0) < 1080:
+                    continue
+                url = best.get("link")
+                if not url or url in seen:
+                    continue
+                meta = {
+                    "width": best.get("width",0),
+                    "height": best.get("height",0),
+                    "duration": v.get("duration",0),
+                    "size": best.get("file_size",0) or 0,
+                    "url": url
+                }
                 cand.append((_score(meta), meta))
             for _,m in sorted(cand, key=lambda x: x[0], reverse=True):
-                if len(out) >= need: break
-                url=m["url"]; seen.add(url)
-                f = str(pathlib.Path(tmp)/f"clip_{len(out):02d}_{uuid.uuid4().hex[:6]}.mp4")
+                if len(out) >= need:
+                    break
+                url = m["url"]
+                seen.add(url)
+                fpath = str(pathlib.Path(tmp)/f"clip_{len(out):02d}_{uuid.uuid4().hex[:6]}.mp4")
                 with requests.get(url, stream=True, timeout=180) as rr:
                     rr.raise_for_status()
-                    with open(f,"wb") as w:
-                        for ch in rr.iter_content(1<<14): w.write(ch)
-                ok_size = pathlib.Path(f).stat().st_size > 1_200_000
+                    with open(fpath,"wb") as w:
+                        for ch in rr.iter_content(1<<14):
+                            w.write(ch)
+                ok_size = pathlib.Path(fpath).stat().st_size > 1_200_000
                 ok_dur  = 4 <= m["duration"] <= 20
-                if ok_size and ok_dur: out.append(f)
+                if ok_size and ok_dur:
+                    out.append(fpath)
         except Exception:
             continue
 
@@ -370,11 +368,16 @@ def make_segment(src: str, dur: float, outp: str):
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
     esc = escape_drawtext(wrapped)
-    lines = wrapped.count("\n")+1; maxchars = max(len(x) for x in wrapped.split("\n"))
-    if is_hook: base_fs, border_w, box_border = (52 if lines >= 3 else 58), 5, 20
-    else:       base_fs, border_w, box_border = (42 if lines >= 3 else 48), 4, 16
-    if maxchars > 25: base_fs -= 6
-    elif maxchars > 20: base_fs -= 3
+    lines = wrapped.count("\n")+1
+    maxchars = max(len(x) for x in wrapped.split("\n"))
+    if is_hook:
+        base_fs, border_w, box_border = (52 if lines >= 3 else 58), 5, 20
+    else:
+        base_fs, border_w, box_border = (42 if lines >= 3 else 48), 4, 16
+    if maxchars > 25:
+        base_fs -= 6
+    elif maxchars > 20:
+        base_fs -= 3
     y_pos = "h-h/3-text_h/2"
     common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
     shadow = f"drawtext={common}:fontcolor=black@0.8:borderw=0"
@@ -441,8 +444,8 @@ EXACTLY 7-8 sentences for complete repair guidance:
 3. "Step one: disconnect power safely..." (safety first)
 4. "Next, locate the damaged part..." (identification)
 5. "Remove it by doing this..." (removal process)
-6. "Install the replacement like this..." (installation)
-7. "Test everything works properly..." (verification)
+6. "Install the replacement like this..."
+7. "Test everything works properly..."
 8. "What repair will you try next?"
 Search terms: tools, repair, DIY, workshop, fixing, maintenance.""",
     "history_story": """Create detailed historical stories.
@@ -631,30 +634,19 @@ Return ONLY valid JSON:
     terms = channel_search_terms or data.get("search_terms") or []
     if isinstance(terms, str): terms = [terms]
     terms = [t.strip() for t in terms if isinstance(t, str) and t.strip()]
-    if not terms:
-        mode_terms = {
-            "fixit_fast": ["tools 4k","repair workshop","DIY project","fixing","maintenance"],
-            "country_facts": ["world travel 4k","cultural heritage","landmarks","city skyline"],
-            "history_story": ["ancient ruins 4k","historical","manuscripts","archaeology"],
-            "animal_facts": ["wildlife 4k","animal close up","nature","safari"],
-            "movie_secrets": ["movie theater 4k","film set","cinema","director"],
-            "space_news": ["space 4k","rocket launch","planets","astronaut"],
-            "tech_news": ["technology 4k","innovation","gadgets","research lab"]
-        }
-        terms = mode_terms.get(mode, ["documentary 4k","education","discovery","science"])
     title = (data.get("title") or "").strip()
     description = (data.get("description") or "").strip()
     tags = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return country, topic, sentences, terms, title, description, tags
 
-# ---------------- ana fonksiyon güncellemeleri ----------------
+# ---------------- ana fonksiyon ----------------
 def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | Enhanced Version")
 
     # Günlük tek-kez kilidi (America/New_York)
     _daily_lock_et()
 
-    # 1) Geliştirilmiş içerik üretimi
+    # 1) İçerik üretimi
     if USE_GEMINI and GEMINI_API_KEY:
         banlist = _recent_topics_for_prompt()
         MAX_TRIES = 8
@@ -679,26 +671,25 @@ def main():
                 print("Son sonucu kullanıyoruz..."); ctry, tpc, sents, terms, ttl, desc, tags = last
             else:
                 print("Gelişmiş fallback içeriği..."); fb = ENHANCED_SCRIPT_BANK[random.choice(list(ENHANCED_SCRIPT_BANK.keys()))]
-                ctry, tpc, sents, terms = fb["country"], fb["topic"], fb["sentences"], fb["search_terms"]; ttl = desc = ""; tags = []
+                ctry, tpc, sents, terms = "World", fb["topic"], fb["sentences"], fb["search_terms"]; ttl = desc = ""; tags = []
     else:
         print("Gemini devre dışı, gelişmiş fallback..."); fb = ENHANCED_SCRIPT_BANK[random.choice(list(ENHANCED_SCRIPT_BANK.keys()))]
-        ctry, tpc, sents, terms = fb["country"], fb["topic"], fb["sentences"], fb["search_terms"]; ttl = desc = ""; tags = []
+        ctry, tpc, sents, terms = "World", fb["topic"], fb["sentences"], fb["search_terms"]; ttl = desc = ""; tags = []
 
     print(f"📝 İçerik: {ctry} | {tpc}"); print(f"📊 Cümle sayısı: {len(sents)}")
     sentences = sents
-    # Video-özel arama terimleri: cümlelerden türet
+
+    # >>> VIDEO-ÖZEL SEARCH TERMS <<<
     search_terms = build_search_terms_per_video(
-    sentences=sentences,
-    topic=tpc,
-    mode=MODE,
-    lang=LANG,
-    hints=terms  # Gemini/kanal’dan gelen olur ise düşük ağırlıkla karışır
-)
+        sentences=sentences,
+        topic=tpc,
+        mode=MODE,
+        lang=LANG,
+        hints=terms  # kanal/Gemini ipuçları düşük ağırlıkla karışır
+    )
+    print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
 
-print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
-    
-
-    # 2) Geliştirilmiş TTS işlemi
+    # 2) TTS
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_"); font = font_path()
     wavs = []; metas = []
     print("🎤 Geliştirilmiş TTS işlemi başlıyor...")
@@ -707,11 +698,11 @@ print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
         w = str(pathlib.Path(tmp)/f"sent_{i:02d}.wav"); dur = tts_to_wav(s, w)
         wavs.append(w); metas.append((s, dur)); time.sleep(0.3)
 
-    # 3) Geliştirilmiş video indirme
+    # 3) Pexels
     print("🎬 Yüksek kaliteli video indiriliyor...")
     clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
 
-    # 4) Geliştirilmiş video segmentleri
+    # 4) Segmentler
     print("✨ Sinematik video segmentleri oluşturuluyor...")
     segs = []
     for i, (s, d) in enumerate(metas):
@@ -721,12 +712,11 @@ print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
         color = CAPTION_COLORS[i % len(CAPTION_COLORS)]; draw_capcut_text(base, s, color, font, colored, is_hook=(i == 0))
         segs.append(colored)
 
-    # 5) Final video assembly
+    # 5) Final assembly
     print("🎞️ Final video oluşturuluyor...")
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos(segs, vcat)
-    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)  # >>> FULL narration
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 6) Süre bilgisi
     total_dur = ffprobe_dur(acat); print(f"📏 Toplam süre: {total_dur:.1f}s (Hedef: {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
     if total_dur < TARGET_MIN_SEC:
         deficit = TARGET_MIN_SEC - total_dur; extra = min(deficit, 5.0)
@@ -737,14 +727,13 @@ print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
                  "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", padded])
             acat = padded
 
-    # 7) Final export
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Enhanced_Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
     print("🔄 Video ve ses birleştiriliyor..."); mux(vcat, acat, outp)
     final_dur = ffprobe_dur(outp); print(f"✅ Video kaydedildi: {outp} ({final_dur:.1f}s)")
 
-    # 8) Geliştirilmiş metadata
+    # 6) Metadata
     def _ok_str(x): return isinstance(x,str) and len(x.strip()) > 0
     if _ok_str(ttl) and _ok_str(desc):
         meta = {"title": ttl.strip()[:95], "description": desc.strip()[:4900], "tags": (tags[:15] if isinstance(tags, list) else []),
@@ -760,11 +749,11 @@ print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
                        f"🎯 Subscribe to {CHANNEL_NAME} for more mind-blowing content!\n"
                        f"💬 Comment your favorite fact below!\n\n"
                        f"#shorts #facts #{ctry.lower()}facts #mindblown #education #mystery")
-        tags = ["shorts","facts",f"{ctry.lower()}facts","mindblown","viral","education","mystery","secrets","amazing","science","discovery","hidden","truth","shocking","unbelievable"]
-        meta = {"title": title[:95],"description": description[:4900],"tags": tags[:15],
+        tag_list = ["shorts","facts",f"{ctry.lower()}facts","mindblown","viral","education","mystery","secrets","amazing","science","discovery","hidden","truth","shocking","unbelievable"]
+        meta = {"title": title[:95],"description": description[:4900],"tags": tag_list[:15],
                 "privacy": VISIBILITY,"defaultLanguage": LANG,"defaultAudioLanguage": LANG}
 
-    # 9) YouTube upload
+    # 7) Upload
     print("📤 YouTube'a yükleniyor...")
     try:
         vid_id = upload_youtube(outp, meta)
@@ -777,7 +766,7 @@ print("🔎 Search terms (per-video):", ", ".join(search_terms[:8]))
         import shutil; shutil.rmtree(tmp); print("🧹 Geçici dosyalar temizlendi")
     except: pass
 
-# Diğer fonksiyonlar aynı kalıyor (utils, state management, etc.)
+# ----- utils -----
 def run(cmd, check=True):
     res = subprocess.run(cmd, text=True, capture_output=True)
     if check and res.returncode != 0: raise RuntimeError(res.stderr[:2000])
@@ -850,4 +839,3 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 if __name__ == "__main__":
     main()
-
