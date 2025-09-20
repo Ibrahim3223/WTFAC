@@ -210,13 +210,13 @@ def tts_to_wav(text: str, wav_out: str, video_text_sample: str = "") -> float:
             loop = asyncio.get_event_loop()
             loop.run_until_complete(_edge_save_premium())
 
-        # Premium kalite ses işleme (ElevenLabs seviyesinde)
+        # Basit ama etkili ses işleme (hızlı ve güvenilir)
         _run_ff([
             "-i", mp3, 
             "-ar", "48000",  # Yüksek kalite sample rate
             "-ac", "1", 
             "-acodec", "pcm_s16le",
-            "-af", "volume=0.92,highpass=f=75,lowpass=f=15000,dynaudnorm=g=7:f=300:r=0.95,acompressor=threshold=-20dB:ratio=2:attack=5:release=50,deesser=i=0.5:m=0.5:f=6000:s=o,equalizer=f=2000:t=h:w=200:g=2,equalizer=f=100:t=h:w=50:g=1",
+            "-af", "volume=0.9,highpass=f=80,lowpass=f=12000,dynaudnorm=g=5:f=200,acompressor=threshold=-18dB:ratio=2:attack=3:release=30",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
@@ -244,13 +244,13 @@ def tts_to_wav(text: str, wav_out: str, video_text_sample: str = "") -> float:
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(_edge_save_simple())
 
-            # Yine kaliteli ses filtreleri
+            # Hızlı ve güvenilir ses filtreleri
             _run_ff([
                 "-i", mp3, 
                 "-ar", "44100",  
                 "-ac", "1", 
                 "-acodec", "pcm_s16le",
-                "-af", "volume=0.9,dynaudnorm=g=5:f=250,acompressor=threshold=-18dB:ratio=2.5:attack=5:release=15",
+                "-af", "volume=0.9,dynaudnorm=g=3:f=200,acompressor=threshold=-16dB:ratio=2:attack=3:release=15",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
@@ -337,17 +337,17 @@ def make_segment(src: str, dur: float, outp: str):
     
     print(f"      📹 Full Segment: {dur:.1f}s")
     
-    # Video filtreleri - kesinti olmadan
+    # Hızlı video işleme - basit filtreler
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
-        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
+        "eq=brightness=0.01:contrast=1.05,"  # Basit renk düzeltme
         f"fade=t=in:st=0:d={fade:.2f},"
         f"fade=t=out:st={max(0.0,dur-fade):.2f}:d={fade:.2f}"
     )
     
     run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r","25","-an",
-         "-c:v","libx264","-preset","medium","-crf","20","-pix_fmt","yuv420p", outp])
+         "-c:v","libx264","-preset","fast","-crf","24","-pix_fmt","yuv420p", outp])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """Tutarlı çok satırlı metin overlay - her zaman 2+ satır"""
@@ -394,8 +394,8 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     # Animasyon efekti için offset
     vf = f"{shadow},{box},{main}"
     
-    run(["ffmpeg","-y","-i",seg,"-vf",vf,"-c:v","libx264","-preset","medium",
-         "-crf",str(max(16,CRF_VISUAL-2)), "-movflags","+faststart", outp])
+    run(["ffmpeg","-y","-i",seg,"-vf",vf,"-c:v","libx264","-preset","fast",
+         "-crf","26", "-movflags","+faststart", outp])
 
 def wrap_mobile_lines_consistent(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
     """HER ZAMAN çok satırlı metin oluştur - tek satır yasaklı"""
@@ -982,9 +982,9 @@ def concat_videos_complete(files: List[str], outp: str):
         for p in files: 
             f.write(f"file '{p}'\n")
     
-    # Soft birleştirme - her segmenti tam kullan
+    # Hızlı birleştirme - her segmenti tam kullan
     run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,
-         "-c:v","libx264","-preset","medium","-crf","20",  # Kaliteli encode
+         "-c:v","libx264","-preset","fast","-crf","24",  # Hızlı encode
          "-movflags","+faststart", outp])
 
 def concat_audios_complete(files: List[str], outp: str):
