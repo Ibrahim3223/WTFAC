@@ -66,114 +66,220 @@ VOICE_OPTIONS = {
     ]
 }
 
-# TTS ayarları güncellenecek
-VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
-VOICE_RATE = os.getenv("TTS_RATE", "+25%")  # Hızlı ve temiz konuşma
+# Video süre ayarları - daha uzun içerik için
+TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))  
+TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))  # 22-42s arası
 
-TARGET_FPS     = 25  # Daha hızlı işlem için düşürüldü
-CRF_VISUAL     = 22  # Balanced kalite/hız 
+# Geliştirilmiş TTS ayarları - Yüksek kalite Edge-TTS
+VOICE_OPTIONS = {
+    "en": [
+        "en-US-JennyNeural",    # En doğal kadın ses
+        "en-US-JasonNeural",    # Çok doğal erkek ses  
+        "en-US-AriaNeural",     # Profesyonel kadın
+        "en-US-GuyNeural",      # Warm erkek ses
+        "en-AU-NatashaNeural",  # Avustralya aksanı (çok doğal)
+        "en-GB-SoniaNeural",    # İngiliz aksanı
+        "en-CA-LiamNeural",     # Kanada aksanı
+        "en-US-DavisNeural",    # Erkek, samimi
+        "en-US-AmberNeural",    # Kadın, enerjik
+    ],
+    "tr": [
+        "tr-TR-EmelNeural",   
+        "tr-TR-AhmetNeural",  
+    ]
+}
+
+VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
+VOICE_RATE = os.getenv("TTS_RATE", "+10%")  # Doğal hız
+
+TARGET_FPS     = 25
+CRF_VISUAL     = 22
 CAPTION_COLORS = ["#FFD700","#FF6B35","#00F5FF","#32CD32","#FF1493","#1E90FF","#FFA500","#FF69B4"]
 CAPTION_MAX_LINE = 22
 
 # State management
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 
-# ---------------- geliştirilmiş TTS (SSML desteği) ----------------
-# TTS ayarları (SSML kaldırıldı - ses kalitesi için)
+# ---------------- geliştirilmiş TTS (basit ama etkili) ----------------
+def optimize_text_for_speech(text: str) -> str:
+    """Metni doğal konuşma için optimize et - ücretsiz ama etkili"""
+    # Metni temizle
+    optimized_text = text.strip()
+    
+    # Kısaltmaları açık hale getir (daha doğal okuma için)
+    abbreviations = {
+        "AI": "Artificial Intelligence",
+        "USA": "United States",
+        "UK": "United Kingdom", 
+        "NASA": "NASA",
+        "DNA": "D.N.A.",
+        "CEO": "C.E.O.",
+        "DIY": "Do It Yourself",
+        "FBI": "F.B.I.",
+        "CIA": "C.I.A.",
+        "NYC": "New York City",
+        "LA": "Los Angeles"
+    }
+    
+    for abbr, full in abbreviations.items():
+        optimized_text = re.sub(rf'\b{abbr}\b', full, optimized_text, flags=re.IGNORECASE)
+    
+    # Sayıları kelimeye çevir (daha doğal okuma için)
+    number_map = {
+        '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
+        '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
+        '11': 'eleven', '12': 'twelve', '13': 'thirteen', '14': 'fourteen', '15': 'fifteen',
+        '16': 'sixteen', '17': 'seventeen', '18': 'eighteen', '19': 'nineteen', '20': 'twenty',
+        '30': 'thirty', '40': 'forty', '50': 'fifty', '60': 'sixty', '70': 'seventy',
+        '80': 'eighty', '90': 'ninety', '100': 'one hundred', '1000': 'one thousand'
+    }
+    
+    for num, word in number_map.items():
+        optimized_text = re.sub(rf'\b{num}\b', word, optimized_text)
+    
+    # Büyük sayıları basitleştir
+    optimized_text = re.sub(r'\b\d{4,}\b', lambda m: "thousands" if int(m.group()) >= 1000 else m.group(), optimized_text)
+    
+    # Noktalama işaretlerini düzenle (doğal duraklamalar için)
+    optimized_text = re.sub(r'\.{2,}', '.', optimized_text)  # Çoklu noktaları tek noktaya
+    optimized_text = re.sub(r'\!{2,}', '!', optimized_text)  # Çoklu ünlemleri tek ünleme
+    optimized_text = re.sub(r'\?{2,}', '?', optimized_text)  # Çoklu soru işaretlerini tek soru işaretine
+    
+    return optimized_text
+
+def create_simple_ssml(text: str, voice: str) -> str:
+    """Yüksek kalite SSML oluştur - basit ama etkili"""
+    optimized_text = optimize_text_for_speech(text)
+    
+    # Basit ama etkili SSML - daha az hata riski
+    ssml = f'''<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
+        <voice name="{voice}">
+            <prosody rate="+8%" pitch="+0Hz">
+                {optimized_text}
+            </prosody>
+        </voice>
+    </speak>'''
+    
+    return ssml.strip()
+
 def tts_to_wav(text: str, wav_out: str) -> float:
-    """İyileştirilmiş TTS - daha doğal ses + MAX 6s kontrol"""
+    """Yüksek kalite Edge-TTS - ücretsiz ama çok doğal"""
     import asyncio
     
     def _run_ff(args):
         subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
 
-    def _probe(path: str, default: float = 2.5) -> float:
+    def _probe(path: str, default: float = 3.5) -> float:
         try:
             pr = subprocess.run(
                 ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
                 capture_output=True, text=True, check=True
             )
-            duration = float(pr.stdout.strip())
-            return min(duration, 6.0)  # ABSOLUTE MAX 6 seconds
+            return float(pr.stdout.strip())
         except Exception:
-            return min(default, 6.0)
+            return default
 
     mp3 = wav_out.replace(".wav", ".mp3")
 
-    # Metni daha doğal TTS için optimize et
-    clean_text = text[:150] if len(text) > 150 else text  # Max 150 karakter
-    # Sayıları kelime olarak değiştir (daha doğal okuma için)
-    clean_text = re.sub(r'\b(\d+)\b', lambda m: {
-        '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
-        '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
-        '50': 'fifty', '100': 'hundred', '1000': 'thousand'
-    }.get(m.group(), m.group()), clean_text)
+    # Metni optimize et (daha uzun içerik için)
+    clean_text = text[:400] if len(text) > 400 else text
+    clean_text = optimize_text_for_speech(clean_text)
     
-    # Daha doğal ses seçimi (rotation için)
+    # En doğal ses seçimi (çeşitlilik için rotation)
     voice_rotation = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     import hashlib
     text_hash = int(hashlib.md5(clean_text.encode()).hexdigest()[:4], 16)
     selected_voice = voice_rotation[text_hash % len(voice_rotation)]
     
-    print(f"      🎤 Ses: {selected_voice.split('-')[-1]} | {clean_text[:30]}...")
+    print(f"      🎤 Natural Voice: {selected_voice.split('-')[-1]} | {clean_text[:30]}...")
 
-    # Edge-TTS ile doğal konuşma
+    # Edge-TTS ile yüksek kalite
     try:
-        async def _edge_save_natural():
-            # Daha doğal hız ve stil
-            comm = edge_tts.Communicate(
-                clean_text, 
-                voice=selected_voice, 
-                rate="+20%"  # Biraz daha yavaş (daha doğal)
-            )
+        async def _edge_save_premium():
+            # SSML ile doğal konuşma
+            ssml_text = create_simple_ssml(clean_text, selected_voice)
+            
+            comm = edge_tts.Communicate(ssml_text, voice=selected_voice)
             await comm.save(mp3)
 
         try:
-            asyncio.run(_edge_save_natural())
+            asyncio.run(_edge_save_premium())
         except RuntimeError:
             nest_asyncio.apply()
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(_edge_save_natural())
+            loop.run_until_complete(_edge_save_premium())
 
-        # WAV'a çevir + doğal ses filtreleri
+        # Yüksek kalite ses işleme - basit ama etkili filtreler
         _run_ff([
             "-i", mp3, 
-            "-ar", "44100",  
+            "-ar", "48000",  # Yüksek kalite sample rate
             "-ac", "1", 
             "-acodec", "pcm_s16le",
-            "-af", "volume=0.88,highpass=f=85,lowpass=f=10000,dynaudnorm=g=5:f=200,acompressor=threshold=-18dB:ratio=3:attack=3:release=8",  # Daha doğal ses
-            "-t", "6.0",  # ZORLA MAX 6s KES
+            "-af", "volume=0.9,dynaudnorm=g=3:f=250:r=0.9,acompressor=threshold=-20dB:ratio=2:attack=5:release=50",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
 
-        final_duration = _probe(wav_out, 3.0)
-        print(f"      ✅ TTS: {final_duration:.1f}s")
+        final_duration = _probe(wav_out, 3.5)
+        print(f"      ✅ High Quality Edge-TTS: {final_duration:.1f}s")
         return final_duration
 
     except Exception as e:
-        print(f"      ⚠️ Edge-TTS başarısız, basit Google TTS: {e}")
-        # Google TTS fallback
+        print(f"      ⚠️ SSML başarısız, basit Edge-TTS deneniyor: {e}")
+        # Fallback: Basit Edge-TTS ama yine kaliteli
         try:
-            q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
-            url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.85"
-            headers = {"User-Agent":"Mozilla/5.0"}
-            r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
-            open(mp3,"wb").write(r.content)
-            
-            _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le",
-                     "-af", "volume=0.88,dynaudnorm",
-                     "-t", "6.0", wav_out])
+            async def _edge_save_simple():
+                comm = edge_tts.Communicate(
+                    clean_text, 
+                    voice=selected_voice, 
+                    rate=VOICE_RATE
+                )
+                await comm.save(mp3)
+
+            try:
+                asyncio.run(_edge_save_simple())
+            except RuntimeError:
+                nest_asyncio.apply()
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(_edge_save_simple())
+
+            # Yine kaliteli ses filtreleri
+            _run_ff([
+                "-i", mp3, 
+                "-ar", "44100",  
+                "-ac", "1", 
+                "-acodec", "pcm_s16le",
+                "-af", "volume=0.9,dynaudnorm=g=3:f=250",
+                wav_out
+            ])
             pathlib.Path(mp3).unlink(missing_ok=True)
-            
-            final_duration = _probe(wav_out, 3.0)
-            print(f"      ✅ Google TTS: {final_duration:.1f}s")
+
+            final_duration = _probe(wav_out, 3.5)
+            print(f"      ✅ Simple Edge-TTS: {final_duration:.1f}s")
             return final_duration
 
         except Exception as e2:
-            print(f"      ❌ Tüm TTS başarısız: {e2}")
-            _run_ff(["-f","lavfi","-t","3.0","-i","anullsrc=r=44100:cl=mono", wav_out])
-            return 3.0
+            print(f"      ⚠️ Edge-TTS başarısız, Google TTS: {e2}")
+            # Son fallback
+            try:
+                q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
+                url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.8"
+                headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
+                open(mp3,"wb").write(r.content)
+                
+                _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le",
+                         "-af", "volume=0.9,dynaudnorm", wav_out])
+                pathlib.Path(mp3).unlink(missing_ok=True)
+                
+                final_duration = _probe(wav_out, 3.5)
+                print(f"      ✅ Google TTS: {final_duration:.1f}s")
+                return final_duration
+
+            except Exception as e3:
+                print(f"      ❌ Tüm TTS başarısız: {e3}")
+                _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out])
+                return 4.0
 
 # ---------------- geliştirilmiş Pexels (daha kaliteli videolar) ----------------
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
@@ -326,220 +432,121 @@ ENHANCED_SCRIPT_BANK = {
 
 # Geliştirilmiş Gemini promptları
 ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """Create a simple 20-40 second YouTube Short.
-EXACTLY 5 sentences. Each sentence 4-8 words. Simple language, family-friendly.
+    "_default": """Create a detailed 25-40 second YouTube Short.
+EXACTLY 7-8 sentences. Each sentence 6-10 words. Simple but informative language.
 Return JSON: country, topic, sentences, search_terms, title, description, tags.""",
 
-    "country_facts": """Create amazing country facts.
-EXACTLY 5 sentences about a specific country:
-1. "Did you know [country]..." (surprising fact)
-2. Geographic/cultural context
-3. Amazing detail with simple numbers
-4. Why it's special/unique
-5. "Have you been to [country]?"
+    "country_facts": """Create amazing country facts with detail.
+EXACTLY 7-8 sentences about a specific country:
+1. "Did you know [country]..." (surprising hook)
+2. Geographic or historical context
+3. First amazing detail with numbers
+4. Second surprising fact
+5. Cultural or natural feature
+6. Why it's special globally
+7. Impact or modern relevance
+8. "Have you been to [country]?"
 Search terms: country name, landmarks, culture, travel.""",
 
-    "history_story": """Create forgotten historical stories.
-EXACTLY 5 sentences about historical events:
+    "fixit_fast": """Create detailed repair instructions.
+EXACTLY 7-8 sentences for complete repair guidance:
+1. "Here's how to fix..." (common problem)
+2. "First, gather these tools..." (specific tools)
+3. "Step one: disconnect power safely..." (safety first)
+4. "Next, locate the damaged part..." (identification)
+5. "Remove it by doing this..." (removal process)
+6. "Install the replacement like this..." (installation)
+7. "Test everything works properly..." (verification)
+8. "What repair will you try next?"
+Search terms: tools, repair, DIY, workshop, fixing, maintenance.""",
+
+    "history_story": """Create detailed historical stories.
+EXACTLY 7-8 sentences about historical events:
 1. "Long ago, something incredible happened..."
-2. Setting and time period
-3. What actually occurred
-4. Why it was forgotten/hidden
-5. "What other secrets are hidden?"
-Search terms: historical, ancient, ruins, manuscripts.""",
+2. Setting and time period details
+3. Main characters or figures involved
+4. What actually occurred (first part)
+5. The dramatic turning point
+6. How it concluded or changed things
+7. Why it was forgotten or hidden
+8. "What other secrets are hidden?"
+Search terms: historical, ancient, ruins, manuscripts, archaeology.""",
 
-    "quotes": """Create quote explanations.
-EXACTLY 5 sentences about a famous quote:
+    "animal_facts": """Create detailed animal abilities explanation.
+EXACTLY 7-8 sentences about one specific animal:
+1. "Did you know [animal] can..." (amazing ability)
+2. Where this animal lives naturally
+3. How this specific ability works
+4. Why they evolved this adaptation
+5. Comparison to human capabilities
+6. Additional surprising behavior or fact
+7. Role in their ecosystem
+8. "Which animal amazes you most?"
+Search terms: specific animal name, wildlife, nature, behavior.""",
+
+    "movie_secrets": """Create detailed movie behind-the-scenes facts.
+EXACTLY 7-8 sentences about film secrets:
+1. "This famous movie scene..." (specific scene)
+2. What the director originally planned
+3. What went wrong during filming
+4. How the actors improvised
+5. Technical challenges they faced
+6. How they solved the problem
+7. Why it became iconic instead
+8. "What's your favorite movie moment?"
+Search terms: movie theater, film set, cinema, director, hollywood.""",
+
+    "tech_news": """Create detailed technology breakthrough content.
+EXACTLY 7-8 sentences about new tech:
+1. "New technology can now..." (capability)
+2. How the technology actually works
+3. What problems it solves
+4. Current testing or development stage
+5. Expected timeline for public use
+6. Potential impact on daily life
+7. What experts are saying about it
+8. "Are you excited about this?"
+Search terms: technology, innovation, gadgets, AI, research lab.""",
+
+    "space_news": """Create detailed space discovery content.
+EXACTLY 7-8 sentences about space:
+1. "Scientists just discovered..." (discovery)
+2. Where in space they found it
+3. How they made the discovery
+4. What makes it so special
+5. Distance from Earth with context
+6. What this means for astronomy
+7. Future research plans for it
+8. "What space mystery interests you?"
+Search terms: space, rocket, planets, telescope, astronaut, NASA.""",
+
+    "quotes": """Create detailed quote explanations.
+EXACTLY 7-8 sentences about a famous quote:
 1. "Someone once said..." (quote)
-2. Who said it (or general context)
-3. What it really means
-4. How to apply it today
-5. "How do you interpret this?"
-Search terms: books, wisdom, philosophy, thinking.""",
+2. Who said it and when
+3. The situation or context behind it
+4. What it literally means
+5. The deeper philosophical meaning
+6. How to apply it today
+7. Why it's still relevant now
+8. "How do you interpret this?"
+Search terms: books, wisdom, philosophy, thinking, inspiration.""",
 
-    "taxwise_usa": """Create US tax education content.
-EXACTLY 5 sentences about tax tips:
-1. "Here's a tax tip..." 
-2. Specific deduction or strategy
-3. How much you could save
-4. Important disclaimer about advice
-5. "Always consult a tax professional."
-Search terms: calculator, tax documents, office, money.""",
-
-    "horror_story": """Create family-friendly mysterious stories.
-EXACTLY 5 sentences for spooky atmosphere:
-1. "Something strange happened..."
-2. Setting and initial mystery
-3. The mysterious discovery
-4. Rational explanation or twist
-5. "What would you have done?"
-Search terms: mysterious, shadows, old house, fog.""",
-
-    "daily_news": """Create global news summary.
-EXACTLY 5 sentences about current events:
-1. "Today's top story..."
-2. What happened where
-3. Why it matters globally
-4. What experts are saying
-5. "What's your take on this?"
-Search terms: newsroom, world events, global, breaking.""",
-
-    "space_news": """Create space discoveries content.
-EXACTLY 5 sentences about space:
-1. "Scientists just discovered..."
-2. What they found in space
-3. How far away it is
-4. What this means for us
-5. "What space mystery interests you?"
-Search terms: space, rocket, planets, telescope, astronaut.""",
-
-    "alt_universe": """Create alternate universe scenarios.
-EXACTLY 5 sentences about different worlds:
-1. "Imagine a world where..."
-2. One major difference from ours
-3. How people live there
-4. What daily life looks like
-5. "Would you visit this place?"
-Search terms: universe, dimensions, cosmic, portal.""",
-
-    "if_lived_today": """Create historical figures in modern times.
-EXACTLY 5 sentences using generic archetypes:
-1. "If an ancient inventor lived today..."
-2. What they would create first
-3. How they would use modern tools
-4. Their biggest contribution now
-5. "What would they invent next?"
-Search terms: modern city, technology, innovation, future.""",
-
-    "nostalgia_story": """Create nostalgic memories.
-EXACTLY 5 sentences about past decades:
-1. "Remember when we used..."
-2. Specific old technology or trend
-3. How different life was then
-4. What we miss about it
-5. "What do you miss most?"
-Search terms: retro, vintage, old technology, nostalgia.""",
-
-    "animal_facts": """Create amazing animal abilities.
-EXACTLY 5 sentences about one specific animal:
-1. "Did you know [animal] can..."
-2. Specific amazing ability
-3. How this ability works
-4. Why they evolved this way
-5. "Which animal amazes you most?"
-Search terms: specific animal name, wildlife, nature, close up.""",
-
-    "movie_secrets": """Create movie behind-the-scenes facts.
-EXACTLY 5 sentences about film secrets:
-1. "This famous movie scene..."
-2. What went wrong during filming
-3. How the director fixed it
-4. Why it became iconic
-5. "What's your favorite movie moment?"
-Search terms: movie theater, film set, cinema, director.""",
-
-    "tech_news": """Create technology breakthrough content.
-EXACTLY 5 sentences about new tech:
-1. "New technology can now..."
-2. What it does specifically
-3. How it will change life
-4. When it will be available
-5. "Are you excited about this?"
-Search terms: technology, innovation, gadgets, AI, research.""",
-
-    "utopic_tech": """Create positive future technology.
-EXACTLY 5 sentences about beneficial tech:
-1. "Future technology could..."
-2. Specific helpful application
-3. How it solves real problems
-4. Making life better for everyone
-5. "What would you want first?"
-Search terms: futuristic, clean energy, helpful robots, smart city.""",
-
-    "fame_story": """Create celebrity success stories using archetypes.
-EXACTLY 5 sentences about generic success:
-1. "One performer started with nothing..."
-2. Their biggest early challenge
-3. The breakthrough moment
-4. How they stayed humble
-5. "What drives your dreams?"
-Search terms: stage lights, performance, success, inspiration.""",
-
-    "post_apoc": """Create hopeful post-apocalyptic content.
-EXACTLY 5 sentences focusing on resilience:
-1. "After everything changed..."
-2. How people adapted together
-3. New skills they learned
-4. Community they built
-5. "What skills would you learn?"
-Search terms: rebuilding, community, survival skills, hope.""",
-
-    "mythology_battle": """Create mythological encounters.
-EXACTLY 5 sentences about mythological scenarios:
-1. "Ancient legends tell of..."
-2. Epic encounter between mythical beings
-3. Their different powers clashing
-4. Unexpected outcome or lesson
-5. "Which mythology interests you?"
-Search terms: mythology, ancient temple, legends, divine.""",
-
-    "kids_story": """Create educational children's content.
-EXACTLY 5 sentences for young minds:
-1. "Once there was a little..."
-2. Simple problem they faced
-3. Creative solution they found
-4. What they learned
-5. "What would you do?"
-Search terms: children, learning, imagination, colorful, fun.""",
-
-    "ai_alt": """Create positive AI integration scenarios.
-EXACTLY 5 sentences about helpful AI:
-1. "Imagine if AI could..."
-2. Specific helpful task
-3. How it makes life easier
-4. People working together with AI
-5. "How could AI help you?"
-Search terms: helpful robots, AI assistant, automation, smart home.""",
-
-    "ai_future": """Create educational AI development content.
-EXACTLY 5 sentences about AI research:
-1. "Scientists are developing AI that..."
-2. Current research breakthrough
-3. Potential positive applications
-4. Ethical considerations being studied
-5. "What AI development excites you?"
-Search terms: AI laboratory, research, neural networks, innovation.""",
-
-    "fixit_fast": """Create quick repair tips.
-EXACTLY 5 sentences about simple fixes:
-1. "Here's a quick fix for..."
-2. Common household problem
-3. Simple tool you need
-4. Step-by-step solution
-5. "What do you fix yourself?"
-Search terms: tools, repair, DIY, workshop, fixing.""",
-
-    "sports_news": """Create daily sports updates.
-EXACTLY 5 sentences about sports:
-1. "Today in sports..."
-2. Major game or achievement
-3. Record broken or milestone
-4. What it means for the sport
-5. "Which sport do you follow?"
-Search terms: sports stadium, athletes, championship, training.""",
-
-    "cricket_women": """Create women's cricket content.
-EXACTLY 5 sentences about women's cricket:
-1. "Women's cricket just achieved..."
-2. Specific achievement or record
-3. Player who made it happen
-4. Impact on the sport
-5. "Do you follow women's cricket?"
-Search terms: women cricket, female athletes, cricket stadium, champions."""
+    "cricket_women": """Create detailed women's cricket content.
+EXACTLY 7-8 sentences about women's cricket:
+1. "Women's cricket just achieved..." (recent achievement)
+2. Which team or player accomplished it
+3. Details about the match or record
+4. Historical context of the achievement
+5. Challenges overcome to get there
+6. Impact on women's cricket globally
+7. What this means for future players
+8. "Do you follow women's cricket?"
+Search terms: women cricket, female athletes, cricket stadium, sports."""
 }
 
 def build_via_gemini(mode: str, channel_name: str, banlist: List[str], channel_config: dict = {}) -> tuple:
-    """Kanal bazlı Gemini entegrasyonu - 25 kanala özel içerik"""
+    """Kanal bazlı Gemini entegrasyonu - 7-8 cümle ile detaylı içerik"""
     
     # Kanal konfigürasyonundan template al
     template = ENHANCED_GEMINI_TEMPLATES.get(mode, ENHANCED_GEMINI_TEMPLATES["_default"])
@@ -561,19 +568,20 @@ Language: {LANG}
 AVOID these recent topics:
 {avoid}
 
-CHANNEL-SPECIFIC REQUIREMENTS:
+CHANNEL-SPECIFIC REQUIREMENTS for 25-40 second videos:
 - Content MUST match the channel's theme: {channel_topic}
 - Follow this focus: {content_focus}
-- EXACTLY 5 sentences (no more, no less!)
-- Each sentence 4-8 words maximum  
-- Simple language, family-friendly
+- EXACTLY 7-8 sentences (for proper explanation!)
+- Each sentence 6-10 words maximum  
+- Detailed but simple language, family-friendly
+- Provide complete explanation especially for instructional content
 - End with engaging question
 
 Return ONLY valid JSON:
 {{
   "country": "<location or theme>",
   "topic": "<channel-themed title>", 
-  "sentences": ["<exactly 5 channel-themed sentences>"],
+  "sentences": ["<exactly 7-8 detailed sentences>"],
   "search_terms": ["<4-6 terms matching channel theme>"],
   "title": "<engaging title under 80 chars>",
   "description": "<simple description 500-800 chars>",
@@ -590,16 +598,32 @@ Return ONLY valid JSON:
         sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
         sentences = [s for s in sentences if s]
         
-        # STRICT: Sadece 5 cümle
-        if len(sentences) < 5:
-            generic_endings = [
-                "This discovery amazes experts worldwide.",
+        # YENI: 7-8 cümle için kontrol
+        if len(sentences) < 7:
+            mode_endings = {
+                "fixit_fast": [
+                    "Test everything works properly now.",
+                    "What repair will you try next?"
+                ],
+                "country_facts": [
+                    "This makes the country truly special.",
+                    "Have you visited this place before?"
+                ],
+                "animal_facts": [
+                    "Nature designed incredible survival skills here.",
+                    "Which animal amazes you the most?"
+                ]
+            }
+            
+            endings = mode_endings.get(mode, [
+                "This discovery continues amazing scientists worldwide.",
                 "What do you think about this?"
-            ]
-            sentences.extend(generic_endings)
-        sentences = sentences[:5]  # EXACTLY 5
+            ])
+            sentences.extend(endings)
         
-        print(f"✅ Gemini kanal temalı içerik: {topic}")
+        sentences = sentences[:8]  # MAXIMUM 8 sentences
+        
+        print(f"✅ Gemini detaylı içerik: {len(sentences)} cümle - {topic}")
         
         # Search terms - önce channel config, sonra Gemini response
         terms = channel_search_terms or data.get("search_terms") or []
@@ -610,11 +634,11 @@ Return ONLY valid JSON:
         if not terms:
             # Mode bazlı fallback terms
             mode_terms = {
+                "fixit_fast": ["tools 4k", "repair workshop", "DIY project", "fixing", "maintenance"],
                 "country_facts": ["world travel 4k", "cultural heritage", "landmarks", "city skyline"],
                 "history_story": ["ancient ruins 4k", "historical", "manuscripts", "archaeology"],
-                "quotes": ["books 4k", "wisdom", "philosophy", "thinking person"],
-                "movie_secrets": ["movie theater 4k", "film set", "cinema", "director"],
                 "animal_facts": ["wildlife 4k", "animal close up", "nature", "safari"],
+                "movie_secrets": ["movie theater 4k", "film set", "cinema", "director"],
                 "space_news": ["space 4k", "rocket launch", "planets", "astronaut"],
                 "tech_news": ["technology 4k", "innovation", "gadgets", "research lab"]
             }
@@ -628,55 +652,69 @@ Return ONLY valid JSON:
         return country, topic, sentences, terms, title, description, tags
         
     except Exception as e:
-        print(f"⚠️ Gemini başarısız, kanal fallback: {e}")
+        print(f"⚠️ Gemini başarısız, detaylı kanal fallback: {e}")
         
-        # Kanal config'inden fallback al
+        # Kanal config'inden detaylı fallback al
         if channel_config:
             topic = channel_config.get('topic', 'Channel Content')
             terms = channel_config.get('search_terms', ['general 4k', 'education'])
             
-            # Mode bazlı fallback sentences
+            # Mode bazlı detaylı fallback sentences (7-8 cümle)
             mode_sentences = {
+                "fixit_fast": [
+                    "Here's how to fix this common problem.",
+                    "First, gather these basic tools you need.",
+                    "Always disconnect power for safety first.",
+                    "Locate the damaged or broken part.",
+                    "Remove it carefully using proper technique.",
+                    "Install the new replacement part securely.",
+                    "Test everything works properly before finishing.",
+                    "What repair will you try next?"
+                ],
                 "country_facts": [
-                    "This country has amazing secrets.",
+                    "This country has truly amazing secrets.",
                     "Hidden facts will surprise you completely.",
-                    "Culture and nature blend perfectly here.",
-                    "History shaped this unique place.",
+                    "Geography shapes culture in unique ways.",
+                    "People here have fascinating traditions.",
+                    "History created something very special here.",
+                    "Modern life blends with ancient customs.",
+                    "This place influences the world today.",
                     "Which country fascinates you most?"
                 ],
                 "animal_facts": [
-                    "This animal has incredible abilities.",
-                    "Nature designed perfect survival skills.",
-                    "These creatures amaze scientists daily.",
-                    "Evolution created amazing adaptations.",
+                    "This animal has absolutely incredible abilities.",
+                    "They live in very specific environments.",
+                    "Nature designed perfect survival skills here.",
+                    "These creatures amaze scientists every day.",
+                    "Evolution created these amazing adaptations perfectly.",
+                    "They play important roles in ecosystems.",
+                    "Human research continues revealing new secrets.",
                     "Which animal surprises you most?"
-                ],
-                "movie_secrets": [
-                    "Movies hide incredible behind-scenes secrets.",
-                    "Directors create magic through clever tricks.",
-                    "Famous scenes happened by accident.",
-                    "Cinema history contains amazing stories.",
-                    "What movie secret amazed you?"
                 ]
             }
             
             sentences = mode_sentences.get(mode, [
-                "Amazing discoveries happen every day.",
-                "Science reveals incredible new facts.",
-                "These secrets will surprise you.",
-                "Knowledge keeps expanding constantly.",
+                "Amazing discoveries happen around us daily.",
+                "Science reveals incredible new facts constantly.",
+                "Researchers work hard to understand more.",
+                "These secrets will definitely surprise you.",
+                "Knowledge keeps expanding in amazing ways.",
+                "Experts continue making breakthrough discoveries.",
+                "The future holds even more surprises.",
                 "What interests you most about this?"
             ])
             
             return "World", topic, sentences, terms, "", "", []
         
-        # Son fallback
+        # Son fallback (7 cümle)
         return ("World", "Daily Facts", [
-            "Did you know this amazing fact?",
-            "Scientists make discoveries every day.",
-            "This will definitely surprise you.",
-            "Knowledge never stops growing.",
-            "What do you think?"
+            "Did you know this truly amazing fact?",
+            "Scientists make incredible discoveries every single day.",
+            "Research reveals secrets we never imagined.",
+            "This information will definitely surprise you completely.",
+            "Knowledge continues growing in fascinating ways.",
+            "Experts work hard to understand more.",
+            "What do you think about this?"
         ], ["science 4k", "discovery", "education", "research"], "", "", [])
 
 # ---------------- ana fonksiyon güncellemeleri ----------------
