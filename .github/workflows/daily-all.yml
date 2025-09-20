@@ -2,7 +2,9 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 06:00 UTC
+    # 20:00 America/New_York yıl boyu (DST güvenli: iki UTC saatinde tetikler)
+    - cron: "0 0 * * *"   # 00:00 UTC ≈ 20:00 ET (DST)
+    - cron: "0 1 * * *"   # 01:00 UTC ≈ 20:00 ET (Standard Time)
   workflow_dispatch:
 
 jobs:
@@ -65,6 +67,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ET gününe göre tek-kez çalıştır (ikinci cron'u atla)
+      - name: Compute ET date
+        id: etdate
+        run: |
+          python - <<'PY'
+          import datetime
+          try:
+              from zoneinfo import ZoneInfo
+              now = datetime.datetime.now(ZoneInfo("America/New_York"))
+          except Exception:
+              now = datetime.datetime.utcnow()
+          print("date="+now.strftime("%Y-%m-%d"))
+          PY
+
+      - name: Restore daily-run cache (skip if already ran)
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .daily_run_stamp
+          key: daily-run-${{ steps.etdate.outputs.date }}
+
+      - name: Stop if already ran today
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          echo "Already ran for ${{ steps.etdate.outputs.date }} ET — skipping."
+          exit 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -84,6 +113,13 @@ jobs:
 
       - name: Run generator & upload
         run: python autoshorts_daily.py
+
+      - name: Save daily-run cache (mark execution for ET date)
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .daily_run_stamp
+          key: daily-run-${{ steps.etdate.outputs.date }}
 
       - name: Save video artifact
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
