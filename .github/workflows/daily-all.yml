@@ -78,8 +78,18 @@ jobs:
               now = datetime.datetime.now(ZoneInfo("America/New_York"))
           except Exception:
               now = datetime.datetime.utcnow()
-          print("date="+now.strftime("%Y-%m-%d"))
+          print(f"date={now.strftime('%Y-%m-%d')}")
           PY
+          echo "date=$(python - <<'PY'
+import datetime
+try:
+    from zoneinfo import ZoneInfo
+    now = datetime.datetime.now(ZoneInfo("America/New_York"))
+    print(now.strftime('%Y-%m-%d'))
+except Exception:
+    print(datetime.datetime.utcnow().strftime('%Y-%m-%d'))
+PY
+)" >> "$GITHUB_OUTPUT"
 
       - name: Restore daily-run cache (skip if already ran)
         id: cache
