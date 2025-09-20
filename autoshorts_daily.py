@@ -1,4 +1,4 @@
-# autoshorts_daily.py - İyileştirilmiş Versiyon
+# autoshorts_daily.py - TTS ve Altyazı Sorunları Düzeltilmiş
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, uuid, random, datetime, tempfile, pathlib, subprocess, hashlib
 from dataclasses import dataclass
@@ -70,7 +70,7 @@ VOICE_OPTIONS = {
 TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))  
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))  # 22-42s arası
 
-# Geliştirilmiş TTS ayarları - Yüksek kalite Edge-TTS
+# TTS ayarları - Problemsiz Edge-TTS
 VOICE_OPTIONS = {
     "en": [
         "en-US-JennyNeural",    # En doğal kadın ses
@@ -95,18 +95,18 @@ VOICE_RATE = os.getenv("TTS_RATE", "+10%")  # Doğal hız
 TARGET_FPS     = 25
 CRF_VISUAL     = 22
 CAPTION_COLORS = ["#FFD700","#FF6B35","#00F5FF","#32CD32","#FF1493","#1E90FF","#FFA500","#FF69B4"]
-CAPTION_MAX_LINE = 22
+CAPTION_MAX_LINE = 18  # Shorts için kısaltıldı
 
 # State management
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 
-# ---------------- geliştirilmiş TTS (basit ama etkili) ----------------
+# ---------------- Düzeltilmiş TTS (SSML problemsiz) ----------------
 def optimize_text_for_speech(text: str) -> str:
-    """Metni doğal konuşma için optimize et - ücretsiz ama etkili"""
+    """Metni doğal konuşma için optimize et - SSML problemsiz"""
     # Metni temizle
     optimized_text = text.strip()
     
-    # Kısaltmaları açık hale getir (daha doğal okuma için)
+    # Kısaltmaları açık hale getir
     abbreviations = {
         "AI": "Artificial Intelligence",
         "USA": "United States",
@@ -124,46 +124,23 @@ def optimize_text_for_speech(text: str) -> str:
     for abbr, full in abbreviations.items():
         optimized_text = re.sub(rf'\b{abbr}\b', full, optimized_text, flags=re.IGNORECASE)
     
-    # Sayıları kelimeye çevir (daha doğal okuma için)
+    # Basit sayı değişimleri (sadece temel olanlar)
     number_map = {
         '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
-        '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
-        '11': 'eleven', '12': 'twelve', '13': 'thirteen', '14': 'fourteen', '15': 'fifteen',
-        '16': 'sixteen', '17': 'seventeen', '18': 'eighteen', '19': 'nineteen', '20': 'twenty',
-        '30': 'thirty', '40': 'forty', '50': 'fifty', '60': 'sixty', '70': 'seventy',
-        '80': 'eighty', '90': 'ninety', '100': 'one hundred', '1000': 'one thousand'
+        '10': 'ten', '20': 'twenty', '100': 'one hundred'
     }
     
     for num, word in number_map.items():
         optimized_text = re.sub(rf'\b{num}\b', word, optimized_text)
     
-    # Büyük sayıları basitleştir
-    optimized_text = re.sub(r'\b\d{4,}\b', lambda m: "thousands" if int(m.group()) >= 1000 else m.group(), optimized_text)
-    
-    # Noktalama işaretlerini düzenle (doğal duraklamalar için)
-    optimized_text = re.sub(r'\.{2,}', '.', optimized_text)  # Çoklu noktaları tek noktaya
-    optimized_text = re.sub(r'\!{2,}', '!', optimized_text)  # Çoklu ünlemleri tek ünleme
-    optimized_text = re.sub(r'\?{2,}', '?', optimized_text)  # Çoklu soru işaretlerini tek soru işaretine
+    # XML/SSML karakterlerini temizle
+    optimized_text = optimized_text.replace('<', '').replace('>', '')
+    optimized_text = optimized_text.replace('&', 'and')
     
     return optimized_text
 
-def create_simple_ssml(text: str, voice: str) -> str:
-    """Yüksek kalite SSML oluştur - basit ama etkili"""
-    optimized_text = optimize_text_for_speech(text)
-    
-    # Basit ama etkili SSML - daha az hata riski
-    ssml = f'''<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
-        <voice name="{voice}">
-            <prosody rate="+8%" pitch="+0Hz">
-                {optimized_text}
-            </prosody>
-        </voice>
-    </speak>'''
-    
-    return ssml.strip()
-
 def tts_to_wav(text: str, wav_out: str) -> float:
-    """Yüksek kalite Edge-TTS - ücretsiz ama çok doğal"""
+    """Basit Edge-TTS - SSML problemsiz"""
     import asyncio
     
     def _run_ff(args):
@@ -181,105 +158,74 @@ def tts_to_wav(text: str, wav_out: str) -> float:
 
     mp3 = wav_out.replace(".wav", ".mp3")
 
-    # Metni optimize et (daha uzun içerik için)
-    clean_text = text[:400] if len(text) > 400 else text
+    # Metni temizle - SSML KULLANMA
+    clean_text = text[:300] if len(text) > 300 else text
     clean_text = optimize_text_for_speech(clean_text)
     
-    # En doğal ses seçimi (çeşitlilik için rotation)
+    # Ses seçimi
     voice_rotation = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     import hashlib
     text_hash = int(hashlib.md5(clean_text.encode()).hexdigest()[:4], 16)
     selected_voice = voice_rotation[text_hash % len(voice_rotation)]
     
-    print(f"      🎤 Natural Voice: {selected_voice.split('-')[-1]} | {clean_text[:30]}...")
+    print(f"      🎤 Voice: {selected_voice.split('-')[-1]} | {clean_text[:30]}...")
 
-    # Edge-TTS ile yüksek kalite
+    # DİREKT Edge-TTS - SSML YOK
     try:
-        async def _edge_save_premium():
-            # SSML ile doğal konuşma
-            ssml_text = create_simple_ssml(clean_text, selected_voice)
-            
-            comm = edge_tts.Communicate(ssml_text, voice=selected_voice)
+        async def _edge_save_direct():
+            # SADECE DÜZ METİN - SSML YOK!
+            comm = edge_tts.Communicate(
+                clean_text,  # Düz metin
+                voice=selected_voice,
+                rate="+8%"  # Basit rate ayarı
+            )
             await comm.save(mp3)
 
         try:
-            asyncio.run(_edge_save_premium())
+            asyncio.run(_edge_save_direct())
         except RuntimeError:
             nest_asyncio.apply()
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(_edge_save_premium())
+            loop.run_until_complete(_edge_save_direct())
 
-        # Yüksek kalite ses işleme - basit ama etkili filtreler
+        # Basit ses filtreleri
         _run_ff([
             "-i", mp3, 
-            "-ar", "48000",  # Yüksek kalite sample rate
+            "-ar", "44100",
             "-ac", "1", 
             "-acodec", "pcm_s16le",
-            "-af", "volume=0.9,dynaudnorm=g=3:f=250:r=0.9,acompressor=threshold=-20dB:ratio=2:attack=5:release=50",
+            "-af", "volume=0.9,dynaudnorm",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
 
         final_duration = _probe(wav_out, 3.5)
-        print(f"      ✅ High Quality Edge-TTS: {final_duration:.1f}s")
+        print(f"      ✅ Direct Edge-TTS: {final_duration:.1f}s")
         return final_duration
 
     except Exception as e:
-        print(f"      ⚠️ SSML başarısız, basit Edge-TTS deneniyor: {e}")
-        # Fallback: Basit Edge-TTS ama yine kaliteli
+        print(f"      ⚠️ Edge-TTS başarısız, Google TTS: {e}")
+        # Google TTS fallback
         try:
-            async def _edge_save_simple():
-                comm = edge_tts.Communicate(
-                    clean_text, 
-                    voice=selected_voice, 
-                    rate=VOICE_RATE
-                )
-                await comm.save(mp3)
-
-            try:
-                asyncio.run(_edge_save_simple())
-            except RuntimeError:
-                nest_asyncio.apply()
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(_edge_save_simple())
-
-            # Yine kaliteli ses filtreleri
-            _run_ff([
-                "-i", mp3, 
-                "-ar", "44100",  
-                "-ac", "1", 
-                "-acodec", "pcm_s16le",
-                "-af", "volume=0.9,dynaudnorm=g=3:f=250",
-                wav_out
-            ])
+            q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
+            url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.9"
+            headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            r = requests.get(url, headers=headers, timeout=30)
+            r.raise_for_status()
+            open(mp3,"wb").write(r.content)
+            
+            _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le",
+                     "-af", "volume=0.9", wav_out])
             pathlib.Path(mp3).unlink(missing_ok=True)
-
+            
             final_duration = _probe(wav_out, 3.5)
-            print(f"      ✅ Simple Edge-TTS: {final_duration:.1f}s")
+            print(f"      ✅ Google TTS: {final_duration:.1f}s")
             return final_duration
 
-        except Exception as e2:
-            print(f"      ⚠️ Edge-TTS başarısız, Google TTS: {e2}")
-            # Son fallback
-            try:
-                q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
-                url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={LANG or 'en'}&client=tw-ob&ttsspeed=0.8"
-                headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
-                open(mp3,"wb").write(r.content)
-                
-                _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le",
-                         "-af", "volume=0.9,dynaudnorm", wav_out])
-                pathlib.Path(mp3).unlink(missing_ok=True)
-                
-                final_duration = _probe(wav_out, 3.5)
-                print(f"      ✅ Google TTS: {final_duration:.1f}s")
-                return final_duration
-
-            except Exception as e3:
-                print(f"      ❌ Tüm TTS başarısız: {e3}")
-                _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out])
-                return 4.0
+        except Exception as e3:
+            print(f"      ❌ Tüm TTS başarısız: {e3}")
+            _run_ff(["-f","lavfi","-t","3.0","-i","anullsrc=r=44100:cl=mono", wav_out])
+            return 3.0
 
 # ---------------- geliştirilmiş Pexels (daha kaliteli videolar) ----------------
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
@@ -348,38 +294,116 @@ def make_segment(src: str, dur: float, outp: str):
     run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r","25","-an",
          "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
 
-def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    """Geliştirilmiş metin overlay - CapCut tarzı animasyonlu"""
-    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
-    esc = escape_drawtext(wrapped)
-    lines = wrapped.count("\n")+1
-    maxchars = max(len(x) for x in wrapped.split("\n"))
+def clean_caption_text(s: str) -> str:
+    """Shorts için agresif metin temizleme - kısa cümleler"""
+    t = (s or "").strip().replace("'","'").replace("—","-").replace('"',"").replace("`","")
+    t = re.sub(r'(\d+)([A-Za-z])', r'\1 \2', t)
+    t = re.sub(r'([A-Za-z])(\d+)', r'\1 \2', t)
+    t = re.sub(r'\s+',' ', t)
     
-    # Hook için daha büyük ve bold
-    if is_hook:
-        base_fs = 52 if lines >= 3 else 58
-        border_w = 5
-        box_border = 20
+    # Sayısal detayları basitleştir
+    t = re.sub(r'\d{2,}', lambda m: "many" if int(m.group()) > 100 else m.group(), t)
+    t = re.sub(r'\d+\s*-\s*meter', "massive", t)
+    t = re.sub(r'\d+\s*years?', "decades", t)
+    
+    if t and t[0].islower():
+        t = t[0].upper() + t[1:]
+    
+    # SHORTS için agresif kısaltma - MAX 60 karakter
+    if len(t) > 60:
+        words = t.split()
+        t = " ".join(words[:8]) + "."  # MAX 8 kelime
+    
+    return t.strip()
+
+def wrap_mobile_lines(text: str, max_line_length: int = 18) -> str:
+    """Dikey shorts için çok satırlı metin düzeni"""
+    words = text.split()
+    total_words = len(words)
+    
+    if total_words <= 4:
+        return text
+    
+    # Shorts için ideal: 2-3 satır, satır başına max 18 karakter
+    if total_words <= 8:
+        # 2 satır
+        mid = total_words // 2
+        line1 = " ".join(words[:mid])
+        line2 = " ".join(words[mid:])
+        
+        # Satır uzunluğu kontrolü
+        if len(line1) > max_line_length or len(line2) > max_line_length:
+            # 3 satıra böl
+            third = total_words // 3
+            line1 = " ".join(words[:third])
+            line2 = " ".join(words[third:third*2])
+            line3 = " ".join(words[third*2:])
+            return "\n".join([line1, line2, line3])
+        
+        return "\n".join([line1, line2])
+    
     else:
-        base_fs = 42 if lines >= 3 else 48
+        # 3 satır (uzun metinler için)
+        third = total_words // 3
+        line1 = " ".join(words[:third])
+        line2 = " ".join(words[third:third*2])
+        line3 = " ".join(words[third*2:])
+        
+        # Her satırı kontrol et ve gerekirse kelime sayısını azalt
+        lines = [line1, line2, line3]
+        final_lines = []
+        
+        for line in lines:
+            if len(line) > max_line_length:
+                # Satır çok uzunsa, kelime sayısını azalt
+                line_words = line.split()
+                if len(line_words) > 3:
+                    line = " ".join(line_words[:3])
+            final_lines.append(line)
+        
+        return "\n".join(final_lines)
+
+def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
+    """Shorts için optimize edilmiş çok satırlı altyazı"""
+    # Metni temizle ve satırlara böl
+    clean_text = clean_caption_text(text)
+    wrapped = wrap_mobile_lines(clean_text, max_line_length=18)  # Shorts için daha kısa
+    esc = escape_drawtext(wrapped)
+    
+    lines = wrapped.count("\n") + 1
+    
+    # Font boyutu - satır sayısına göre
+    if is_hook:
+        if lines >= 3:
+            base_fs = 48  # 3 satır için küçük
+        elif lines == 2:
+            base_fs = 54  # 2 satır için orta
+        else:
+            base_fs = 60  # 1 satır için büyük
+        border_w = 5
+        box_border = 18
+    else:
+        if lines >= 3:
+            base_fs = 42  # 3 satır için küçük
+        elif lines == 2:
+            base_fs = 48  # 2 satır için orta
+        else:
+            base_fs = 54  # 1 satır için büyük
         border_w = 4
-        box_border = 16
+        box_border = 15
     
-    # Font boyutunu karakter sayısına göre ayarla
-    if maxchars > 25:
-        base_fs -= 6
-    elif maxchars > 20:
-        base_fs -= 3
+    # Pozisyon - ekranın alt kısmında
+    y_pos = "h-h/4-text_h/2"  # Alt çeyreklik kısımda
     
-    # Pozisyon hesaplama - ekranın alt 1/3'ünde
-    y_pos = "h-h/3-text_h/2"
+    # Satır aralığı - çok satırlı için
+    line_spacing = 8 if lines >= 3 else 10
     
-    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing={line_spacing}"
     
     # Gölge efekti
-    shadow = f"drawtext={common}:fontcolor=black@0.8:borderw=0"
-    # Ana arka plan kutusu
-    box = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.65"
+    shadow = f"drawtext={common}:fontcolor=black@0.7:borderw=0"
+    # Arka plan kutusu
+    box = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.6"
     # Ana metin
     main = f"drawtext={common}:fontcolor={color}:borderw={border_w}:bordercolor=black@0.9"
     
@@ -389,11 +413,10 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
         box += f":fontfile={fp}"
         main += f":fontfile={fp}"
     
-    # Animasyon efekti için offset
     vf = f"{shadow},{box},{main}"
     
     run(["ffmpeg","-y","-i",seg,"-vf",vf,"-c:v","libx264","-preset","medium",
-         "-crf",str(max(16,CRF_VISUAL-3)), "-movflags","+faststart", outp])
+         "-crf","20","-movflags","+faststart", outp])
 
 # ---------------- geliştirilmiş içerik üretimi ----------------
 ENHANCED_SCRIPT_BANK = {
@@ -719,7 +742,7 @@ Return ONLY valid JSON:
 
 # ---------------- ana fonksiyon güncellemeleri ----------------
 def main():
-    print(f"==> {CHANNEL_NAME} | MODE={MODE} | Enhanced Version")
+    print(f"==> {CHANNEL_NAME} | MODE={MODE} | Fixed TTS & Captions")
 
     # 1) Geliştirilmiş içerik üretimi
     if USE_GEMINI and GEMINI_API_KEY:
@@ -774,12 +797,12 @@ def main():
     sentences = sents
     search_terms = terms
 
-    # 2) Geliştirilmiş TTS işlemi
-    tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
+    # 2) TTS işlemi - problemsiz
+    tmp = tempfile.mkdtemp(prefix="fixed_shorts_")
     font = font_path()
     wavs = []; metas = []
     
-    print("🎤 Geliştirilmiş TTS işlemi başlıyor...")
+    print("🎤 Problemsiz TTS işlemi başlıyor...")
     for i, s in enumerate(sentences):
         print(f"   Cümle {i+1}/{len(sentences)}: {s[:50]}...")
         w = str(pathlib.Path(tmp)/f"sent_{i:02d}.wav")
@@ -788,15 +811,15 @@ def main():
         metas.append((s, dur))
         time.sleep(0.3)  # Rate limiting
 
-    # 3) Geliştirilmiş video indirme
+    # 3) Video indirme
     print("🎬 Yüksek kaliteli video indiriliyor...")
     clips = pexels_download(search_terms, need=len(sentences), tmp=tmp)
 
-    # 4) Geliştirilmiş video segmentleri
-    print("✨ Sinematik video segmentleri oluşturuluyor...")
+    # 4) Video segmentleri - çok satırlı altyazı
+    print("✨ Çok satırlı altyazı segmentleri oluşturuluyor...")
     segs = []
     for i, (s, d) in enumerate(metas):
-        print(f"   Segment {i+1}/{len(metas)}")
+        print(f"   Segment {i+1}/{len(metas)} - Çok satırlı altyazı")
         base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(clips[i % len(clips)], d, base)
         
@@ -833,7 +856,7 @@ def main():
 
     # 7) Final export
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Enhanced_Short"
+    safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Fixed_Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
     
     print("🔄 Video ve ses birleştiriliyor...")
@@ -931,28 +954,6 @@ def escape_drawtext(s: str) -> str:
              .replace(",", "\\,")
              .replace("'", "\\'")
              .replace("%","\\%"))
-
-def clean_caption_text(s: str) -> str:
-    """Agresif metin temizleme - MAX 80 karakter per sentence"""
-    t = (s or "").strip().replace("'","'").replace("—","-").replace('"',"").replace("`","")
-    t = re.sub(r'(\d+)([A-Za-z])', r'\1 \2', t)
-    t = re.sub(r'([A-Za-z])(\d+)', r'\1 \2', t)
-    t = re.sub(r'\s+',' ', t)
-    
-    # Sayısal detayları basitleştir (TTS sorunları için)
-    t = re.sub(r'\d{2,}', lambda m: "many" if int(m.group()) > 100 else m.group(), t)
-    t = re.sub(r'\d+\s*-\s*meter', "massive", t)
-    t = re.sub(r'\d+\s*years?', "decades", t)
-    
-    if t and t[0].islower():
-        t = t[0].upper() + t[1:]
-    
-    # AGRESIF uzunluk kısıtlaması
-    if len(t) > 80:  # MAX 80 karakter
-        words = t.split()
-        t = " ".join(words[:12]) + "."  # MAX 12 kelime
-    
-    return t.strip()
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
     words = text.split()
