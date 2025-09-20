@@ -219,40 +219,84 @@ def build_search_terms_per_video(sentences: List[str], topic: str, mode: str, la
 
 # ---------------- Pexels ----------------
 def pexels_download(terms: List[str], need: int, tmp: str) -> List[str]:
-    if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
-    out, seen = [], set(); headers = {"Authorization": PEXELS_API_KEY}
+    if not PEXELS_API_KEY:
+        raise RuntimeError("PEXELS_API_KEY missing")
+    out, seen = [], set()
+    headers = {"Authorization": PEXELS_API_KEY}
+
     def _score(meta):
-        w,h = meta.get("width",0), meta.get("height",0); dur = meta.get("duration",0); size = meta.get("size",0) or 0
-        aspect = (h>0 and abs((9/16)-(w/h))<0.08); dur_bonus = -abs(dur-9)+9
-        return (2000*(1 if aspect else 0)) + (w*h/1e4) + (size/2e5) + (120*max(dur_bonus,0))
+        w, h = meta.get("width", 0), meta.get("height", 0)
+        dur = meta.get("duration", 0)
+        size = meta.get("size", 0) or 0
+        aspect = (h > 0 and abs((9/16) - (w / h)) < 0.08)
+        dur_bonus = -abs(dur - 9) + 9  # 9sn civarı tepe
+        return (2000 * (1 if aspect else 0)) + (w * h / 1e4) + (size / 2e5) + (120 * max(dur_bonus, 0))
+
     for term in terms:
-        if len(out) >= need: break
+        if len(out) >= need:
+            break
         try:
-            r = requests.get("https://api.pexels.com/videos/search", headers=headers,
-                             params={"query":term,"per_page":30,"orientation":"portrait","size":"large","min_width":"1080","min_height":"1920"}, timeout=30)
-            vids = r.json().get("videos", []) if r.status_code==200 else []
+            r = requests.get(
+                "https://api.pexels.com/videos/search",
+                headers=headers,
+                params={
+                    "query": term,
+                    "per_page": 30,
+                    "orientation": "portrait",
+                    "size": "large",
+                    "min_width": "1080",
+                    "min_height": "1920",
+                },
+                timeout=30,
+            )
+            vids = r.json().get("videos", []) if r.status_code == 200 else []
             cand = []
+
             for v in vids:
-                files = v.get("video_files",[]); if not files: continue
-                best = max(files, key=lambda x: x.get("width",0)*x.get("height",0))
-                if best.get("height",0) < 1080: continue
-                url = best.get("link"); if not url or url in seen: continue
-                meta = {"width": best.get("width",0),"height": best.get("height",0),"duration": v.get("duration",0),
-                        "size": best.get("file_size",0) or 0,"url": url}
+                files = v.get("video_files", [])
+                if not files:
+                    continue
+
+                best = max(files, key=lambda x: x.get("width", 0) * x.get("height", 0))
+                if best.get("height", 0) < 1080:
+                    continue
+
+                url = best.get("link")
+                if not url or url in seen:
+                    continue
+
+                meta = {
+                    "width": best.get("width", 0),
+                    "height": best.get("height", 0),
+                    "duration": v.get("duration", 0),
+                    "size": best.get("file_size", 0) or 0,
+                    "url": url,
+                }
                 cand.append((_score(meta), meta))
-            for _,m in sorted(cand, key=lambda x: x[0], reverse=True):
-                if len(out) >= need: break
-                url = m["url"]; seen.add(url)
-                fpath = str(pathlib.Path(tmp)/f"clip_{len(out):02d}_{uuid.uuid4().hex[:6]}.mp4")
+
+            for _, m in sorted(cand, key=lambda x: x[0], reverse=True):
+                if len(out) >= need:
+                    break
+                url = m["url"]
+                seen.add(url)
+
+                fpath = str(pathlib.Path(tmp) / f"clip_{len(out):02d}_{uuid.uuid4().hex[:6]}.mp4")
                 with requests.get(url, stream=True, timeout=180) as rr:
                     rr.raise_for_status()
-                    with open(fpath,"wb") as w:
-                        for ch in rr.iter_content(1<<14): w.write(ch)
+                    with open(fpath, "wb") as w:
+                        for ch in rr.iter_content(1 << 14):
+                            w.write(ch)
+
                 ok_size = pathlib.Path(fpath).stat().st_size > 1_200_000
-                ok_dur  = 4 <= m["duration"] <= 20
-                if ok_size and ok_dur: out.append(fpath)
-        except Exception: continue
-    if len(out) < max(3, need//2): raise RuntimeError("Yeterli kaliteli Pexels video bulunamadı")
+                ok_dur = 4 <= m["duration"] <= 20
+                if ok_size and ok_dur:
+                    out.append(fpath)
+
+        except Exception:
+            continue
+
+    if len(out) < max(3, need // 2):
+        raise RuntimeError("Yeterli kaliteli Pexels video bulunamadı")
     return out[:need]
 
 # ---------------- Video işleme ----------------
@@ -566,3 +610,4 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 if __name__ == "__main__":
     main()
+
