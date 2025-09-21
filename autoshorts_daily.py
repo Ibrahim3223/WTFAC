@@ -174,18 +174,72 @@ def clean_caption_text(s: str) -> str:
         t = " ".join(words[:18]) + "…"
     return t
 
-def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
+def wrap_mobile_lines_smart(text: str, max_chars_per_line: int = CAPTION_MAX_LINE, max_lines: int = 4) -> List[str]:
+    """
+    Greedy kelime paketleyici:
+    - Satırları max_chars_per_line'ı aşmadan doldurur
+    - Gerekirse 2 -> 3 -> 4 satıra çıkar
+    - Hâlâ sığmıyorsa en uzun satırı hafifçe kısar (…)
+    """
     text = (text or "").strip()
-    if not text: return text
-    words = text.split()
-    target = 3 if len(text) > 60 or len(words) > 12 else 2
-    per = math.ceil(len(words)/target)
-    chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(target)]
-    chunks = [c for c in chunks if c]
-    if any(len(c) > max_line_length for c in chunks) and target == 2:
-        target = 3; per = math.ceil(len(words)/target)
-        chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(target)]
-    return "\n".join(chunks[:3])
+    if not text:
+        return []
+    words = re.findall(r"\S+", text)
+
+    # 2, 3 ve max_lines denemesi
+    for target in (2, 3, max_lines):
+        lines = []
+        cur = []
+        cur_len = 0
+        for w in words:
+            add = (1 if cur else 0) + len(w)  # boşluk + kelime
+            if cur_len + add <= max_chars_per_line or not cur:
+                cur.append(w); cur_len += add
+            else:
+                lines.append(" ".join(cur))
+                cur = [w]; cur_len = len(w)
+        if cur:
+            lines.append(" ".join(cur))
+
+        # Tümü sınır içinde ve satır sayısı hedefi geçmiyorsa döndür
+        if len(lines) <= target and all(len(ln) <= max_chars_per_line for ln in lines):
+            return lines
+
+        # Bazı satırlar uzun ama target'ı geçmiyorsa yine de döndür (fontu küçülteceğiz)
+        if len(lines) <= target:
+            return lines[:target]
+
+    # Son çare: kısalt
+    clipped = []
+    for ln in lines[:max_lines]:
+        if len(ln) > max_chars_per_line:
+            clipped.append(ln[:max(0, max_chars_per_line-1)].rstrip() + "…")
+        else:
+            clipped.append(ln)
+    return clipped
+
+def _smart_wrap_and_font(text: str, base_fs: int, is_hook: bool, max_chars: int = CAPTION_MAX_LINE) -> tuple[str, int]:
+    """
+    Metni satırlara böler ve fontu gerektiğinde küçültür.
+    Döndürür: (wrapped_text, fontsize)
+    """
+    min_fs = 44 if is_hook else 36
+    fs = base_fs
+    lines = wrap_mobile_lines_smart(text, max_chars_per_line=max_chars, max_lines=4)
+
+    # Çok uzun satırlar varsa fontu azalt
+    while fs > min_fs:
+        if all(len(ln) <= max_chars for ln in lines) and len(lines) <= 4:
+            break
+        fs -= 2
+        # Font küçülünce genelde sığar; yine de satır sayısı <= 4 ise kabul
+        if len(lines) <= 4:
+            break
+        # nadiren yeniden sarma gerekebilir
+        lines = wrap_mobile_lines_smart(text, max_chars_per_line=max_chars, max_lines=4)
+
+    wrapped = "\n".join(lines[:4])
+    return wrapped, fs
 
 # -------------------- TTS (Edge-TTS primary, Google fallback) --------------------
 def tts_to_wav(text: str, wav_out: str) -> float:
@@ -266,20 +320,24 @@ def make_segment(src: str, dur: float, outp: str):
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
+    """
+    CapCut tarzı kutulu altyazı (dinamik satır ve font).
+    """
+    cleaned = clean_caption_text(text)
+    base_fs = 60 if is_hook else 50
+    wrapped, fs = _smart_wrap_and_font(cleaned, base_fs, is_hook, max_chars=CAPTION_MAX_LINE)
+
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    lines = wrapped.count("\n")+1
-    fs = 58 if is_hook else 48
-    if lines >= 3: fs -= 6
     y_pos = "h-h/3-text_h/2"
-    col = color if re.fullmatch(r"0x[0-9A-Fa-f]{6}", color) else "white"
+    # renk: ffmpeg için 0xRRGGBB bekleniyor; yanlışsa "white"
+    col = color if re.fullmatch(r"0x[0-9A-Fa-f]{6}", color or "") else "white"
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
 
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
-    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(20 if is_hook else 16)}:boxcolor=black@0.65"
+    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 16)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
     vf_advanced = f"{shadow},{box},{main}"
     vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
@@ -494,6 +552,88 @@ def _score_video(v: dict, query_terms: List[str]) -> float:
     w += overlap * 1.5
     return w
 
+# --- ADD: görsel sözlükleri (somut kavramlar/ortamlar) ---
+GENERIC_VISUAL_LEXICON = {
+    "office","street","city","forest","mountain","desert","beach","ocean","cave","cavern","temple","ruins","museum",
+    "kitchen","workshop","factory","laboratory","library","market","classroom","stadium","stage","arena","bridge","skyline",
+    "statue","bust","columns","torch","flame","smoke","river","lava","sky","clouds","storm","crown","gate","doorway",
+    "book","desk","computer","laptop","phone","robot","tools","hammer","screwdriver","gear","wheel","car","train",
+    "rocket","telescope","satellite","planet","moon","sun","tree","rock","stone","sand","snow","ice","waterfall",
+    "animal","bird","lion","eagle","horse","fish","dog","cat","butterfly","insect",
+    "man","woman","people","crowd","silhouette","hand","face","eyes"
+}
+
+MODE_VISUAL_LEXICON = {
+    "myth_gods": {
+        "temple","columns","marble","statue","bust","laurel","cave","underworld","torch","flame","smoke","lava","altar","crown","gate"
+    },
+    "country_facts": {
+        "city","market","bridge","museum","ruins","desert","beach","forest","mountain","temple","cave","street","skyline"
+    },
+    "tech_news": {
+        "robot","laboratory","computer","server","factory","workshop","tools","circuit","drone","microscope"
+    },
+    "history_story": {
+        "ruins","manuscript","temple","columns","statue","cave","desert","castle","fortress","library"
+    }
+}
+
+def _pick_visual_words(sentence: str, mode: str, fallback: List[str]) -> List[str]:
+    text = (sentence or "").lower()
+    ws = [w for w in re.findall(r"[a-z]+", text) if w not in STOP and len(w) > 2]
+    lex = set(GENERIC_VISUAL_LEXICON) | set(MODE_VISUAL_LEXICON.get(mode, set()))
+    picked = []
+    for w in ws:
+        if w in lex and w not in picked:
+            picked.append(w)
+        if len(picked) >= 2:
+            break
+    if not picked and fallback:
+        tok = re.findall(r"[a-z]+", fallback[0].lower())
+        if tok:
+            picked.append(tok[0])
+    return picked[:2] if picked else ["city"]
+
+def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mode: str) -> List[str]:
+    out=[]
+    for s in sentences:
+        kws = _pick_visual_words(s, mode, fallback_terms)
+        q = " ".join(kws[:2])
+        out.append(q)
+    return out
+
+def pexels_pick_one(query: str) -> tuple[int, str]:
+    headers = _pexels_headers()
+    locale  = _pexels_locale(LANG)
+    block   = _blocklist_get_pexels()
+    try:
+        r = requests.get("https://api.pexels.com/videos/search",
+                         headers=headers,
+                         params={"query": query, "per_page": 20, "orientation": "portrait",
+                                 "size": "large", "locale": locale},
+                         timeout=30)
+        data = r.json() if r.status_code == 200 else {}
+    except Exception:
+        data = {}
+    best_pair = (0, "")
+    best_score = -1.0
+    for v in data.get("videos", []):
+        vid = int(v.get("id", 0))
+        if vid in block:
+            continue
+        files = v.get("video_files", []) or []
+        if not files:
+            continue
+        bestf = max(files, key=lambda x: (int(x.get("height",0))*int(x.get("width",0))))
+        link = bestf.get("link")
+        if not link:
+            continue
+        score = _score_video(v, _words(query))
+        if score > best_score:
+            best_score = score
+            best_pair = (vid, link)
+    return best_pair
+
 def pexels_pick_clips(per_video_queries: List[str], need: int) -> List[Tuple[int,str]]:
     headers = _pexels_headers()
     locale  = _pexels_locale(LANG)
@@ -634,25 +774,44 @@ def main():
 
     sentences = processed_sentences
 
-    # 3) Per-video search terms
-    channel_hint = CHANNEL_NAME.replace("_"," ").replace("-"," ")
-    per_video_queries = derive_search_terms(sentences, terms, channel_hint=channel_hint)
-    print("🔎 Per-video queries:")
-    for q in per_video_queries: print(f"   • {q}")
+    # 3) Per-scene kısa query'ler (1–2 kelime)
+    per_scene_queries = build_per_scene_queries(sentences, search_terms, MODE)
+    print("🔎 Per-scene queries:")
+    for i, q in enumerate(per_scene_queries):
+        print(f"   [{i+1}] {q}")
 
-    # 4) Pexels download with relevance & reuse guard
-    picked = pexels_pick_clips(per_video_queries, need=len(sentences))
-    clips=[]
-    for idx,(vid,link) in enumerate(picked):
-        f = str(pathlib.Path(tmp)/f"clip_{idx:02d}_{vid}.mp4")
-        with requests.get(link, stream=True, timeout=120) as rr:
-            rr.raise_for_status()
-            with open(f,"wb") as w:
-                for ch in rr.iter_content(8192): w.write(ch)
-        if pathlib.Path(f).stat().st_size > 500_000:
-            clips.append(f)
-    if len(clips) < len(sentences):
-        print("⚠️ Not enough downloaded clips after filtering; cycling clips to fill.")
+    # 4) Pexels: sahne bazlı tek seçim ve indirme
+    clips = []
+    used_ids = []
+    print("🎬 Pexels select per scene…")
+    for i, q in enumerate(per_scene_queries):
+        vid, url = pexels_pick_one(q)
+        if vid and url:
+            f = str(pathlib.Path(tmp)/f"clip_{i:02d}_{vid}.mp4")
+            try:
+                with requests.get(url, stream=True, timeout=120) as rr:
+                    rr.raise_for_status()
+                    with open(f,"wb") as w:
+                        for ch in rr.iter_content(8192):
+                            w.write(ch)
+                if pathlib.Path(f).stat().st_size > 400_000:
+                    clips.append(f)
+                    used_ids.append(vid)
+                    print(f"   • scene {i+1}: id={vid} ({q})")
+            except Exception as e:
+                print(f"   • scene {i+1}: download failed for '{q}': {e}")
+        else:
+            print(f"   • scene {i+1}: no strong match for '{q}'")
+
+    # reuse-guard: seçilenleri blokliste ekle (30 gün)
+    if used_ids:
+        _blocklist_add_pexels(used_ids, days=30)
+
+    # güvenlik: eksik varsa döngüsel doldur
+    if len(clips) < len(sentences) and clips:
+        print("⚠️ Not enough distinct clips; cycling existing clips to fill.")
+        while len(clips) < len(sentences):
+            clips.append(clips[len(clips) % max(1, len(clips))])
 
     # 5) Segments + captions + pair-mux (hard sync)
     print("🎬 Segments (hard-sync)…")
@@ -711,3 +870,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
