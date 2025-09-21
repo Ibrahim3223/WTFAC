@@ -93,6 +93,15 @@ def escape_drawtext(s: str) -> str:
     return (s.replace("\\","\\\\").replace(":", "\\:").replace(",", "\\,")
              .replace("'", "\\'").replace("%","\\%"))
 
+def _ff_sanitize_font(font_path: str) -> str:
+    """
+    FFmpeg drawtext fontfile için güvenli yol:
+    ':' -> '\:' , ',' -> '\,' , '\' -> '/'
+    """
+    if not font_path:
+        return ""
+    return font_path.replace(":", r"\:").replace(",", r"\,").replace("\\", "/")
+
 # -------------------- State management --------------------
 def _state_load() -> dict:
     try: return json.load(open(STATE_FILE, "r", encoding="utf-8"))
@@ -298,11 +307,11 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     ffmpeg hata verirse otomatik olarak basit overlay'e düşer.
     """
     safe_txt = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
-    # \n’leri drawtext için literal bırak
     esc = escape_drawtext(safe_txt).replace("\n", r"\n")
 
     lines = safe_txt.count("\n")+1
     maxchars = max(len(x) for x in safe_txt.split("\n"))
+
     if is_hook:
         base_fs = 52 if lines >= 3 else 58
         border_w = 5
@@ -311,24 +320,30 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
         base_fs = 42 if lines >= 3 else 48
         border_w = 4
         box_border = 16
+
     if maxchars > 25:
         base_fs -= 6
     elif maxchars > 20:
         base_fs -= 3
 
     y_pos = "h-h/3-text_h/2"
-    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
-    fontarg = f":fontfile={font.replace(':','\\:').replace(',','\\,').replace('\\','/')}" if font else ""
     col = _ff_color(color)
 
+    # fontfile argümanını f-string dışından hazırla (backslash hatasını önlemek için)
+    font_arg = ""
+    if font:
+        font_arg = f":fontfile={_ff_sanitize_font(font)}"
+
+    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+
     # 1) Gelişmiş zincir
-    shadow = f"drawtext={common}{fontarg}:fontcolor=black@0.8:borderw=0"
-    box    = f"drawtext={common}{fontarg}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.65"
-    main   = f"drawtext={common}{fontarg}:fontcolor={col}:borderw={border_w}:bordercolor=black@0.9"
+    shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.8:borderw=0"
+    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.65"
+    main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={border_w}:bordercolor=black@0.9"
     vf_advanced = f"{shadow},{box},{main}"
 
     # 2) Basit fallback
-    vf_simple = f"drawtext={common}{fontarg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
+    vf_simple = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
     try:
         run([
@@ -337,6 +352,15 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             "-crf",str(max(16,CRF_VISUAL-3)),
             "-movflags","+faststart", outp
         ])
+    except Exception as e:
+        print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
+        run([
+            "ffmpeg","-y","-i",seg,"-vf",vf_simple,
+            "-c:v","libx264","-preset","medium",
+            "-crf",str(max(16,CRF_VISUAL-2)),
+            "-movflags","+faststart", outp
+        ])
+
     except Exception as e:
         print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
         run([
@@ -815,5 +839,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
