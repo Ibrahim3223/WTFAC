@@ -774,73 +774,85 @@ def main():
 
     sentences = processed_sentences
 
-    # 3) Per-scene kısa query'ler (1–2 kelime)
-    per_scene_queries = build_per_scene_queries(sentences, search_terms, MODE)
+      # 3) Per-scene queries (kısa ve net; 1–2 kelime)
+    fallback_terms = terms if 'terms' in locals() and isinstance(terms, list) else []
+    per_scene_queries = build_per_scene_queries(sentences, fallback_terms, MODE)
     print("🔎 Per-scene queries:")
-    for i, q in enumerate(per_scene_queries):
-        print(f"   [{i+1}] {q}")
+    for q in per_scene_queries:
+        print(f"   • {q}")
 
-    # 4) Pexels: sahne bazlı tek seçim ve indirme
+    # 4) Pexels – her sahne için tek odaklı seçim
+    picked = []
+    for q in per_scene_queries:
+        vid, link = pexels_pick_one(q)
+        if vid and link:
+            picked.append((vid, link))
+
+    if not picked:
+        raise RuntimeError("Pexels: hiçbir sonuç toparlanamadı (per-scene).")
+
+    # indirme
     clips = []
-    used_ids = []
-    print("🎬 Pexels select per scene…")
-    for i, q in enumerate(per_scene_queries):
-        vid, url = pexels_pick_one(q)
-        if vid and url:
-            f = str(pathlib.Path(tmp)/f"clip_{i:02d}_{vid}.mp4")
-            try:
-                with requests.get(url, stream=True, timeout=120) as rr:
-                    rr.raise_for_status()
-                    with open(f,"wb") as w:
-                        for ch in rr.iter_content(8192):
-                            w.write(ch)
-                if pathlib.Path(f).stat().st_size > 400_000:
-                    clips.append(f)
-                    used_ids.append(vid)
-                    print(f"   • scene {i+1}: id={vid} ({q})")
-            except Exception as e:
-                print(f"   • scene {i+1}: download failed for '{q}': {e}")
-        else:
-            print(f"   • scene {i+1}: no strong match for '{q}'")
+    for idx, (vid, link) in enumerate(picked):
+        try:
+            f = str(pathlib.Path(tmp) / f"clip_{idx:02d}_{vid}.mp4")
+            with requests.get(link, stream=True, timeout=120) as rr:
+                rr.raise_for_status()
+                with open(f, "wb") as w:
+                    for ch in rr.iter_content(8192):
+                        w.write(ch)
+            if pathlib.Path(f).stat().st_size > 500_000:
+                clips.append(f)
+        except Exception as e:
+            print(f"⚠️ download fail ({vid}): {e}")
 
-    # reuse-guard: seçilenleri blokliste ekle (30 gün)
-    if used_ids:
-        _blocklist_add_pexels(used_ids, days=30)
+    if len(clips) < len(sentences):
+        print("⚠️ Yeterli klip yok; eldeki klipler döndürülerek kullanılacak.")
 
-    # güvenlik: eksik varsa döngüsel doldur
-    if len(clips) < len(sentences) and clips:
-        print("⚠️ Not enough distinct clips; cycling existing clips to fill.")
-        while len(clips) < len(sentences):
-            clips.append(clips[len(clips) % max(1, len(clips))])
-
-    # 5) Segments + captions + pair-mux (hard sync)
-    print("🎬 Segments (hard-sync)…")
-    chunks = []
+    # 5) Segments + captions (SENKRON: video süresi = TTS süresi; altyazı = TTS metni)
+    print("🎬 Segments…")
+    segs = []
     for i, (base_text, d) in enumerate(metas):
-        raw = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
-        make_segment(clips[i % len(clips)], d, raw)  # video süresi ≈ TTS süresi
-        colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
+        base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
+        make_segment(clips[i % len(clips)], d, base)  # TTS süresine kes
+        colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
-            raw, base_text,
+            base,
+            base_text,  # aynı metin = aynı zamanlama algısı
             CAPTION_COLORS[i % len(CAPTION_COLORS)],
-            font, colored, is_hook=(i == 0)
+            font,
+            colored,
+            is_hook=(i == 0),
         )
-        pair = str(pathlib.Path(tmp)/f"chunk_{i:02d}.mp4")
-        mux_exact_pair(colored, wavs[i], pair)  # ← segment bazında kesin senkron
-        chunks.append(pair)
+        segs.append(colored)
 
-    # 6) Final assemble (tek concat, hem ses hem görüntü)
-    print("🎞️ Assemble (final)…")
-    outp_video = str(pathlib.Path(tmp)/"final.mp4")
-    concat_chunks_with_audio(chunks, outp_video)
+    # 6) Assemble
+    print("🎞️ Assemble…")
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos(segs, vcat)
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    final_dur = ffprobe_dur(outp_video)
-    print(f"📏 Final duration: {final_dur:.1f}s (target {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
+    total = ffprobe_dur(acat)
+    print(f"📏 Total audio: {total:.1f}s (target {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
+    if total < TARGET_MIN_SEC:
+        deficit = TARGET_MIN_SEC - total
+        extra = min(deficit, 5.0)
+        if extra > 0.1:
+            padded = str(pathlib.Path(tmp) / "audio_padded.wav")
+            run([
+                "ffmpeg","-y",
+                "-f","lavfi","-t", f"{extra:.2f}", "-i", "anullsrc=r=48000:cl=mono",
+                "-i", acat, "-filter_complex", "[1:a][0:a]concat=n=2:v=0:a=1",
+                padded
+            ])
+            acat = padded
+
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
-    pathlib.Path(outp).write_bytes(pathlib.Path(outp_video).read_bytes())
-    print(f"✅ Saved: {outp} ({final_dur:.1f}s)")
+    print("🔄 Mux…")
+    mux(vcat, acat, outp)
+    final = ffprobe_dur(outp)
+    print(f"✅ Saved: {outp} ({final:.1f}s)")
 
     # 7) Metadata
     def _ok_str(x): return isinstance(x,str) and len(x.strip())>0
@@ -870,4 +882,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
