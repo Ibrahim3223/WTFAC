@@ -166,6 +166,26 @@ def normalize_sentence(raw: str) -> str:
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
 
+def _rate_to_atempo(rate_str: str, default: float = 1.12) -> float:
+    """
+    '+12%' gibi bir değeri 1.12'ye çevirir. Hatalıysa default döner.
+    """
+    try:
+        if not rate_str:
+            return default
+        rate_str = rate_str.strip()
+        if rate_str.endswith("%"):
+            val = float(rate_str.replace("%",""))
+            return max(0.5, min(2.0, 1.0 + val/100.0))
+        # '1.15x' gibi gelirse:
+        if rate_str.endswith(("x","X")):
+            return max(0.5, min(2.0, float(rate_str[:-1])))
+        # doğrudan sayı verilmişse
+        v = float(rate_str)
+        return max(0.5, min(2.0, v))
+    except Exception:
+        return default
+
 # -------------------- Text prep (captions) --------------------
 def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
@@ -258,45 +278,76 @@ def _build_ssml(text: str, voice: str) -> str:
 
 def tts_to_wav(text: str, wav_out: str) -> float:
     """
-    Edge-TTS (plain text) -> MP3 -> WAV
-    - SSML kullanmıyoruz (aksi durumda 'speak version…' gibi okunuyor).
-    - Hız: VOICE_RATE env (ör: +12% / +15%).
-    - 48 kHz mono, hafif normalizasyon.
+    TTS üretimi (sağlam):
+      1) edge-tts (2 deneme) + hız (VOICE_RATE)
+      2) 401/bağlantı hatasında: Google Translate TTS fallback
+    Son aşamada WAV 48kHz mono, hafif normalize + atempo uygulanır.
     """
     import asyncio
-    mp3 = wav_out.replace(".wav", ".mp3")
 
-    # Hız ve ses
+    text = (text or "").strip()
+    if not text:
+        # boşsa 1 sn sessizlik
+        run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
+        return 1.0
+
+    mp3 = wav_out.replace(".wav", ".mp3")
+    rate_env = os.getenv("TTS_RATE", "+12%")
+    atempo = _rate_to_atempo(rate_env, default=1.12)
+
+    # --- 1) EDGE-TTS (denemeli) ---
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
-    rate = os.getenv("TTS_RATE", "+12%")  # daha akıcı varsayılan
 
     async def _edge_save_simple():
-        comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate)
+        comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
         await comm.save(mp3)
 
-    try:
+    for attempt in range(2):
         try:
-            asyncio.run(_edge_save_simple())
-        except RuntimeError:
-            nest_asyncio.apply()
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(_edge_save_simple())
-    except Exception as e:
-        print(f"⚠️ edge-tts mp3 üretimi başarısız: {e}")
-        raise
+            try:
+                asyncio.run(_edge_save_simple())
+            except RuntimeError:
+                nest_asyncio.apply()
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(_edge_save_simple())
+            # MP3 → WAV + hız/normalize
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", mp3,
+                "-ar","48000","-ac","1","-acodec","pcm_s16le",
+                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+                wav_out
+            ])
+            pathlib.Path(mp3).unlink(missing_ok=True)
+            return ffprobe_dur(wav_out) or 0.0
+        except Exception as e:
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}")
+            # 401 vb. durumlarda kısa bekleme
+            time.sleep(1.2)
 
-    # MP3 → WAV (48k, mono), soft comp/normalize
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", mp3,
-        "-ar","48000","-ac","1","-acodec","pcm_s16le",
-        "-af","dynaudnorm=g=7:f=250:rc=0.95,acompressor=threshold=-18dB:ratio=2.2:attack=5:release=80",
-        wav_out
-    ])
-    pathlib.Path(mp3).unlink(missing_ok=True)
+    # --- 2) GOOGLE TRANSLATE TTS FALLBACK ---
+    try:
+        q = requests.utils.quote(text.replace('"','').replace("'",""))
+        lang_code = (LANG or "en")
+        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
+        open(mp3, "wb").write(r.content)
 
-    return ffprobe_dur(wav_out) or 0.0
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
+            wav_out
+        ])
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        return ffprobe_dur(wav_out) or 0.0
+    except Exception as e2:
+        print(f"❌ Tüm TTS yolları başarısız, sessizlik üretilecek: {e2}")
+        run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
+        return 4.0
 
 # -------------------- Video compose helpers --------------------
 def make_segment(src: str, dur: float, outp: str):
@@ -857,6 +908,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
