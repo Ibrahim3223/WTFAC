@@ -413,46 +413,28 @@ def concat_videos(files: List[str], outp: str):
 
 def concat_audios(files: List[str], outp: str):
     """
-    WAV’ları ardışık birleştirir, 48kHz’e sabitler.
-    NOT: Bu fonksiyon İÇİNDE tmp/segs/vcat KULLANILMAZ.
+    WAV'ları ardışık birleştirir, 48kHz mono'ya sabitler ve normalize eder.
+    Bu fonksiyon YALNIZCA sesi birleştirir; video ile senkron işi main()'de yapılır.
     """
     if not files:
         raise RuntimeError("concat_audios: empty file list")
+
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
-    with open(lst,"w",encoding="utf-8") as f:
+    with open(lst, "w", encoding="utf-8") as f:
         for p in files:
             f.write(f"file '{p}'\n")
+
     run([
-        "ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+        "ffmpeg","-y","-f","concat","-safe","0","-i", lst,
         "-ar","48000","-ac","1",
         "-af","dynaudnorm=g=6:f=300",
         outp
     ])
+
     try:
         pathlib.Path(lst).unlink(missing_ok=True)
     except:
         pass
-
-    # ——— Birleştir ———
-    print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
-    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
-
-    # Audio/Video sürelerini kontrol et ve senkronla
-    adur = ffprobe_dur(acat)
-    vdur = ffprobe_dur(vcat)
-    drift = vdur - adur
-
-    # Video sesin GERİSİNDE kalıyorsa (kısa), son kareyi klonlayarak pad et
-    if vdur + 0.04 < adur:
-        vcat_pad = str(pathlib.Path(tmp)/"video_padded.mp4")
-        pad_video_to_duration(vcat, adur, vcat_pad)
-        vcat = vcat_pad
-    # Video sesin İLERİSİNDE ise (uzun), videoyu ses süresine kırp
-    elif vdur > adur + 0.04:
-        vcat_trim = str(pathlib.Path(tmp)/"video_trimmed.mp4")
-        run(["ffmpeg","-y","-i",vcat,"-t",f"{adur:.3f}","-c","copy", vcat_trim])
-        vcat = vcat_trim
 
 def ensure_av_alignment(video_path: str, audio_path: str, tmp_dir: str) -> Tuple[str, str]:
     """
@@ -831,36 +813,53 @@ def main():
         )
         segs.append(colored)
 
-    # 6) Birleştir (CFR)
+    # --- Birleştir ---
     print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
-    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
+    concat_videos(segs, vcat)
 
-    # 7) Senkron garantisi: video'yu audio süresine hizala (pad/trim)
-    vcat, acat = ensure_av_alignment(vcat, acat, tmp)
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav")
+    concat_audios(wavs, acat)
 
-    # 8) Minimum süreyi tuttur (gerekirse audio'ya sessizlik ekle)
-    total = ffprobe_dur(acat)
+    # Süreleri yazdır
+    adur = ffprobe_dur(acat)
+    vdur = ffprobe_dur(vcat)
+    print(f"⏱  Durations -> audio: {adur:.2f}s | video: {vdur:.2f}s")
+
+    # Video/Audio eşitle (video'yu sese göre hizala)
+    vcat_sync = str(pathlib.Path(tmp) / "video_synced.mp4")
+    ensure_av_sync(vcat, acat, vcat_sync)
+    vsync_dur = ffprobe_dur(vcat_sync)
+    print(f"✔️  Synced video: {vsync_dur:.2f}s (matches audio {adur:.2f}s)")
+
+    # Kısa toplam ses için minimal pad (opsiyonel)
+    total = adur
     print(f"📏 Total audio: {total:.1f}s (target {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
     if total < TARGET_MIN_SEC:
         deficit = TARGET_MIN_SEC - total
         extra = min(deficit, 5.0)
-        if extra > 0.1:
-            padded = str(pathlib.Path(tmp)/"audio_padded.wav")
+        if extra > 0.10:
+            padded = str(pathlib.Path(tmp) / "audio_padded.wav")
             run([
                 "ffmpeg","-y",
                 "-f","lavfi","-t",f"{extra:.2f}","-i","anullsrc=r=48000:cl=mono",
-                "-i",acat,"-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1",
+                "-i", acat,
+                "-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1",
                 padded
             ])
             acat = padded
+            # Ses uzadıysa videoyu tekrar senkle
+            vcat_sync2 = str(pathlib.Path(tmp) / "video_synced2.mp4")
+            ensure_av_sync(vcat_sync, acat, vcat_sync2)
+            vcat_sync = vcat_sync2
 
-    # 9) Mux
+    # --- Mux ---
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+','_', tpc)[:60] or "Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
+
     print("🔄 Mux…")
-    mux(vcat, acat, outp)
+    mux(vcat_sync, acat, outp)
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.1f}s)")
 
@@ -893,6 +892,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
