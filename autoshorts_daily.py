@@ -230,8 +230,8 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         return 1.0
 
     mp3 = wav_out.replace(".wav", ".mp3")
-    rate_env = VOICE_RATE
-    atempo = _rate_to_atempo(rate_env, default=1.15)
+    rate_env = os.getenv("TTS_RATE", "+8%")   # daha doğal hız
+    atempo = _rate_to_atempo(rate_env, default=1.08)
 
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
@@ -253,7 +253,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
                 "-i", mp3,
                 "-ar","48000","-ac","1","-acodec","pcm_s16le",
-                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+                "-af", f"dynaudnorm=g=5:f=250,atempo={atempo}",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
@@ -282,7 +282,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
             "-ar","48000","-ac","1","-acodec","pcm_s16le",
-            "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
+            "-af", f"dynaudnorm=g=5:f=300,atempo={atempo}",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
@@ -302,17 +302,35 @@ def _ff_color(c: str) -> str:
     return "white"
 
 def make_segment(src: str, dur: float, outp: str):
-    dur = max(0.8, min(dur, 5.0))
-    fade = max(0.05, min(0.12, dur/8))
+    """
+    Her segmentin süresini frame sayısına kilitler.
+    Böylece 25 fps'te kümülatif yuvarlama hatası oluşmaz.
+    """
+    # FFmpeg'in frame yuvarlamasından kaynaklı drift'i engelle
+    fps = TARGET_FPS
+    frames = max(1, int(round(dur * fps)))
+    dur_q = frames / fps
+
+    fade = max(0.05, min(0.12, dur_q/8))
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
         f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={max(0.0,dur-fade):.2f}:d={fade:.2f}"
+        f"fade=t=out:st={max(0.0,dur_q-fade):.2f}:d={fade:.2f},"
+        f"fps={fps}"
     )
-    run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r",str(TARGET_FPS),"-an",
-         "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
+
+    run([
+        "ffmpeg","-y",
+        "-i", src,
+        "-t", f"{dur_q:.3f}",        # süreyi frame'e yuvarlanmış değere sabitliyoruz
+        "-vf", vf,
+        "-r", str(fps),              # CFR
+        "-an",
+        "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p",
+        outp
+    ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """
@@ -391,19 +409,48 @@ def concat_videos(files: List[str], outp: str):
     except: pass
 
 def concat_audios(files: List[str], outp: str):
+    """
+    WAV’ları ardışık birleştirir, 48kHz’e sabitler. Sadece audio yapar.
+    """
     if not files:
         raise RuntimeError("concat_audios: empty file list")
+
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst,"w",encoding="utf-8") as f:
-        for p in files: f.write(f"file '{p}'\n")
+        for p in files:
+            f.write(f"file '{p}'\n")
+
     run([
-        "ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+        "ffmpeg","-y",
+        "-f","concat","-safe","0","-i",lst,
         "-ar","48000","-ac","1",
-        "-af","dynaudnorm=g=6:f=300",
+        "-af","dynaudnorm=g=5:f=250",
         outp
     ])
+
     try: pathlib.Path(lst).unlink(missing_ok=True)
     except: pass
+
+    # ——— Birleştir ———
+    print("🎞️ Assemble…")
+    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
+    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
+
+    # Audio/Video sürelerini kontrol et ve senkronla
+    adur = ffprobe_dur(acat)
+    vdur = ffprobe_dur(vcat)
+    drift = vdur - adur
+
+    # Video sesin GERİSİNDE kalıyorsa (kısa), son kareyi klonlayarak pad et
+    if vdur + 0.04 < adur:
+        vcat_pad = str(pathlib.Path(tmp)/"video_padded.mp4")
+        pad_video_to_duration(vcat, adur, vcat_pad)
+        vcat = vcat_pad
+    # Video sesin İLERİSİNDE ise (uzun), videoyu ses süresine kırp
+    elif vdur > adur + 0.04:
+        vcat_trim = str(pathlib.Path(tmp)/"video_trimmed.mp4")
+        run(["ffmpeg","-y","-i",vcat,"-t",f"{adur:.3f}","-c","copy", vcat_trim])
+        vcat = vcat_trim
 
 def mux(video: str, audio: str, outp: str):
     """
@@ -803,3 +850,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
