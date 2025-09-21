@@ -360,7 +360,7 @@ def _ff_color(c: str) -> str:
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """
     Metni geçici bir .txt dosyasına yazıp drawtext=textfile=... ile okur.
-    Böylece \n, noktalama, UTF-8 VS *sorunsuz*.
+    İleri overlay başarısız olursa basit overlay'e düşer.
     """
     # 1) metnin son halini (normalize + wrap)
     wrapped = wrap_mobile_lines(clean_caption_text(normalize_sentence(text)), CAPTION_MAX_LINE)
@@ -369,23 +369,26 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    # 3) tipografi
-    lines = wrapped.count("\n")+1
-    base_fs = (58 if is_hook else 48)
-    if lines >= 3: base_fs -= 6
+    # 3) tipografi / yerleşim
+    lines = wrapped.count("\n") + 1
+    base_fs = 58 if is_hook else 48
+    if lines >= 3:
+        base_fs -= 6
     y_pos = "h-h/3-text_h/2"
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
 
-    # 4) iki kademeli overlay
+    # 4) filtreler
     common = f"textfile='{tf}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(20 if is_hook else 16)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
+
     vf_advanced = f"{shadow},{box},{main}"
     vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
     try:
+        # Önce gelişmiş overlay
         run([
             "ffmpeg","-y","-i",seg,"-vf",vf_advanced,
             "-c:v","libx264","-preset","medium",
@@ -393,6 +396,7 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             "-movflags","+faststart", outp
         ])
     except Exception as e:
+        # Hata olursa basit overlay
         print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
         run([
             "ffmpeg","-y","-i",seg,"-vf",vf_simple,
@@ -401,37 +405,8 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             "-movflags","+faststart", outp
         ])
     finally:
+        # temp dosyayı temizle
         pathlib.Path(tf).unlink(missing_ok=True)
-
-    except Exception as e:
-        print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
-        run([
-            "ffmpeg","-y","-i",seg,"-vf",vf_simple,
-            "-c:v","libx264","-preset","medium",
-            "-crf",str(max(16,CRF_VISUAL-2)),
-            "-movflags","+faststart", outp
-        ])
-
-    except Exception as e:
-        print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
-        run([
-            "ffmpeg","-y","-i",seg,"-vf",vf_simple,
-            "-c:v","libx264","-preset","medium",
-            "-crf",str(max(16,CRF_VISUAL-2)),
-            "-movflags","+faststart", outp
-        ])
-        
-    except Exception as e:
-        # Fallback: sadece ana metin, beyaz renk; kutu/gölge yok
-        print(f"⚠️ drawtext advanced failed: {e}\n   → retrying with minimal overlay")
-        main_min = f"drawtext={common}:fontcolor=white:borderw=4:bordercolor=black@0.9"
-        if font:
-            fp = font.replace(":","\\:").replace(",","\\,").replace("\\","/")
-            main_min += f":fontfile={fp}"
-        run([
-            "ffmpeg","-y","-i",seg,"-vf",main_min,
-            "-c:v","libx264","-preset","medium","-crf","20","-movflags","+faststart", outp
-        ])
 
 def concat_videos(files: List[str], outp: str):
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -905,6 +880,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
