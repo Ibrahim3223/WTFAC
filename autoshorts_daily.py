@@ -148,57 +148,82 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
 
 # -------------------- Caption text & wrap --------------------
 def clean_caption_text(s: str) -> str:
+    """
+    Altyazı metnini normalize eder ama KESMEZ.
+    Truncation yok; satır sayısını wrap fonksiyonu çözer.
+    """
     t = (s or "").strip()
-    t = t.replace("—","-").replace("`","")
-    t = re.sub(r"\s+"," ", t)
-    if t and t[0].islower(): t = t[0].upper()+t[1:]
-    if len(t) > 120:  # biraz esnettik
-        words = t.split()
-        t = " ".join(words[:22]) + "…"
+    # tipik sorunlu karakterler
+    t = (t.replace("—", "-")
+           .replace("–", "-")
+           .replace("“", '"')
+           .replace("”", '"')
+           .replace("’", "'")
+           .replace("`", ""))
+    # aşırı boşluk temizliği
+    t = re.sub(r"\s+", " ", t).strip()
+    # ilk harfi büyük
+    if t and t[0].islower():
+        t = t[0].upper() + t[1:]
     return t
 
-def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
+
+def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = 5) -> str:
+    """
+    Metni 2–5 satıra dinamik böler. Amaç: tek satıra sığmayan uzun cümleleri kesmeden
+    küçük satırlara bölmek.
+    """
     text = (text or "").strip()
-    if not text: return text
+    if not text:
+        return text
+
     words = text.split()
 
-    # Dinamik satır sayısı: 2–4 arası
-    # çok uzun kelime sayısı arttıkça satır sayısını yükselt
-    target = 2
-    if len(words) > 10: target = 3
-    if len(words) > 18: target = 4
+    # 2'den max_lines'a kadar dene; tüm satırlar max_line_length'i geçmeyecek ilk dağılımı seç
+    def distribute_into(k: int) -> list[str]:
+        per = math.ceil(len(words) / k)
+        chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(k)]
+        return [c for c in chunks if c]
 
-    # karakter dağılımına göre böl
-    total = len(text)
-    ideal = max(10, min(max_line_length, math.ceil(total/target)))
+    chosen = None
+    for k in range(2, max_lines + 1):
+        cand = distribute_into(k)
+        if cand and all(len(c) <= max_line_length for c in cand):
+            chosen = cand
+            break
 
-    lines=[]; cur=[]; L=0
-    for w in words:
-        add = (1 if cur else 0) + len(w)
-        if L + add > ideal and len(lines)+1 < target:
-            lines.append(" ".join(cur)); cur=[w]; L=len(w)
-        else:
-            cur.append(w); L += add
-    if cur: lines.append(" ".join(cur))
+    if not chosen:
+        # Hâlâ uzun satır varsa, yine de kademeli olarak 5 satıra dağıtılmış hâlini kullan
+        chosen = distribute_into(max_lines)
 
-    # 1 satıra düşerse zorla 2'ye böl
-    if len(lines) == 1 and len(words) > 1:
-        mid = len(words)//2
-        lines = [" ".join(words[:mid]), " ".join(words[mid:])]
+        # Çok uzun satırları ikinci kez kırp (kelime bazlı, kesmeden)
+        fixed = []
+        for c in chosen:
+            if len(c) <= max_line_length + 6:
+                fixed.append(c)
+            else:
+                ws = c.split()
+                buf = []
+                L = 0
+                for w in ws:
+                    add = (1 if buf else 0) + len(w)
+                    if L + add > max_line_length and buf:
+                        fixed.append(" ".join(buf))
+                        buf = [w]
+                        L = len(w)
+                    else:
+                        buf.append(w)
+                        L += add
+                if buf:
+                    fixed.append(" ".join(buf))
+        chosen = fixed[:max_lines]
 
-    # son rötuş: aşırı uzun satırları kırp
-    fixed=[]
-    for ln in lines:
-        if len(ln) <= max_line_length+8:
-            fixed.append(ln)
-        else:
-            ws = ln.split(); acc=[]; c=0
-            for w in ws:
-                add = (1 if acc else 0) + len(w)
-                if c + add > max_line_length: break
-                acc.append(w); c += add
-            fixed.append(" ".join(acc))
-    return "\n".join([ln.strip() for ln in fixed if ln.strip()][:4])
+    # güvence: en az 2 satır
+    if len(chosen) == 1 and len(words) > 1:
+        mid = len(words) // 2
+        chosen = [" ".join(words[:mid]), " ".join(words[mid:])]
+
+    return "\n".join([c.strip() for c in chosen if c.strip()])
 
 # -------------------- TTS --------------------
 def _rate_to_atempo(rate_str: str, default: float = 1.12) -> float:
@@ -290,22 +315,45 @@ def make_segment(src: str, dur: float, outp: str):
          "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
+    """
+    Dinamik font ve çok satır: taşma yok, kesme yok.
+    """
+    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, max_lines=5)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    lines = wrapped.count("\n")+1
-    fs = 58 if is_hook else 48
-    if lines >= 3: fs -= 6
-    if lines >= 4: fs -= 6
-    y_pos = "h-h/3-text_h/2"
+    # satır ve en uzun satır uzunluğu
+    lines = wrapped.split("\n")
+    n_lines = max(1, len(lines))
+    maxchars = max((len(l) for l in lines), default=1)
+
+    # temel font
+    base = 58 if is_hook else 48
+
+    # karaktere göre küçültme (max CAPTION_MAX_LINE hedefi)
+    ratio = CAPTION_MAX_LINE / max(1, maxchars)
+    fs = int(base * min(1.0, max(0.55, ratio)))  # alt sınır ~%55
+    # satır sayısı arttıkça biraz daha küçült
+    if n_lines >= 4:
+        fs = int(fs * 0.92)
+    if n_lines >= 5:
+        fs = int(fs * 0.88)
+    fs = max(28, fs)  # çok küçülmesin
+
+    # alt 1/3 yerine, satır çoksa biraz yukarı al
+    if n_lines >= 4:
+        y_pos = "(h*0.58 - text_h/2)"
+    else:
+        y_pos = "h-h/3-text_h/2"
+
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
 
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
-    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 16)}:boxcolor=black@0.65"
+    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
+
     vf_advanced = f"{shadow},{box},{main}"
     vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
@@ -318,6 +366,29 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
              "-crf",str(max(16,CRF_VISUAL-2)),"-movflags","+faststart", outp])
     finally:
         pathlib.Path(tf).unlink(missing_ok=True)
+
+def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
+    """
+    Video süre audio'dan kısa ise, son kareyi klonlayıp (freeze-frame) video'yu uzat.
+    tpad ile sonu doldurur; kalite bozulmasın diye tekrar encode edilir.
+    """
+    vdur = ffprobe_dur(video_in)
+    if vdur >= target_sec - 0.05:
+        # yeterince uzun; kopyala
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
+        return
+
+    extra = max(0.0, target_sec - vdur)
+    print(f"🧩 Video kısa, son kare {extra:.2f}s kadar klonlanacak")
+    run([
+        "ffmpeg","-y","-i", video_in,
+        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f}[v]",
+        "-map","[v]",
+        "-r", str(TARGET_FPS),
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart",
+        outp
+    ])
 
 def concat_videos(files: List[str], outp: str):
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -341,23 +412,49 @@ def concat_audios(files: List[str], outp: str):
         outp
     ])
 
+    # ... mevcut:
+    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
+    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
+
+    # hedef: video süresi >= audio süresi (yoksa final cümle kesilir)
+    adur = ffprobe_dur(acat)
+    vdur = ffprobe_dur(vcat)
+    if vdur + 0.10 < adur:
+        vcat_padded = str(pathlib.Path(tmp)/"video_padded.mp4")
+        pad_video_to_duration(vcat, adur, vcat_padded)
+        vcat = vcat_padded
+
 def mux(video: str, audio: str, outp: str):
+    """
+    Video ve audio zaten eşit/uyumlu: -shortest KULLANMA.
+    Uyum farkı varsa main() içinde pad/kırp yapılıyor.
+    """
     try:
         vd, ad = ffprobe_dur(video), ffprobe_dur(audio)
-        if abs(vd-ad) > 1.0:
+        # Güvenlik: çok büyük fark varsa min'e eşitle
+        if abs(vd - ad) > 1.0:
             md = min(vd, ad, 45.0)
             tv = video.replace(".mp4","_temp.mp4")
             ta = audio.replace(".wav","_temp.wav")
             run(["ffmpeg","-y","-i",video,"-t",f"{md:.2f}","-c","copy", tv])
             run(["ffmpeg","-y","-i",audio,"-t",f"{md:.2f}","-c","copy", ta])
             video, audio = tv, ta
-        run(["ffmpeg","-y","-i",video,"-i",audio,"-map","0:v:0","-map","1:a:0",
-             "-c:v","copy","-c:a","aac","-b:a","256k","-movflags","+faststart","-shortest","-avoid_negative_ts","make_zero", outp])
+
+        run([
+            "ffmpeg","-y","-i",video,"-i",audio,
+            "-map","0:v:0","-map","1:a:0",
+            "-c:v","copy","-c:a","aac","-b:a","256k",
+            "-movflags","+faststart",
+            "-avoid_negative_ts","make_zero",
+            outp
+        ])
+
         for f in (video, audio):
             if f.endswith("_temp.mp4") or f.endswith("_temp.wav"):
                 pathlib.Path(f).unlink(missing_ok=True)
-    except Exception:
-        run(["ffmpeg","-y","-i",video,"-i",audio,"-c","copy","-shortest", outp])
+    except Exception as e:
+        print(f"⚠️ Mux hatası, basit birleştirme deneniyor: {e}")
+        run(["ffmpeg","-y","-i",video,"-i",audio,"-c","copy", outp])
 
 # -------------------- Gemini (optional) --------------------
 ENHANCED_GEMINI_TEMPLATES = {
@@ -711,3 +808,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
