@@ -188,15 +188,18 @@ def tts_to_wav(text: str, wav_out: str) -> float:
     def _run_ff(args): subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
     def _probe(path: str, default: float = 3.5) -> float:
         try:
-            pr = subprocess.run(["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
-                                capture_output=True, text=True, check=True)
+            pr = subprocess.run(
+                ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
+                capture_output=True, text=True, check=True
+            )
             return float((pr.stdout or "0").strip())
-        except Exception: return default
+        except Exception:
+            return default
 
     mp3 = wav_out.replace(".wav",".mp3")
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected = VOICE if VOICE in available else available[0]
-    clean_text = text.strip()
+    clean_text = (text or "").strip()
 
     async def _edge_save():
         ssml = _build_ssml(clean_text, selected)
@@ -204,29 +207,47 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         await comm.save(mp3)
 
     try:
-        try: asyncio.run(_edge_save())
+        try:
+            asyncio.run(_edge_save())
         except RuntimeError:
-            nest_asyncio.apply(); loop=asyncio.get_event_loop(); loop.run_until_complete(_edge_save())
-        # safe filter chain (no deesser)
-        _run_ff(["-i", mp3, "-ar", "48000", "-ac", "1", "-acodec", "pcm_s16le",
-                 "-af", "volume=0.92,highpass=f=75,lowpass=f=15000,dynaudnorm=g=7:f=250:r=0.95,acompressor=threshold=-20dB:ratio=2:attack=5:release=60",
-                 wav_out])
+            nest_asyncio.apply()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(_edge_save())
+
+        # Güvenli zincir (deesser yok)
+        _run_ff([
+            "-i", mp3,
+            "-ar", "48000", "-ac", "1", "-acodec", "pcm_s16le",
+            "-af", "volume=0.92,highpass=f=75,lowpass=f=15000,dynaudnorm=g=7:f=300:r=0.95,acompressor=threshold=-20dB:ratio=2:attack=5:release=60",
+            wav_out
+        ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         return _probe(wav_out, 3.5)
-    except Exception as e:
-        # Fallback simple
+
+    except Exception:
+        # Fallback: simple edge-tts (metin)
         try:
             async def _edge_simple():
                 comm = edge_tts.Communicate(clean_text, voice=selected, rate=VOICE_RATE)
                 await comm.save(mp3)
-            try: asyncio.run(_edge_simple())
+            try:
+                asyncio.run(_edge_simple())
             except RuntimeError:
-                nest_asyncio.apply(); loop=asyncio.get_event_loop(); loop.run_until_complete(_edge_simple())
-            _run_ff(["-i", mp3, "-ar","44100","-ac","1","-acodec","pcm_s16le","-af","volume=0.9,dynaudnorm=g=5:f=200", wav_out])
+                nest_asyncio.apply()
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(_edge_simple())
+
+            _run_ff([
+                "-i", mp3,
+                "-ar","44100","-ac","1","-acodec","pcm_s16le",
+                "-af","volume=0.9,dynaudnorm",
+                wav_out
+            ])
             pathlib.Path(mp3).unlink(missing_ok=True)
             return _probe(wav_out, 3.5)
         except:
-            _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out]); return 4.0
+            _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out])
+            return 4.0
 
 # -------------------- Video compose helpers --------------------
 def make_segment(src: str, dur: float, outp: str):
@@ -257,43 +278,74 @@ def _ff_color(c: str) -> str:
     # fallback to named color
     return "white"
 
+# --- COLORS: use 0xRRGGBB for ffmpeg drawtext ---
+CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
+
+def _ff_color(c: str) -> str:
+    """
+    Convert #RRGGBB -> 0xRRGGBB for ffmpeg. Accepts already-0x too.
+    """
+    c = (c or "").strip()
+    if c.startswith("#"):
+        return "0x" + c[1:].upper()
+    if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c):
+        return c
+    return "white"
+
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """
-    Safer drawtext: renkler 0xRRGGBB, metin kaçışları tam.
-    Hata olursa sade fallback ile yeniden dener.
+    CapCut tarzı yazı: önce gelişmiş overlay dener,
+    ffmpeg hata verirse otomatik olarak basit overlay'e düşer.
     """
-    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
-    # drawtext multi-line \n destekliyor; metni agresif kaçır:
-    esc = escape_drawtext(wrapped).replace("\n", r"\n")
+    safe_txt = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
+    # \n’leri drawtext için literal bırak
+    esc = escape_drawtext(safe_txt).replace("\n", r"\n")
 
-    lines = wrapped.count("\n")+1
-    base_fs = (58 if is_hook else 48)
-    if lines >= 3: base_fs -= 6
+    lines = safe_txt.count("\n")+1
+    maxchars = max(len(x) for x in safe_txt.split("\n"))
+    if is_hook:
+        base_fs = 52 if lines >= 3 else 58
+        border_w = 5
+        box_border = 20
+    else:
+        base_fs = 42 if lines >= 3 else 48
+        border_w = 4
+        box_border = 16
+    if maxchars > 25:
+        base_fs -= 6
+    elif maxchars > 20:
+        base_fs -= 3
 
     y_pos = "h-h/3-text_h/2"
-    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=8"
+    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+    fontarg = f":fontfile={font.replace(':','\\:').replace(',','\\,').replace('\\','/')}" if font else ""
     col = _ff_color(color)
 
-    shadow = f"drawtext={common}:fontcolor=black@0.85:borderw=0"
-    box    = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw={20 if is_hook else 16}:boxcolor=black@0.65"
-    main   = f"drawtext={common}:fontcolor={col}:borderw={5 if is_hook else 4}:bordercolor=black@0.9"
+    # 1) Gelişmiş zincir
+    shadow = f"drawtext={common}{fontarg}:fontcolor=black@0.8:borderw=0"
+    box    = f"drawtext={common}{fontarg}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.65"
+    main   = f"drawtext={common}{fontarg}:fontcolor={col}:borderw={border_w}:bordercolor=black@0.9"
+    vf_advanced = f"{shadow},{box},{main}"
 
-    if font:
-        fp = font.replace(":","\\:").replace(",","\\,").replace("\\","/")
-        shadow += f":fontfile={fp}"
-        box    += f":fontfile={fp}"
-        main   += f":fontfile={fp}"
-
-    vf = f"{shadow},{box},{main}"
+    # 2) Basit fallback
+    vf_simple = f"drawtext={common}{fontarg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
     try:
         run([
-            "ffmpeg","-y","-i",seg,"-vf",vf,
+            "ffmpeg","-y","-i",seg,"-vf",vf_advanced,
             "-c:v","libx264","-preset","medium",
             "-crf",str(max(16,CRF_VISUAL-3)),
-            "-movflags","+faststart",
-            outp
+            "-movflags","+faststart", outp
         ])
+    except Exception as e:
+        print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
+        run([
+            "ffmpeg","-y","-i",seg,"-vf",vf_simple,
+            "-c:v","libx264","-preset","medium",
+            "-crf",str(max(16,CRF_VISUAL-2)),
+            "-movflags","+faststart", outp
+        ])
+        
     except Exception as e:
         # Fallback: sadece ana metin, beyaz renk; kutu/gölge yok
         print(f"⚠️ drawtext advanced failed: {e}\n   → retrying with minimal overlay")
@@ -411,79 +463,90 @@ MYTH_BOOSTERS = {
     # istersen diğer modlara da ek deposu açarız
 }
 
+MYTH_BOOSTERS = {
+    "myth_gods": [
+        "ancient greek statue", "marble bust close up", "temple columns doric",
+        "torch flame in darkness", "smoke swirling in cave", "obsidian rock texture",
+        "underworld cave river", "lava flow close up", "storm clouds dramatic sky",
+        "black robe silhouette", "gold laurel crown", "gates doorway ancient",
+        "ruined temple night", "cave entrance mist", "catacombs corridor", "underground cavern",
+        "slow motion smoke", "embers floating", "torchlight flicker", "shadow moving wall"
+    ],
+}
+
 def derive_search_terms(sentences: List[str], fallback: List[str], channel_hint: str="") -> List[str]:
     """
     Cümlelerden işe yarar bigram/terimler çıkarır; moda özel booster’larla harmanlar.
-    Myth_gods gibi nişte, somut görsel objelere zorlar (statue, torch, cave, smoke, lava, columns…).
+    Myth_gods gibi nişte, stokta gerçekten bulunan fiziksel objelere zorlar.
     """
-    # 1) Çekirdek kelimeler
-    bag = []
+    # 1) kelime torbası
+    def _words_local(s: str) -> List[str]:
+        s = re.sub(r"[^A-Za-z0-9\- ]+"," ", s.lower())
+        STOP = set("""a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
+        this that these those is are was were be been being have has had do does did can could should would may might will shall
+        you your we our they their he she it its as than then so such very more most many much just also only even still yet""".split())
+        return [w for w in s.split() if w and w not in STOP and len(w)>2]
+
+    bag=[]
     for s in sentences:
-        bag += _words(s)
-    # özel isimleri (Topic vb.) da zorla ekleyelim
-    main_subjects = []
+        bag += _words_local(s)
+
+    # Proper-name'leri de zorla ekle (ilk 1-2 cümleden)
+    main_subjects=[]
     for s in sentences[:2]:
-        ms = re.findall(r"[A-Z][a-z]{2,}", s)
-        main_subjects += [m.lower() for m in ms]
+        main_subjects += [m.lower() for m in re.findall(r"[A-Z][a-z]{2,}", s)]
     bag = main_subjects + bag
 
-    # 2) uniq sırayı koru
+    # uniq sırayı koru
     uniq=[]; seen=set()
     for w in bag:
         if w not in seen:
             seen.add(w); uniq.append(w)
 
-    # 3) moda özel booster
-    boosters = []
-    if MODE in MYTH_BOOSTERS:
-        boosters = MYTH_BOOSTERS[MODE][:]
+    # moda özel booster
+    boosters = MYTH_BOOSTERS.get(MODE, [])
 
-    # 4) cümle kökenli bigramları oluştur
+    # bigramlar
     bigrams=set()
     for s in sentences:
-        ws = _words(s)
+        ws = _words_local(s)
         for a,b in zip(ws, ws[1:]):
-            if a!=b:
-                bigrams.add(f"{a} {b}")
+            if a!=b: bigrams.add(f"{a} {b}")
 
-    # 5) soruları ve çöplerini at
+    # zayıf kelimeleri at
     trash = {"think","evil","eldest","time","very","really","thing","something"}
     core = [w for w in uniq if w not in trash][:10]
 
-    # 6) candidate queries
+    # candidate queries
     queries=[]
     subj = (core[0] if core else "")
-    if channel_hint:
-        queries.append(f"{channel_hint} logo intro vertical 4k")  # genel b-roll seçeneği
 
-    # Subjects’i boost et (ör: hades / zeus)
+    if channel_hint:
+        queries.append(f"{channel_hint} logo intro vertical 4k")
+
     if subj:
         queries += [
-            f"{subj} statue portrait 4k", f"{subj} marble bust portrait 4k",
-            f"{subj} temple columns vertical 4k", f"{subj} torch flame cave vertical 4k",
+            f"{subj} statue portrait 4k",
+            f"{subj} marble bust portrait 4k",
+            f"{subj} temple columns vertical 4k",
+            f"{subj} torch flame cave vertical 4k",
         ]
 
-    # bigramlardan işe yarayanları ekle
     for bg in list(bigrams)[:8]:
         queries.append(f"{bg} portrait 4k")
         queries.append(f"{bg} vertical video")
 
-    # moda özel boosterları ekle
     for b in boosters[:14]:
         queries.append(f"{b} portrait 4k")
         queries.append(f"{b} vertical 4k")
 
-    # güvenli b-roll’lar
     queries += ["cinematic smoke portrait 4k", "dramatic sky vertical 4k", "dark cave portrait 4k"]
 
-    # fallbackler
     for t in (fallback or []):
-        if t:
-            queries.append(f"{t} portrait 4k")
+        if t: queries.append(f"{t} portrait 4k")
 
-    # dedupe+temizle
-    cleaned=[]
-    seen=set()
+    # temizle + shuffle
+    cleaned=[]; seen=set()
     for q in queries:
         q = re.sub(r"\s+"," ", q.strip())
         if len(q.split()) < 2: 
@@ -492,7 +555,6 @@ def derive_search_terms(sentences: List[str], fallback: List[str], channel_hint:
             seen.add(q); cleaned.append(q)
 
     random.shuffle(cleaned)
-    # myth_gods ise sayıyı biraz yüksek tutalım; yoksa 10–12
     limit = 18 if MODE=="myth_gods" else 12
     return cleaned[:limit] if cleaned else ["portrait 4k"]
 
@@ -753,4 +815,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
