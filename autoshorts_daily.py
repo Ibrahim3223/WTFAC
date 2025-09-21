@@ -225,9 +225,10 @@ def _rate_to_atempo(rate_str: str, default: float = 1.15) -> float:
 def tts_to_wav(text: str, wav_out: str) -> float:
     """
     TTS:
-      1) edge-tts (2 deneme) — 401'de hızlı fallback
-      2) Google Translate TTS fallback
-    Çıkış: 48kHz mono WAV, dynaudnorm + atempo (akıcı konuşma)
+      - edge-tts kullanılırsa: HIZ AYARI SADECE edge-tts'in 'rate' parametresinde yapılır.
+        ffmpeg tarafında 'atempo' uygulanmaz (böylece ton bozulmaz).
+      - Fallback (Google TTS) durumunda: hız ayarı ffmpeg 'atempo' ile yapılır.
+    Çıkış: 48kHz mono WAV (+ dynaudnorm, pitch bozmadan).
     """
     import asyncio
     from aiohttp.client_exceptions import WSServerHandshakeError
@@ -238,8 +239,18 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         return 1.0
 
     mp3 = wav_out.replace(".wav", ".mp3")
-    rate_env = os.getenv("TTS_RATE", VOICE_RATE)
-    atempo = _rate_to_atempo(rate_env, default=1.15)
+    rate_env = os.getenv("TTS_RATE", VOICE_RATE)   # ör: "+8%" veya "0%" veya "1.08x"
+    # edge-tts yolunda ATEMPO KULLANMAYACAĞIZ
+    def _convert_rate_to_atempo(rate_str: str, default: float = 1.08) -> float:
+        try:
+            if not rate_str: return default
+            rs = rate_str.strip()
+            if rs.endswith("%"):
+                val = float(rs[:-1]); return max(0.5, min(2.0, 1.0 + val/100.0))
+            if rs.endswith(("x","X")):
+                return max(0.5, min(2.0, float(rs[:-1])))
+            return max(0.5, min(2.0, float(rs)))
+        except: return default
 
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
@@ -248,6 +259,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
         await comm.save(mp3)
 
+    # --- Edge-TTS denemeleri (atempo YOK) ---
     for attempt in range(2):
         try:
             try:
@@ -257,11 +269,12 @@ def tts_to_wav(text: str, wav_out: str) -> float:
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(_edge_save_simple())
 
+            # ton korunur; sadece normalize + 48kHz
             run([
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
                 "-i", mp3,
                 "-ar","48000","-ac","1","-acodec","pcm_s16le",
-                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+                "-af", "dynaudnorm=g=5:f=250",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
@@ -277,7 +290,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}")
             time.sleep(0.8)
 
-    # fallback
+    # --- Google Translate TTS fallback (burada atempo uygulanır) ---
     try:
         q = requests.utils.quote(text.replace('"','').replace("'",""))
         lang_code = (LANG or "en")
@@ -286,17 +299,18 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
         open(mp3, "wb").write(r.content)
 
+        atempo = _convert_rate_to_atempo(rate_env, default=1.08)
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
             "-ar","48000","-ac","1","-acodec","pcm_s16le",
-            "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
+            "-af", f"dynaudnorm=g=5:f=300,atempo={atempo}",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         return ffprobe_dur(wav_out) or 0.0
     except Exception as e2:
-        print(f"❌ Tüm TTS yolları başarısız, sessizlik üretilecek: {e2}")
+        print(f"❌ TTS fallback başarısız, sessizlik üretilecek: {e2}")
         run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 4.0
 
@@ -310,17 +324,28 @@ def _ff_color(c: str) -> str:
     return "white"
 
 def make_segment(src: str, dur: float, outp: str):
-    dur = max(0.8, min(dur, 5.0))
-    fade = max(0.05, min(0.12, dur/8))
+    """
+    Segment süresini fps’e YUKARI yuvarlarız ki concat sonrası toplam video,
+    toplam audiodan kısa kalmasın (freeze ihtiyacı azalır).
+    """
+    # kare bazında yukarı yuvarla + ufak güvenlik payı
+    seg_dur = math.ceil(dur * TARGET_FPS) / TARGET_FPS + 0.02
+    seg_dur = max(0.8, min(seg_dur, 5.2))
+
+    fade = max(0.05, min(0.12, seg_dur/8))
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
         f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={max(0.0,dur-fade):.2f}:d={fade:.2f}"
+        f"fade=t=out:st={max(0.0,seg_dur-fade):.2f}:d={fade:.2f}"
     )
-    run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r",str(TARGET_FPS),"-an",
-         "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
+    run([
+        "ffmpeg","-y","-i",src,"-t",f"{seg_dur:.3f}",
+        "-vf",vf,"-r",str(TARGET_FPS),"-an",
+        "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p",
+        outp
+    ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, max_lines=5)
@@ -770,10 +795,13 @@ def main():
     # Son kesilme önlemi: video sesden kısaysa pad’le
     adur = ffprobe_dur(acat)
     vdur = ffprobe_dur(vcat)
-    if vdur + 0.10 < adur:
-        vcat_padded = str(pathlib.Path(tmp)/"video_padded.mp4")
-        pad_video_to_duration(vcat, adur, vcat_padded)
-        vcat = vcat_padded
+    # Tercih: video >= audio olacak şekilde segmentleri zaten yukarı yuvarladık.
+    # Yine de farklılık varsa: freeze EKLEMEK yerine (rahatsız ediyordu) videoyu hafifçe KISALT.
+    if vdur > adur + 0.06:
+        trimmed = str(pathlib.Path(tmp)/"video_trimmed.mp4")
+        run(["ffmpeg","-y","-i",vcat,"-t",f"{adur:.2f}","-c","copy", trimmed])
+        vcat = trimmed
+    # (vdur + 0.06 < adur) gibi nadir durumda ufak bir fark kaldıysa mux zaten min’e eşitleyecek.
 
     # Minimum süre için gerektiğinde audio'ya pad
     total = ffprobe_dur(acat)
@@ -823,3 +851,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
