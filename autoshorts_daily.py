@@ -168,24 +168,32 @@ def normalize_sentence(raw: str) -> str:
 
 # -------------------- Text prep (captions) --------------------
 def clean_caption_text(s: str) -> str:
-    t = (s or "").strip().replace("—","-").replace('"',"").replace("`","")
-    t = re.sub(r'(\d+)([A-Za-z])', r'\1 \2', t)
-    t = re.sub(r'([A-Za-z])(\d+)', r'\1 \2', t)
-    t = re.sub(r'\s+',' ', t)
-    if t and t[0].islower(): t = t[0].upper() + t[1:]
-    if len(t) > 80:
+    t = (s or "").strip()
+    # tek tırnak/çift tırnak sorun yaratmasın
+    t = t.replace("—","-").replace("`","")
+    t = re.sub(r"\s+"," ", t)
+    # ilk harfi büyük
+    if t and t[0].islower(): t = t[0].upper()+t[1:]
+    # 90+ charı 2–3 satıra uygun kısalt
+    if len(t) > 90:
         words = t.split()
-        t = " ".join(words[:12]) + "."
-    return t.strip()
+        t = " ".join(words[:18]) + "…"
+    return t
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
-    """
-    Telefon ekranı için *zorunlu* 2–3 satır sarma.
-    Karakter bazlı üst sınır: ~22–26; kelime bazlı dengeleme.
-    """
-    text = normalize_sentence(text)
-    if not text:
-        return ""
+    text = (text or "").strip()
+    if not text: return text
+    words = text.split()
+    # 2–3 satır arası dağıt
+    target = 3 if len(text) > 60 or len(words) > 12 else 2
+    per = math.ceil(len(words)/target)
+    chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(target)]
+    chunks = [c for c in chunks if c]
+    # aşırı uzun satır varsa 3 satıra zorla
+    if any(len(c) > max_line_length for c in chunks) and target == 2:
+        target = 3; per = math.ceil(len(words)/target)
+        chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(target)]
+    return "\n".join(chunks[:3])
 
     # satır içi aşırı uzun kelimeleri kır
     words = re.findall(r"\S+", text)
@@ -249,70 +257,46 @@ def _build_ssml(text: str, voice: str) -> str:
 """.strip()
 
 def tts_to_wav(text: str, wav_out: str) -> float:
+    """
+    Edge-TTS (plain text) -> MP3 -> WAV
+    - SSML kullanmıyoruz (aksi durumda 'speak version…' gibi okunuyor).
+    - Hız: VOICE_RATE env (ör: +12% / +15%).
+    - 48 kHz mono, hafif normalizasyon.
+    """
     import asyncio
-    def _run_ff(args): subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y", *args], check=True)
-    def _probe(path: str, default: float = 3.5) -> float:
-        try:
-            pr = subprocess.run(
-                ["ffprobe","-v","error","-show_entries","format=duration","-of","default=nk=1:nw=1", path],
-                capture_output=True, text=True, check=True
-            )
-            return float((pr.stdout or "0").strip())
-        except Exception:
-            return default
+    mp3 = wav_out.replace(".wav", ".mp3")
 
-    mp3 = wav_out.replace(".wav",".mp3")
+    # Hız ve ses
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
-    selected = VOICE if VOICE in available else available[0]
-    clean_text = (text or "").strip()
+    selected_voice = VOICE if VOICE in available else available[0]
+    rate = os.getenv("TTS_RATE", "+12%")  # daha akıcı varsayılan
 
-    async def _edge_save():
-        ssml = _build_ssml(clean_text, selected)
-        comm = edge_tts.Communicate(ssml, voice=selected, ssml=True)
+    async def _edge_save_simple():
+        comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate)
         await comm.save(mp3)
 
     try:
         try:
-            asyncio.run(_edge_save())
+            asyncio.run(_edge_save_simple())
         except RuntimeError:
             nest_asyncio.apply()
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(_edge_save())
+            loop.run_until_complete(_edge_save_simple())
+    except Exception as e:
+        print(f"⚠️ edge-tts mp3 üretimi başarısız: {e}")
+        raise
 
-        # Güvenli zincir (deesser yok)
-        _run_ff([
-            "-i", mp3,
-            "-ar", "48000", "-ac", "1", "-acodec", "pcm_s16le",
-            "-af", "volume=0.92,highpass=f=75,lowpass=f=15000,dynaudnorm=g=7:f=300:r=0.95,acompressor=threshold=-20dB:ratio=2:attack=5:release=60",
-            wav_out
-        ])
-        pathlib.Path(mp3).unlink(missing_ok=True)
-        return _probe(wav_out, 3.5)
+    # MP3 → WAV (48k, mono), soft comp/normalize
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", mp3,
+        "-ar","48000","-ac","1","-acodec","pcm_s16le",
+        "-af","dynaudnorm=g=7:f=250:rc=0.95,acompressor=threshold=-18dB:ratio=2.2:attack=5:release=80",
+        wav_out
+    ])
+    pathlib.Path(mp3).unlink(missing_ok=True)
 
-    except Exception:
-        # Fallback: simple edge-tts (metin)
-        try:
-            async def _edge_simple():
-                comm = edge_tts.Communicate(clean_text, voice=selected, rate=VOICE_RATE)
-                await comm.save(mp3)
-            try:
-                asyncio.run(_edge_simple())
-            except RuntimeError:
-                nest_asyncio.apply()
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(_edge_simple())
-
-            _run_ff([
-                "-i", mp3,
-                "-ar","44100","-ac","1","-acodec","pcm_s16le",
-                "-af","volume=0.9,dynaudnorm",
-                wav_out
-            ])
-            pathlib.Path(mp3).unlink(missing_ok=True)
-            return _probe(wav_out, 3.5)
-        except:
-            _run_ff(["-f","lavfi","-t","4.0","-i","anullsrc=r=44100:cl=mono", wav_out])
-            return 4.0
+    return ffprobe_dur(wav_out) or 0.0
 
 # -------------------- Video compose helpers --------------------
 def make_segment(src: str, dur: float, outp: str):
@@ -358,67 +342,62 @@ def _ff_color(c: str) -> str:
     return "white"
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    """
-    Metni geçici bir .txt dosyasına yazıp drawtext=textfile=... ile okur.
-    İleri overlay başarısız olursa basit overlay'e düşer.
-    """
-    # 1) metnin son halini (normalize + wrap)
-    wrapped = wrap_mobile_lines(clean_caption_text(normalize_sentence(text)), CAPTION_MAX_LINE)
-
-    # 2) temp textfile
+    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    # 3) tipografi / yerleşim
-    lines = wrapped.count("\n") + 1
-    base_fs = 58 if is_hook else 48
-    if lines >= 3:
-        base_fs -= 6
+    lines = wrapped.count("\n")+1
+    fs = 58 if is_hook else 48
+    if lines >= 3: fs -= 6
     y_pos = "h-h/3-text_h/2"
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
+    common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
 
-    # 4) filtreler
-    common = f"textfile='{tf}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(20 if is_hook else 16)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
-
     vf_advanced = f"{shadow},{box},{main}"
     vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
     try:
-        # Önce gelişmiş overlay
-        run([
-            "ffmpeg","-y","-i",seg,"-vf",vf_advanced,
-            "-c:v","libx264","-preset","medium",
-            "-crf",str(max(16,CRF_VISUAL-3)),
-            "-movflags","+faststart", outp
-        ])
+        run(["ffmpeg","-y","-i",seg,"-vf",vf_advanced,"-c:v","libx264","-preset","medium",
+             "-crf",str(max(16,CRF_VISUAL-3)),"-movflags","+faststart", outp])
     except Exception as e:
-        # Hata olursa basit overlay
-        print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
-        run([
-            "ffmpeg","-y","-i",seg,"-vf",vf_simple,
-            "-c:v","libx264","-preset","medium",
-            "-crf",str(max(16,CRF_VISUAL-2)),
-            "-movflags","+faststart", outp
-        ])
+        print(f"⚠️ drawtext advanced failed, fallback simple: {e}")
+        run(["ffmpeg","-y","-i",seg,"-vf",vf_simple,"-c:v","libx264","-preset","medium",
+             "-crf",str(max(16,CRF_VISUAL-2)),"-movflags","+faststart", outp])
     finally:
-        # temp dosyayı temizle
         pathlib.Path(tf).unlink(missing_ok=True)
 
 def concat_videos(files: List[str], outp: str):
+    """
+    Tüm segmentleri CFR (25 fps) re-encode ederek birleştir.
+    Copy concat yerine re-encode: süreler birebir tutar.
+    """
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
-    with open(lst,"w") as f:
+    with open(lst,"w",encoding="utf-8") as f:
         for p in files: f.write(f"file '{p}'\n")
-    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-c","copy", outp])
+    run([
+        "ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+        "-vsync","cfr","-r",str(TARGET_FPS),
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart", outp
+    ])
 
 def concat_audios(files: List[str], outp: str):
+    """
+    WAV’ları ardışık birleştirir, 48kHz’e sabitler.
+    """
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
-    with open(lst,"w") as f:
+    with open(lst,"w",encoding="utf-8") as f:
         for p in files: f.write(f"file '{p}'\n")
-    run(["ffmpeg","-y","-f","concat","-safe","0","-i",lst,"-af","volume=0.9,dynaudnorm", outp])
+    run([
+        "ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+        "-ar","48000","-ac","1",
+        "-af","dynaudnorm=g=6:f=300",
+        outp
+    ])
 
 def mux(video: str, audio: str, outp: str):
     try:
@@ -774,20 +753,20 @@ def main():
     # 2) TTS – aynı metin tabanı
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
-    wavs = []
-    metas = []              # [(text_for_this_sentence, duration_sec), ...]
+    wavs, metas = [], []           # [(text, dur)]
+    processed_sentences = []
     print("🎤 TTS…")
 
-    processed_sentences = []  # caption ve senkron için tek kaynak
-
     for i, s in enumerate(sentences):
-        base = normalize_sentence(s)           # ← 1) tek kaynak metin
-        processed_sentences.append(base)       #    (ileri aşamada hep bunu kullanacağız)
-        wav_path = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
-        dur = tts_to_wav(base, wav_path)       # ← 2) TTS de aynı metinden
-        wavs.append(wav_path)
-        metas.append((base, dur))              # ← 3) metin + süre birlikte dursun
-        print(f"   {i+1}/{len(sentences)}: {dur:.1f}s")
+        base = normalize_sentence(s)          # ← TEK kaynak
+        processed_sentences.append(base)
+        w = str(pathlib.Path(tmp)/f"sent_{i:02d}.wav")
+        d = tts_to_wav(base, w)               # ← TTS de aynı metin
+        wavs.append(w); metas.append((base, d))
+        print(f"   {i+1}/{len(sentences)}: {d:.1f}s")
+
+    sentences = processed_sentences           # ← aşağıda hep bunu kullan
+
 
     # 3) Per-video search terms
     channel_hint = CHANNEL_NAME.replace("_"," ").replace("-"," ")
@@ -813,19 +792,17 @@ def main():
 # 5) Segments + captions (senkron)
     print("🎬 Segments…")
     segs = []
-    for i, (base_text, d) in enumerate(metas):   # ← metas içinden METİN + SÜRE geliyor
-        base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        make_segment(clips[i % len(clips)], d, base)  # segment süresi = TTS süresi
-        colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
+    for i, (base_text, d) in enumerate(metas):
+        base = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
+        make_segment(clips[i % len(clips)], d, base)  # video süresi = TTS süresi
+        colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
         draw_capcut_text(
-            base,
-            base_text,                              # ← altyazı metni TTS ile AYNI
+            base, base_text,
             CAPTION_COLORS[i % len(CAPTION_COLORS)],
-            font,
-            colored,
-            is_hook=(i == 0)
+            font, colored, is_hook=(i == 0)
         )
         segs.append(colored)
+
 
     # 6) Assemble
     print("🎞️ Assemble…")
@@ -880,6 +857,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
