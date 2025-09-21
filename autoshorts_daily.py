@@ -4,7 +4,7 @@ import os, sys, re, json, time, uuid, random, datetime, tempfile, pathlib, subpr
 from typing import List, Optional, Tuple, Dict
 
 # -------------------- ENV / constants --------------------
-VOICE_STYLE   = os.getenv("TTS_STYLE", "narration-professional")
+VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
 TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
@@ -20,8 +20,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "0") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-TARGET_FPS     = 25
-CRF_VISUAL     = 22
+TARGET_FPS       = 25
+CRF_VISUAL       = 22
 CAPTION_MAX_LINE = 22
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
@@ -58,7 +58,7 @@ VOICE_OPTIONS = {
     "tr": ["tr-TR-EmelNeural","tr-TR-AhmetNeural"]
 }
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
-VOICE_RATE = os.getenv("TTS_RATE", "+12%")
+VOICE_RATE = os.getenv("TTS_RATE", "+15%")  # biraz daha akıcı
 
 # -------------------- Utils --------------------
 def run(cmd, check=True):
@@ -150,28 +150,20 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
 def clean_caption_text(s: str) -> str:
     """
     Altyazı metnini normalize eder ama KESMEZ.
-    Truncation yok; satır sayısını wrap fonksiyonu çözer.
     """
     t = (s or "").strip()
-    # tipik sorunlu karakterler
-    t = (t.replace("—", "-")
-           .replace("–", "-")
-           .replace("“", '"')
-           .replace("”", '"')
-           .replace("’", "'")
-           .replace("`", ""))
-    # aşırı boşluk temizliği
+    t = (t.replace("—", "-").replace("–", "-")
+           .replace("“", '"').replace("”", '"')
+           .replace("’", "'").replace("`", ""))
     t = re.sub(r"\s+", " ", t).strip()
-    # ilk harfi büyük
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
     return t
 
-
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = 5) -> str:
     """
-    Metni 2–5 satıra dinamik böler. Amaç: tek satıra sığmayan uzun cümleleri kesmeden
-    küçük satırlara bölmek.
+    Metni 2–5 satıra dinamik böler. Amaç: uzun cümleleri kesmeden
+    küçük satırlara bölmek ve taşmayı önlemek.
     """
     text = (text or "").strip()
     if not text:
@@ -179,8 +171,7 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
 
     words = text.split()
 
-    # 2'den max_lines'a kadar dene; tüm satırlar max_line_length'i geçmeyecek ilk dağılımı seç
-    def distribute_into(k: int) -> list[str]:
+    def distribute_into(k: int) -> List[str]:
         per = math.ceil(len(words) / k)
         chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(k)]
         return [c for c in chunks if c]
@@ -193,32 +184,25 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
             break
 
     if not chosen:
-        # Hâlâ uzun satır varsa, yine de kademeli olarak 5 satıra dağıtılmış hâlini kullan
         chosen = distribute_into(max_lines)
-
-        # Çok uzun satırları ikinci kez kırp (kelime bazlı, kesmeden)
         fixed = []
         for c in chosen:
             if len(c) <= max_line_length + 6:
                 fixed.append(c)
             else:
                 ws = c.split()
-                buf = []
-                L = 0
+                buf = []; L = 0
                 for w in ws:
                     add = (1 if buf else 0) + len(w)
                     if L + add > max_line_length and buf:
                         fixed.append(" ".join(buf))
-                        buf = [w]
-                        L = len(w)
+                        buf = [w]; L = len(w)
                     else:
-                        buf.append(w)
-                        L += add
+                        buf.append(w); L += add
                 if buf:
                     fixed.append(" ".join(buf))
         chosen = fixed[:max_lines]
 
-    # güvence: en az 2 satır
     if len(chosen) == 1 and len(words) > 1:
         mid = len(words) // 2
         chosen = [" ".join(words[:mid]), " ".join(words[mid:])]
@@ -226,7 +210,7 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
     return "\n".join([c.strip() for c in chosen if c.strip()])
 
 # -------------------- TTS --------------------
-def _rate_to_atempo(rate_str: str, default: float = 1.12) -> float:
+def _rate_to_atempo(rate_str: str, default: float = 1.15) -> float:
     try:
         if not rate_str: return default
         rate_str = rate_str.strip()
@@ -239,15 +223,24 @@ def _rate_to_atempo(rate_str: str, default: float = 1.12) -> float:
         return default
 
 def tts_to_wav(text: str, wav_out: str) -> float:
+    """
+    TTS:
+      1) edge-tts (2 deneme) — 401'de hızlı fallback
+      2) Google Translate TTS fallback
+    Çıkış: 48kHz mono WAV, dynaudnorm + atempo (akıcı konuşma)
+    """
     import asyncio
+    from aiohttp.client_exceptions import WSServerHandshakeError
+
     text = (text or "").strip()
     if not text:
         run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 1.0
 
     mp3 = wav_out.replace(".wav", ".mp3")
-    rate_env = VOICE_RATE
-    atempo = _rate_to_atempo(rate_env, default=1.12)
+    rate_env = os.getenv("TTS_RATE", VOICE_RATE)
+    atempo = _rate_to_atempo(rate_env, default=1.15)
+
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
 
@@ -260,35 +253,50 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             try:
                 asyncio.run(_edge_save_simple())
             except RuntimeError:
-                nest_asyncio.apply(); loop = asyncio.get_event_loop(); loop.run_until_complete(_edge_save_simple())
+                nest_asyncio.apply()
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(_edge_save_simple())
+
             run([
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
-                "-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le",
+                "-i", mp3,
+                "-ar","48000","-ac","1","-acodec","pcm_s16le",
                 "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
             return ffprobe_dur(wav_out) or 0.0
+
+        except WSServerHandshakeError as e:
+            if getattr(e, "status", None) == 401 or "401" in str(e):
+                print("⚠️ edge-tts 401 → hızlı fallback TTS")
+                break
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}")
+            time.sleep(0.8)
         except Exception as e:
-            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(1.0)
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}")
+            time.sleep(0.8)
 
     # fallback
     try:
         q = requests.utils.quote(text.replace('"','').replace("'",""))
-        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={(LANG or 'en')}&client=tw-ob&ttsspeed=1.0"
+        lang_code = (LANG or "en")
+        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
-        open(mp3,"wb").write(r.content)
+        open(mp3, "wb").write(r.content)
+
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
             "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         return ffprobe_dur(wav_out) or 0.0
     except Exception as e2:
-        print(f"❌ TTS fallback başarısız: {e2}")
+        print(f"❌ Tüm TTS yolları başarısız, sessizlik üretilecek: {e2}")
         run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 4.0
 
@@ -315,36 +323,22 @@ def make_segment(src: str, dur: float, outp: str):
          "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    """
-    Dinamik font ve çok satır: taşma yok, kesme yok.
-    """
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, max_lines=5)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    # satır ve en uzun satır uzunluğu
     lines = wrapped.split("\n")
     n_lines = max(1, len(lines))
     maxchars = max((len(l) for l in lines), default=1)
 
-    # temel font
     base = 58 if is_hook else 48
-
-    # karaktere göre küçültme (max CAPTION_MAX_LINE hedefi)
     ratio = CAPTION_MAX_LINE / max(1, maxchars)
-    fs = int(base * min(1.0, max(0.55, ratio)))  # alt sınır ~%55
-    # satır sayısı arttıkça biraz daha küçült
-    if n_lines >= 4:
-        fs = int(fs * 0.92)
-    if n_lines >= 5:
-        fs = int(fs * 0.88)
-    fs = max(28, fs)  # çok küçülmesin
+    fs = int(base * min(1.0, max(0.55, ratio)))
+    if n_lines >= 4: fs = int(fs * 0.92)
+    if n_lines >= 5: fs = int(fs * 0.88)
+    fs = max(28, fs)
 
-    # alt 1/3 yerine, satır çoksa biraz yukarı al
-    if n_lines >= 4:
-        y_pos = "(h*0.58 - text_h/2)"
-    else:
-        y_pos = "h-h/3-text_h/2"
+    y_pos = "(h*0.58 - text_h/2)" if n_lines >= 4 else "h-h/3-text_h/2"
 
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
@@ -369,12 +363,10 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
 
 def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     """
-    Video süre audio'dan kısa ise, son kareyi klonlayıp (freeze-frame) video'yu uzat.
-    tpad ile sonu doldurur; kalite bozulmasın diye tekrar encode edilir.
+    Video sesden kısa ise, son kareyi klonlayıp (freeze-frame) videoyu uzatır.
     """
     vdur = ffprobe_dur(video_in)
     if vdur >= target_sec - 0.05:
-        # yeterince uzun; kopyala
         pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
         return
 
@@ -400,38 +392,34 @@ def concat_videos(files: List[str], outp: str):
         "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart", outp
     ])
+    try: pathlib.Path(lst).unlink(missing_ok=True)
+    except: pass
 
 def concat_audios(files: List[str], outp: str):
+    """
+    WAV’ları ardışık birleştirir, 48kHz’e sabitler.
+    """
+    if not files:
+        raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst,"w",encoding="utf-8") as f:
-        for p in files: f.write(f"file '{p}'\n")
+        for p in files:
+            f.write(f"file '{p}'\n")
     run([
         "ffmpeg","-y","-f","concat","-safe","0","-i",lst,
         "-ar","48000","-ac","1",
         "-af","dynaudnorm=g=6:f=300",
         outp
     ])
-
-    # ... mevcut:
-    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
-    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
-
-    # hedef: video süresi >= audio süresi (yoksa final cümle kesilir)
-    adur = ffprobe_dur(acat)
-    vdur = ffprobe_dur(vcat)
-    if vdur + 0.10 < adur:
-        vcat_padded = str(pathlib.Path(tmp)/"video_padded.mp4")
-        pad_video_to_duration(vcat, adur, vcat_padded)
-        vcat = vcat_padded
+    try: pathlib.Path(lst).unlink(missing_ok=True)
+    except: pass
 
 def mux(video: str, audio: str, outp: str):
     """
-    Video ve audio zaten eşit/uyumlu: -shortest KULLANMA.
-    Uyum farkı varsa main() içinde pad/kırp yapılıyor.
+    Video ve audio süresi önceden eşitlenir/pad’lenir; burada -shortest KULLANMIYORUZ.
     """
     try:
         vd, ad = ffprobe_dur(video), ffprobe_dur(audio)
-        # Güvenlik: çok büyük fark varsa min'e eşitle
         if abs(vd - ad) > 1.0:
             md = min(vd, ad, 45.0)
             tv = video.replace(".mp4","_temp.mp4")
@@ -505,7 +493,7 @@ Avoid for 180 days:
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return country, topic, sentences, terms, title, desc, tags
 
-# -------------------- Per-scene query builder (1–2 kelime) --------------------
+# -------------------- Per-scene (1–2 kelime) query builder --------------------
 _STOP = set("""
 a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
 this that these those is are was were be been being have has had do does did can could should would may might will shall
@@ -609,8 +597,8 @@ def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
             if h < w or h < 1080: continue
             dur = float(v.get("duration",0))
             dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
-            tokens = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
-            qtokens= set(re.findall(r"[a-z0-9]+", query.lower()))
+            tokens  = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
+            qtokens = set(re.findall(r"[a-z0-9]+", query.lower()))
             overlap = len(tokens & qtokens)
             score = overlap*2.0 + dur_bonus + (1.0 if h>=1920 else 0.0)
             cand.append((score, vid, best.get("link")))
@@ -720,48 +708,74 @@ def main():
         print(f"   {i+1}/{len(sentences)}: {d:.1f}s")
     sentences = processed_sentences
 
-    # Per-scene queries (1–2 kelime)
-    per_scene_queries = build_per_scene_queries(sentences, search_terms, MODE, topic=tpc)
+    # PEXELS: sahne başına 1–2 kelime net sorgular
+    per_scene_queries = build_per_scene_queries(
+        sentences,
+        search_terms or [],
+        MODE,
+        topic=tpc
+    )
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
 
-    # Pexels – tek odak seçim + download
+    # Tek tek sahne için en iyi portre klibi seç & indir
     picked = []
     for q in per_scene_queries:
         vid, link = pexels_pick_one(q)
-        if vid and link: picked.append((vid, link))
-    if not picked: raise RuntimeError("Pexels: hiçbir sonuç bulunamadı (per-scene).")
+        if vid and link:
+            picked.append((vid, link))
+            print(f"   → Pexels pick [{q}] -> id={vid} | {link}")
 
-    clips=[]
-    for idx,(vid,link) in enumerate(picked):
+    if not picked:
+        raise RuntimeError("Pexels: per-scene hiçbir sonuç bulunamadı.")
+
+    clips = []
+    for idx, (vid, link) in enumerate(picked):
         try:
             f = str(pathlib.Path(tmp)/f"clip_{idx:02d}_{vid}.mp4")
             with requests.get(link, stream=True, timeout=120) as rr:
                 rr.raise_for_status()
-                with open(f,"wb") as w:
+                with open(f, "wb") as w:
                     for ch in rr.iter_content(8192): w.write(ch)
             if pathlib.Path(f).stat().st_size > 500_000:
                 clips.append(f)
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
-    if len(clips) < len(sentences):
-        print("⚠️ Yeterli klip yok; eldeki klipler döndürülerek kullanılacak.")
 
-    # Segments + captions (senkron)
+    if len(clips) < len(sentences):
+        print("⚠️ Yeterli klip indirilemedi; mevcut klipler döndürülerek doldurulacak.")
+
+    # Segment + altyazı (TTS süresiyle senkron)
     print("🎬 Segments…")
-    segs=[]
-    for i,(base_text, d) in enumerate(metas):
+    segs = []
+    for i, (base_text, d) in enumerate(metas):
         base = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
-        make_segment(clips[i % len(clips)], d, base)
+        make_segment(clips[i % len(clips)], d, base)  # video süresi = TTS süresi
         colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
-        draw_capcut_text(base, base_text, CAPTION_COLORS[i % len(CAPTION_COLORS)], font, colored, is_hook=(i==0))
+        draw_capcut_text(
+            base,
+            base_text,
+            CAPTION_COLORS[i % len(CAPTION_COLORS)],
+            font,
+            colored,
+            is_hook=(i == 0)
+        )
         segs.append(colored)
 
-    # Assemble
+    # Birleştir
     print("🎞️ Assemble…")
     vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos(segs, vcat)
     acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
 
+    # Son kesilme önlemi: video sesden kısaysa pad’le
+    adur = ffprobe_dur(acat)
+    vdur = ffprobe_dur(vcat)
+    if vdur + 0.10 < adur:
+        vcat_padded = str(pathlib.Path(tmp)/"video_padded.mp4")
+        pad_video_to_duration(vcat, adur, vcat_padded)
+        vcat = vcat_padded
+
+    # Minimum süre için gerektiğinde audio'ya pad
     total = ffprobe_dur(acat)
     print(f"📏 Total audio: {total:.1f}s (target {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
     if total < TARGET_MIN_SEC:
@@ -769,7 +783,8 @@ def main():
         extra = min(deficit, 5.0)
         if extra > 0.1:
             padded = str(pathlib.Path(tmp)/"audio_padded.wav")
-            run(["ffmpeg","-y","-f","lavfi","-t",f"{extra:.2f}","-i","anullsrc=r=48000:cl=mono","-i",acat,"-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", padded])
+            run(["ffmpeg","-y","-f","lavfi","-t",f"{extra:.2f}","-i","anullsrc=r=48000:cl=mono",
+                 "-i",acat,"-filter_complex","[1:a][0:a]concat=n=2:v=0:a=1", padded])
             acat = padded
 
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -808,4 +823,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
