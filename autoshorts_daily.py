@@ -526,6 +526,164 @@ def derive_search_terms(sentences: List[str], fallback: List[str], channel_hint:
     limit = 18 if MODE=="myth_gods" else 12
     return cleaned[:limit] if cleaned else ["portrait 4k"]
 
+# ==== Per-scene query builder (1–2 kelime, konuya sabit) ====
+_STOP = set("""
+a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
+this that these those is are was were be been being have has had do does did can could should would may might will shall
+you your we our they their he she it its as than then so such very more most many much just also only even still yet
+""".split())
+_GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff"}
+
+def _lower_tokens(s: str) -> List[str]:
+    s = re.sub(r"[^A-Za-z0-9 ]+", " ", s.lower())
+    return [w for w in s.split() if w and len(w)>2 and w not in _STOP and w not in _GENERIC_BAD]
+
+def _proper_phrases(texts: List[str]) -> List[str]:
+    """Başlık/cümlelerden özel isim çok-kelimeli ifadeleri çek (Great Pacific Garbage Patch → 'pacific garbage','garbage patch')."""
+    phrases=[]
+    for t in texts:
+        for m in re.finditer(r"(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", t or ""):
+            phrase = m.group(0)
+            # en anlamsız baş sözcükleri at (The, A, An)
+            phrase = re.sub(r"^(The|A|An)\s+", "", phrase)
+            ws = [w.lower() for w in phrase.split()]
+            # 2'li pencereler üret
+            for i in range(len(ws)-1):
+                two = f"{ws[i]} {ws[i+1]}"
+                phrases.append(two)
+    # uniq sırayı koru
+    seen=set(); out=[]
+    for p in phrases:
+        if p not in seen:
+            seen.add(p); out.append(p)
+    return out
+
+def _domain_synonyms(all_text: str) -> List[str]:
+    """Konudan türetilen alan terimleri (daha isabetli stock sonuçları için)."""
+    t = (all_text or "").lower()
+    s = set()
+    if "garbage" in t or "trash" in t or "plastic" in t:
+        s.update(["garbage patch","ocean plastic","plastic pollution","floating debris","sea cleanup","ocean gyre"])
+    if "pacific" in t:
+        s.update(["pacific ocean","north pacific"])
+    if "brics" in t:
+        s.update(["summit", "trade bloc", "global south"])
+    # başka modlar için kolayca genişler
+    return list(s)
+
+def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mode: str, topic: Optional[str]=None) -> List[str]:
+    """Her sahne için 1–2 kelimelik net arama (ofiste elma yiyen tuzağını engeller)."""
+    topic = topic or ""
+    texts_cap = [topic] + sentences
+    texts_all = " ".join([topic] + sentences)
+
+    phrase_pool = _proper_phrases(texts_cap) + _domain_synonyms(texts_all)
+    # global token havuzu (tek kelime)
+    global_tokens = []
+    for s in sentences:
+        global_tokens += _lower_tokens(s)
+    # uniq sırayı koru
+    seen=set(); global_tokens = [w for w in global_tokens if not (w in seen or seen.add(w))]
+
+    # fallback terms → 1–2 kelimeye indir
+    fb=[]
+    for t in (fallback_terms or []):
+        t = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
+        if not t: continue
+        ws = [w for w in t.split() if w not in _STOP and w not in _GENERIC_BAD]
+        if not ws: continue
+        fb.append(" ".join(ws[:2]))
+
+    queries=[]
+    for s in sentences:
+        s_low = " " + (s or "").lower() + " "
+        picked=None
+        # 1) cümlede geçen 2'li öz-isim ifadelerden biri?
+        for ph in phrase_pool:
+            if f" {ph} " in s_low:
+                picked = ph; break
+        # 2) cümle içi nitelikli tek kelimelerden ilk ikisini birleştir
+        if not picked:
+            toks = [w for w in _lower_tokens(s) if w not in _GENERIC_BAD]
+            if len(toks)>=2:
+                picked = f"{toks[0]} {toks[1]}"
+            elif len(toks)==1:
+                picked = toks[0]
+        # 3) global havuzdan destek
+        if not picked and global_tokens:
+            picked = global_tokens[0]
+        # 4) fallback
+        if not picked and fb:
+            picked = fb[0]
+        # 5) son güvenlik: tek kelimeye düşürme
+        if picked and len(picked.split())>2:
+            ws = picked.split()
+            picked = f"{ws[-2]} {ws[-1]}"
+        # 6) yine çok genelse zenginleştir
+        if picked in ("great","nice","good","bad",None,""):
+            picked = (fb[0] if fb else (global_tokens[0] if global_tokens else "portrait"))
+        queries.append(picked)
+
+    # Son düzeltmeler: 'portrait','vertical','4k' gibi kelimeleri eklemiyoruz; pexels tarafı bunları `pexels_pick_one`'da ayarlıyor.
+    return queries
+
+# ==== Tek sahne için Pexels seçimi (net odak + portre) ====
+def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
+    headers = _pexels_headers()
+    locale  = _pexels_locale(LANG)
+    try:
+        r = requests.get(
+            "https://api.pexels.com/videos/search",
+            headers=headers,
+            params={"query": query, "per_page": 15, "orientation":"portrait", "size":"large", "locale": locale},
+            timeout=30
+        )
+        if r.status_code != 200:
+            return None, None
+        data = r.json() or {}
+        cand = []
+        for v in data.get("videos", []):
+            vid = int(v.get("id", 0))
+            if vid in _blocklist_get_pexels():
+                continue
+            files = v.get("video_files", []) or []
+            if not files: 
+                continue
+            best = max(files, key=lambda x: int(x.get("height",0))*int(x.get("width",0)))
+            w = int(best.get("width",0)); h = int(best.get("height",0))
+            if h < w or h < 1080:
+                continue
+            dur = float(v.get("duration",0))
+            # 2–12 sn b-roll en kullanışlı
+            dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
+            # slug/URL keyword örtüşmesi
+            tokens = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
+            qtokens = set(re.findall(r"[a-z0-9]+", query.lower()))
+            overlap = len(tokens & qtokens)
+            score = overlap*2.0 + dur_bonus + (1.0 if h>=1920 else 0.0)
+            cand.append((score, vid, best.get("link")))
+        if not cand:
+            return None, None
+        cand.sort(key=lambda x: x[0], reverse=True)
+        top = cand[0]
+        _blocklist_add_pexels([top[1]], days=30)
+        print(f"   → Pexels pick [{query}] -> id={top[1]} | {top[2]}")
+        return top[1], top[2]
+    except Exception:
+        return None, None
+
+# ==== CFR concat (ffmpeg copy concat yerine yeniden kodlar, süre sapmasını engeller) ====
+def concat_videos(files: List[str], outp: str):
+    lst = str(pathlib.Path(outp).with_suffix(".txt"))
+    with open(lst,"w",encoding="utf-8") as f:
+        for p in files: f.write(f"file '{p}'\n")
+    run([
+        "ffmpeg","-y","-f","concat","-safe","0","-i",lst,
+        "-vsync","cfr","-r",str(TARGET_FPS),
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart", outp
+    ])
+
 # -------------------- Pexels search with relevance & reuse guard --------------------
 def _pexels_headers(): 
     if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
@@ -774,24 +932,22 @@ def main():
 
     sentences = processed_sentences
 
-      # 3) Per-scene queries (kısa ve net; 1–2 kelime)
+    # 3) Per-scene queries (1–2 kelime, konu odaklı)
     fallback_terms = terms if 'terms' in locals() and isinstance(terms, list) else []
-    per_scene_queries = build_per_scene_queries(sentences, fallback_terms, MODE)
+    per_scene_queries = build_per_scene_queries(sentences, fallback_terms, MODE, topic=tpc)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries:
         print(f"   • {q}")
 
-    # 4) Pexels – her sahne için tek odaklı seçim
+    # 4) Pexels – her sahne için tek odaklı seçim + indirme
     picked = []
     for q in per_scene_queries:
         vid, link = pexels_pick_one(q)
         if vid and link:
             picked.append((vid, link))
-
     if not picked:
-        raise RuntimeError("Pexels: hiçbir sonuç toparlanamadı (per-scene).")
+        raise RuntimeError("Pexels: hiçbir sonuç bulunamadı (per-scene).")
 
-    # indirme
     clips = []
     for idx, (vid, link) in enumerate(picked):
         try:
@@ -882,5 +1038,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
