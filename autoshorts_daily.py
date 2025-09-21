@@ -242,23 +242,69 @@ def make_segment(src: str, dur: float, outp: str):
     run(["ffmpeg","-y","-i",src,"-t",f"{dur:.3f}","-vf",vf,"-r","25","-an",
          "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p", outp])
 
+# --- COLORS: use 0xRRGGBB for ffmpeg drawtext ---
+CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
+
+def _ff_color(c: str) -> str:
+    """
+    Convert #RRGGBB -> 0xRRGGBB for ffmpeg. Accepts already-0x too.
+    """
+    c = (c or "").strip()
+    if c.startswith("#"):
+        return "0x" + c[1:].upper()
+    if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c):
+        return c
+    # fallback to named color
+    return "white"
+
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
+    """
+    Safer drawtext: renkler 0xRRGGBB, metin kaçışları tam.
+    Hata olursa sade fallback ile yeniden dener.
+    """
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
-    esc = escape_drawtext(wrapped)
+    # drawtext multi-line \n destekliyor; metni agresif kaçır:
+    esc = escape_drawtext(wrapped).replace("\n", r"\n")
+
     lines = wrapped.count("\n")+1
     base_fs = (58 if is_hook else 48)
     if lines >= 3: base_fs -= 6
+
     y_pos = "h-h/3-text_h/2"
-    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
-    shadow = f"drawtext={common}:fontcolor=black@0.8:borderw=0"
+    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=8"
+    col = _ff_color(color)
+
+    shadow = f"drawtext={common}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}:fontcolor=white@0.0:box=1:boxborderw={20 if is_hook else 16}:boxcolor=black@0.65"
-    main   = f"drawtext={common}:fontcolor={color}:borderw={5 if is_hook else 4}:bordercolor=black@0.9"
+    main   = f"drawtext={common}:fontcolor={col}:borderw={5 if is_hook else 4}:bordercolor=black@0.9"
+
     if font:
         fp = font.replace(":","\\:").replace(",","\\,").replace("\\","/")
-        shadow += f":fontfile={fp}"; box += f":fontfile={fp}"; main += f":fontfile={fp}"
+        shadow += f":fontfile={fp}"
+        box    += f":fontfile={fp}"
+        main   += f":fontfile={fp}"
+
     vf = f"{shadow},{box},{main}"
-    run(["ffmpeg","-y","-i",seg,"-vf",vf,"-c:v","libx264","-preset","medium",
-         "-crf",str(max(16,CRF_VISUAL-3)), "-movflags","+faststart", outp])
+
+    try:
+        run([
+            "ffmpeg","-y","-i",seg,"-vf",vf,
+            "-c:v","libx264","-preset","medium",
+            "-crf",str(max(16,CRF_VISUAL-3)),
+            "-movflags","+faststart",
+            outp
+        ])
+    except Exception as e:
+        # Fallback: sadece ana metin, beyaz renk; kutu/gölge yok
+        print(f"⚠️ drawtext advanced failed: {e}\n   → retrying with minimal overlay")
+        main_min = f"drawtext={common}:fontcolor=white:borderw=4:bordercolor=black@0.9"
+        if font:
+            fp = font.replace(":","\\:").replace(",","\\,").replace("\\","/")
+            main_min += f":fontfile={fp}"
+        run([
+            "ffmpeg","-y","-i",seg,"-vf",main_min,
+            "-c:v","libx264","-preset","medium","-crf","20","-movflags","+faststart", outp
+        ])
 
 def concat_videos(files: List[str], outp: str):
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -350,38 +396,105 @@ def _words(s: str) -> List[str]:
     s = re.sub(r"[^A-Za-z0-9\- ]+"," ", s.lower())
     return [w for w in s.split() if w and w not in STOP and len(w)>2]
 
+MYTH_BOOSTERS = {
+    "myth_gods": [
+        # sahne / obje
+        "ancient greek statue", "marble bust close up", "temple columns doric",
+        "torch flame in darkness", "smoke swirling in cave", "obsidian rock texture",
+        "underworld cave river", "lava flow close up", "storm clouds dramatic sky",
+        "black robe silhouette", "gold laurel crown", "gates doorway ancient",
+        # mekan
+        "ruined temple night", "cave entrance mist", "catacombs corridor", "underground cavern",
+        # hareket
+        "slow motion smoke", "embers floating", "torchlight flicker", "shadow moving wall"
+    ],
+    # istersen diğer modlara da ek deposu açarız
+}
+
 def derive_search_terms(sentences: List[str], fallback: List[str], channel_hint: str="") -> List[str]:
-    # noun-ish words by simple heuristic
+    """
+    Cümlelerden işe yarar bigram/terimler çıkarır; moda özel booster’larla harmanlar.
+    Myth_gods gibi nişte, somut görsel objelere zorlar (statue, torch, cave, smoke, lava, columns…).
+    """
+    # 1) Çekirdek kelimeler
     bag = []
     for s in sentences:
         bag += _words(s)
-    # keep top distinct tokens
+    # özel isimleri (Topic vb.) da zorla ekleyelim
+    main_subjects = []
+    for s in sentences[:2]:
+        ms = re.findall(r"[A-Z][a-z]{2,}", s)
+        main_subjects += [m.lower() for m in ms]
+    bag = main_subjects + bag
+
+    # 2) uniq sırayı koru
     uniq=[]; seen=set()
     for w in bag:
         if w not in seen:
             seen.add(w); uniq.append(w)
-    # build queries emphasizing vertical/video
+
+    # 3) moda özel booster
+    boosters = []
+    if MODE in MYTH_BOOSTERS:
+        boosters = MYTH_BOOSTERS[MODE][:]
+
+    # 4) cümle kökenli bigramları oluştur
+    bigrams=set()
+    for s in sentences:
+        ws = _words(s)
+        for a,b in zip(ws, ws[1:]):
+            if a!=b:
+                bigrams.add(f"{a} {b}")
+
+    # 5) soruları ve çöplerini at
+    trash = {"think","evil","eldest","time","very","really","thing","something"}
+    core = [w for w in uniq if w not in trash][:10]
+
+    # 6) candidate queries
     queries=[]
-    core = uniq[:10]
-    if channel_hint: queries.append(f"{channel_hint} vertical 4k")
-    for i in range(0, min(len(core),10), 2):
-        part = " ".join(core[i:i+2])
-        if part:
-            queries.append(f"{part} portrait 4k")
-            queries.append(f"{part} vertical video")
-    # add safe b-roll terms
-    queries += ["b-roll portrait 4k", "timelapse vertical", "documentary portrait 4k"]
-    # mix with fallback if empty
-    if not queries and fallback:
-        queries = [f"{t} portrait 4k" for t in fallback]
-    # dedupe & trim
-    seen=set(); out=[]
+    subj = (core[0] if core else "")
+    if channel_hint:
+        queries.append(f"{channel_hint} logo intro vertical 4k")  # genel b-roll seçeneği
+
+    # Subjects’i boost et (ör: hades / zeus)
+    if subj:
+        queries += [
+            f"{subj} statue portrait 4k", f"{subj} marble bust portrait 4k",
+            f"{subj} temple columns vertical 4k", f"{subj} torch flame cave vertical 4k",
+        ]
+
+    # bigramlardan işe yarayanları ekle
+    for bg in list(bigrams)[:8]:
+        queries.append(f"{bg} portrait 4k")
+        queries.append(f"{bg} vertical video")
+
+    # moda özel boosterları ekle
+    for b in boosters[:14]:
+        queries.append(f"{b} portrait 4k")
+        queries.append(f"{b} vertical 4k")
+
+    # güvenli b-roll’lar
+    queries += ["cinematic smoke portrait 4k", "dramatic sky vertical 4k", "dark cave portrait 4k"]
+
+    # fallbackler
+    for t in (fallback or []):
+        if t:
+            queries.append(f"{t} portrait 4k")
+
+    # dedupe+temizle
+    cleaned=[]
+    seen=set()
     for q in queries:
-        q=q.strip()
-        if q and q not in seen:
-            seen.add(q); out.append(q)
-    random.shuffle(out)
-    return out[:12] if out else ["portrait 4k"]
+        q = re.sub(r"\s+"," ", q.strip())
+        if len(q.split()) < 2: 
+            continue
+        if q not in seen:
+            seen.add(q); cleaned.append(q)
+
+    random.shuffle(cleaned)
+    # myth_gods ise sayıyı biraz yüksek tutalım; yoksa 10–12
+    limit = 18 if MODE=="myth_gods" else 12
+    return cleaned[:limit] if cleaned else ["portrait 4k"]
 
 # -------------------- Pexels search with relevance & reuse guard --------------------
 def _pexels_headers(): 
@@ -640,3 +753,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
