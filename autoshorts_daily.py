@@ -150,6 +150,22 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
         if len(uniq) >= limit: break
     return uniq
 
+def normalize_sentence(raw: str) -> str:
+    """
+    Tek kaynak metin: hem TTS hem altyazı buradan beslensin.
+    Garip kaçışları temizler, \\n -> gerçek satır sonu yapar.
+    """
+    s = (raw or "").strip()
+    # olası kaçışlardan gelen \n'leri gerçek newline'a çevir
+    s = s.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
+    # fazla boşlukları sadeleştir (newline'lara dokunmadan)
+    s = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in s.split("\n"))
+    # unicode tire/tırnak normalize
+    s = s.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'")
+    # görünmez karakterler
+    s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
+    return s
+
 # -------------------- Text prep (captions) --------------------
 def clean_caption_text(s: str) -> str:
     t = (s or "").strip().replace("—","-").replace('"',"").replace("`","")
@@ -163,20 +179,60 @@ def clean_caption_text(s: str) -> str:
     return t.strip()
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE) -> str:
-    text = (text or "").strip()
-    if not text: return text
-    words = text.split(); n = len(words)
-    target = 3 if n > 12 else 2
-    per = math.ceil(n/target)
-    chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(target)]
-    chunks = [c for c in chunks if c]
-    if any(len(c)>max_line_length for c in chunks) and target==2:
-        target=3; per=math.ceil(n/target)
-        chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(target)]
-        chunks = [c for c in chunks if c]
-    if len(chunks)==1 and n>1:
-        mid=n//2; chunks=[" ".join(words[:mid]), " ".join(words[mid:])]
-    return "\n".join(chunks[:3])
+    """
+    Telefon ekranı için *zorunlu* 2–3 satır sarma.
+    Karakter bazlı üst sınır: ~22–26; kelime bazlı dengeleme.
+    """
+    text = normalize_sentence(text)
+    if not text:
+        return ""
+
+    # satır içi aşırı uzun kelimeleri kır
+    words = re.findall(r"\S+", text)
+    # hedef satır sayısı 2 (kısa cümle) ya da 3 (uzun cümle)
+    target = 3 if len(" ".join(words)) > 45 or len(words) > 12 else 2
+
+    # kaba parçalama: toplam karakter / hedef
+    total = len(text)
+    ideal = max(12, min(max_line_length, math.ceil(total/target)))
+
+    lines = []
+    current = []
+    current_len = 0
+    for w in words:
+        add = (1 if current else 0) + len(w)  # boşluk + kelime
+        if current_len + add > ideal and len(lines) + 1 < target:
+            lines.append(" ".join(current))
+            current = [w]
+            current_len = len(w)
+        else:
+            current.append(w)
+            current_len += add
+    if current:
+        lines.append(" ".join(current))
+
+    # garanti: en az 2, en fazla 3 satır
+    if len(lines) == 1 and len(words) >= 2:
+        mid = len(words)//2
+        lines = [" ".join(words[:mid]), " ".join(words[mid:])]
+    if len(lines) > 3:
+        lines = lines[:3]
+
+    # satır uzunluğu aşarsa ikinci kırpma
+    fixed=[]
+    for ln in lines:
+        if len(ln) <= max_line_length+6:
+            fixed.append(ln)
+        else:
+            ws = ln.split()
+            cut = []
+            L=0
+            for w in ws:
+                if L + (1 if cut else 0) + len(w) > max_line_length:
+                    break
+                cut.append(w); L += (1 if cut else 0) + len(w)
+            fixed.append(" ".join(cut))
+    return "\n".join([ln.strip() for ln in fixed if ln.strip()])
 
 # -------------------- TTS (Edge-TTS with SSML) --------------------
 def _build_ssml(text: str, voice: str) -> str:
@@ -303,47 +359,31 @@ def _ff_color(c: str) -> str:
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """
-    CapCut tarzı yazı: önce gelişmiş overlay dener,
-    ffmpeg hata verirse otomatik olarak basit overlay'e düşer.
+    Metni geçici bir .txt dosyasına yazıp drawtext=textfile=... ile okur.
+    Böylece \n, noktalama, UTF-8 VS *sorunsuz*.
     """
-    safe_txt = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE)
-    esc = escape_drawtext(safe_txt).replace("\n", r"\n")
+    # 1) metnin son halini (normalize + wrap)
+    wrapped = wrap_mobile_lines(clean_caption_text(normalize_sentence(text)), CAPTION_MAX_LINE)
 
-    lines = safe_txt.count("\n")+1
-    maxchars = max(len(x) for x in safe_txt.split("\n"))
+    # 2) temp textfile
+    tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
+    pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    if is_hook:
-        base_fs = 52 if lines >= 3 else 58
-        border_w = 5
-        box_border = 20
-    else:
-        base_fs = 42 if lines >= 3 else 48
-        border_w = 4
-        box_border = 16
-
-    if maxchars > 25:
-        base_fs -= 6
-    elif maxchars > 20:
-        base_fs -= 3
-
+    # 3) tipografi
+    lines = wrapped.count("\n")+1
+    base_fs = (58 if is_hook else 48)
+    if lines >= 3: base_fs -= 6
     y_pos = "h-h/3-text_h/2"
     col = _ff_color(color)
+    font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
 
-    # fontfile argümanını f-string dışından hazırla (backslash hatasını önlemek için)
-    font_arg = ""
-    if font:
-        font_arg = f":fontfile={_ff_sanitize_font(font)}"
-
-    common = f"text='{esc}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
-
-    # 1) Gelişmiş zincir
-    shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.8:borderw=0"
-    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={box_border}:boxcolor=black@0.65"
-    main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={border_w}:bordercolor=black@0.9"
+    # 4) iki kademeli overlay
+    common = f"textfile='{tf}':fontsize={base_fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+    shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
+    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(20 if is_hook else 16)}:boxcolor=black@0.65"
+    main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
     vf_advanced = f"{shadow},{box},{main}"
-
-    # 2) Basit fallback
-    vf_simple = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
+    vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
     try:
         run([
@@ -352,6 +392,17 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             "-crf",str(max(16,CRF_VISUAL-3)),
             "-movflags","+faststart", outp
         ])
+    except Exception as e:
+        print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
+        run([
+            "ffmpeg","-y","-i",seg,"-vf",vf_simple,
+            "-c:v","libx264","-preset","medium",
+            "-crf",str(max(16,CRF_VISUAL-2)),
+            "-movflags","+faststart", outp
+        ])
+    finally:
+        pathlib.Path(tf).unlink(missing_ok=True)
+
     except Exception as e:
         print(f"⚠️ drawtext advanced failed, falling back to simple: {e}")
         run([
@@ -745,15 +796,22 @@ def main():
     print(f"📝 Content: {ctry} | {tpc}")
     print(f"📊 Sentences: {len(sentences)}")
 
-    # 2) TTS
+    # 2) TTS – aynı metin tabanı
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
-    wavs=[]; metas=[]
+    wavs = []
+    metas = []              # [(text_for_this_sentence, duration_sec), ...]
     print("🎤 TTS…")
+
+    processed_sentences = []  # caption ve senkron için tek kaynak
+
     for i, s in enumerate(sentences):
-        w = str(pathlib.Path(tmp)/f"sent_{i:02d}.wav")
-        dur = tts_to_wav(s, w)
-        wavs.append(w); metas.append((s, dur))
+        base = normalize_sentence(s)           # ← 1) tek kaynak metin
+        processed_sentences.append(base)       #    (ileri aşamada hep bunu kullanacağız)
+        wav_path = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
+        dur = tts_to_wav(base, wav_path)       # ← 2) TTS de aynı metinden
+        wavs.append(wav_path)
+        metas.append((base, dur))              # ← 3) metin + süre birlikte dursun
         print(f"   {i+1}/{len(sentences)}: {dur:.1f}s")
 
     # 3) Per-video search terms
@@ -777,13 +835,21 @@ def main():
     if len(clips) < len(sentences):
         print("⚠️ Not enough downloaded clips after filtering; cycling clips to fill.")
     # 5) Segments + captions
+# 5) Segments + captions (senkron)
     print("🎬 Segments…")
-    segs=[]
-    for i,(s,d) in enumerate(metas):
-        base = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
-        make_segment(clips[i % len(clips)], d, base)
-        colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
-        draw_capcut_text(base, s, CAPTION_COLORS[i % len(CAPTION_COLORS)], font, colored, is_hook=(i==0))
+    segs = []
+    for i, (base_text, d) in enumerate(metas):   # ← metas içinden METİN + SÜRE geliyor
+        base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
+        make_segment(clips[i % len(clips)], d, base)  # segment süresi = TTS süresi
+        colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
+        draw_capcut_text(
+            base,
+            base_text,                              # ← altyazı metni TTS ile AYNI
+            CAPTION_COLORS[i % len(CAPTION_COLORS)],
+            font,
+            colored,
+            is_hook=(i == 0)
+        )
         segs.append(colored)
 
     # 6) Assemble
@@ -839,6 +905,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
