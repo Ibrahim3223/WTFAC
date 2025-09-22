@@ -317,31 +317,38 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> float:
 
 def make_segment(src: str, dur: float, outp: str):
     """
-    Her segmenti CFR ve kare ızgarasına oturtulmuş kesin süreyle üret.
+    Her segmente TAM kare sayısı üretir:
+      frames = round(dur * TARGET_FPS)
+    Böylece concat sonrası toplam süre sesle birebir eşleşir.
     """
     dur = max(0.8, min(dur, 5.0))
-    dur_q = quantize_to_frames(dur, TARGET_FPS)
-    fade = max(0.05, min(0.12, dur_q / 8.0))
-    vf = (
+    frames = max(2, int(round(dur * TARGET_FPS)))  # en az 2 kare
+    fade = max(0.05, min(0.12, dur/8))
+
+    vf_core = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
-        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
-        f"fade=t=in:st=0:d={fade:.3f},"
-        f"fade=t=out:st={max(0.0, dur_q - fade):.3f}:d={fade:.3f},"
-        f"fps={TARGET_FPS}"
+        "eq=brightness=0.02:contrast=1.08:saturation=1.1"
     )
+
+    # CFR garanti: fps sabitle → tam kare sayısına trim → PTS'i kare indeksine bağla
+    vf = (
+        f"{vf_core},"
+        f"fps={TARGET_FPS},"
+        f"trim=start_frame=0:end_frame={frames},"
+        f"setpts=N/{TARGET_FPS}/TB,"
+        f"fade=t=in:st=0:d={fade:.2f},"
+        f"fade=t=out:st={(dur - fade):.2f}:d={fade:.2f}"
+    )
+
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-fflags","+genpts",
         "-i", src,
-        "-t", f"{dur_q:.3f}",
         "-vf", vf,
-        "-r", str(TARGET_FPS),
         "-vsync","cfr",
+        "-r", str(TARGET_FPS),
         "-an",
-        "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart",
-        "-reset_timestamps","1",
+        "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL)," -pix_fmt","yuv420p",
         outp
     ])
 
@@ -408,19 +415,52 @@ def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     ])
 
 def concat_videos(files: List[str], outp: str):
-    lst = str(pathlib.Path(outp).with_suffix(".txt"))
-    with open(lst, "w", encoding="utf-8") as f:
-        for p in files:
-            f.write(f"file '{p}'\n")
+    """
+    Concat DEMUXER yerine concat FILTER kullanılır.
+    Böylece tüm parçalar PTS=0'dan başlar, CFR korunur, drift birikmez.
+    """
+    if not files:
+        raise RuntimeError("concat_videos: no files")
+
+    # inputları sıralı ekle
+    args = ["ffmpeg","-y","-hide_banner","-loglevel","error"]
+    for f in files:
+        args += ["-i", f]
+
+    # filter tanımı: [0:v][1:v]...[n-1:v] concat=n=...:v=1:a=0
+    n = len(files)
+    streams = "".join(f"[{i}:v]" for i in range(n))
+    vf = f"{streams}concat=n={n}:v=1:a=0, fps={TARGET_FPS}, setpts=N/{TARGET_FPS}/TB"
+
+    args += [
+        "-filter_complex", vf,
+        "-map","[v]",
+        "-r", str(TARGET_FPS),
+        "-vsync","cfr",
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart",
+        outp
+    ]
+    run(args)
+
+def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
+    """
+    Final video akışını TAM olarak target_frames kareye keser.
+    Pad gerekiyorsa önce main() içinde pad_video_to_duration çağrılır.
+    """
+    target_frames = max(2, int(target_frames))
+    vf = (
+        f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,"
+        f"trim=start_frame=0:end_frame={target_frames}"
+    )
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-f","concat","-safe","0","-i", lst,
-        "-fflags","+genpts",
-        "-vsync","cfr",
+        "-i", video_in,
+        "-vf", vf,
         "-r", str(TARGET_FPS),
-        "-c:v","libx264","-preset","medium","-crf", str(CRF_VISUAL),
+        "-vsync","cfr",
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart",
-        "-reset_timestamps","1",
         outp
     ])
 
@@ -451,23 +491,28 @@ def concat_audios(files: List[str], outp: str):
 
 def mux(video: str, audio: str, outp: str):
     """
-    Video ve audio süreleri önceden hizalanır; burada -shortest KULLANMIYORUZ.
+    Süreler önceden hizalanır; -shortest kullanmıyoruz.
+    Mux sırasındaki potansiyel encoder delay etkisini en aza indiriyoruz.
     """
     try:
         vd, ad = ffprobe_dur(video), ffprobe_dur(audio)
-        if abs(vd - ad) > 1.0:
+        if abs(vd - ad) > 0.15:
+            # güvenlik: minimuma eşitle
             md = min(vd, ad, 45.0)
             tv = video.replace(".mp4","_temp.mp4")
             ta = audio.replace(".wav","_temp.wav")
-            run(["ffmpeg","-y","-i",video,"-t",f"{md:.2f}","-c","copy", tv])
-            run(["ffmpeg","-y","-i",audio,"-t",f"{md:.2f}","-c","copy", ta])
+            run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",video,"-t",f"{md:.3f}","-c","copy", tv])
+            run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",audio,"-t",f"{md:.3f}","-c","copy", ta])
             video, audio = tv, ta
 
         run([
-            "ffmpeg","-y","-i",video,"-i",audio,
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i",video,"-i",audio,
             "-map","0:v:0","-map","1:a:0",
-            "-c:v","copy","-c:a","aac","-b:a","256k",
+            "-c:v","copy",
+            "-c:a","aac","-b:a","256k",
             "-movflags","+faststart",
+            "-muxpreload","0","-muxdelay","0",   # <- küçük gecikmeleri bastır
             "-avoid_negative_ts","make_zero",
             outp
         ])
@@ -822,27 +867,29 @@ def main():
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 7) Süre eşitleme (kritik)
+    # === Süre eşitleme (karekare hassas) ===
     adur = ffprobe_dur(acat)
     vdur = ffprobe_dur(vcat)
 
-    if vdur + 0.08 < adur:
-        vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
-        pad_video_to_duration(vcat, adur, vcat_padded)
-        vcat = vcat_padded
+    # Sesin hedef kare sayısı
+    a_frames = max(2, int(round(adur * TARGET_FPS)))
+
+    if vdur + 0.06 < adur:
+        # Video kısa → pad et (freeze-frame)
+        vcat_pad = str(pathlib.Path(tmp) / "video_padded.mp4")
+        pad_video_to_duration(vcat, adur, vcat_pad)
+        vcat = vcat_pad
         vdur = ffprobe_dur(vcat)
-        print(f"🧩 Padded video to match audio: v={vdur:.2f}s, a={adur:.2f}s")
-    elif adur + 0.08 < vdur:
-        vcat_trim = str(pathlib.Path(tmp) / "video_trim.mp4")
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", vcat, "-t", f"{adur:.3f}",
-            "-c","copy",
-            vcat_trim
-        ])
-        vcat = vcat_trim
-        vdur = ffprobe_dur(vcat)
-        print(f"✂️  Trimmed video to match audio: v={vdur:.2f}s, a={adur:.2f}s")
+
+    # Bu noktada video >= audio olabilir.
+    # Son kez kareye kilitle: tam olarak ses kare sayısına sabitle.
+    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4")
+    enforce_video_exact_frames(vcat, a_frames, vcat_exact)
+    vcat = vcat_exact
+
+    # Tekrar ölç (debug)
+    vdur = ffprobe_dur(vcat); adur = ffprobe_dur(acat)
+    print(f"🔒 Locked frames: video={vdur:.3f}s  audio={adur:.3f}s  (fps={TARGET_FPS})")
 
     # 8) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -896,3 +943,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
