@@ -1,6 +1,6 @@
-# autoshorts_daily.py — Relevance-first Pexels + per-scene queries + sync captions
+# autoshorts_daily.py — Relevance-first Pexels + per-scene queries + hard A/V lock
 # -*- coding: utf-8 -*-
-import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math
+import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict
 
 # -------------------- ENV / constants --------------------
@@ -58,12 +58,13 @@ VOICE_OPTIONS = {
     "tr": ["tr-TR-EmelNeural","tr-TR-AhmetNeural"]
 }
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
+VOICE_RATE = os.getenv("TTS_RATE", "+12%")
 
 # -------------------- Utils --------------------
 def run(cmd, check=True):
     res = subprocess.run(cmd, text=True, capture_output=True)
     if check and res.returncode != 0:
-        raise RuntimeError(res.stderr[:2000])
+        raise RuntimeError(res.stderr[:4000])
     return res
 
 def ffprobe_dur(p):
@@ -142,13 +143,20 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
     return uniq
 
 # -------------------- Caption text & wrap --------------------
+CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
+
+def _ff_color(c: str) -> str:
+    c = (c or "").strip()
+    if c.startswith("#"): return "0x" + c[1:].upper()
+    if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c): return c
+    return "white"
+
 def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
-    t = (t.replace("—", "-").replace("–", "-")
-           .replace("“", '"').replace("”", '"')
-           .replace("’", "'").replace("`", ""))
+    t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
-    if t and t[0].islower(): t = t[0].upper() + t[1:]
+    if t and t[0].islower():
+        t = t[0].upper() + t[1:]
     return t
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = 5) -> str:
@@ -166,24 +174,27 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
             chosen = cand; break
     if not chosen:
         chosen = distribute_into(max_lines)
-        fixed = []
+        fixed=[]
         for c in chosen:
-            if len(c) <= max_line_length + 6: fixed.append(c); continue
-            ws = c.split(); buf=[]; L=0
-            for w in ws:
-                add = (1 if buf else 0) + len(w)
-                if L + add > max_line_length and buf:
-                    fixed.append(" ".join(buf)); buf=[w]; L=len(w)
-                else:
-                    buf.append(w); L += add
-            if buf: fixed.append(" ".join(buf))
+            if len(c) <= max_line_length + 6:
+                fixed.append(c)
+            else:
+                ws = c.split(); buf=[]; L=0
+                for w in ws:
+                    add = (1 if buf else 0) + len(w)
+                    if L + add > max_line_length and buf:
+                        fixed.append(" ".join(buf)); buf=[w]; L=len(w)
+                    else:
+                        buf.append(w); L += add
+                if buf: fixed.append(" ".join(buf))
         chosen = fixed[:max_lines]
     if len(chosen) == 1 and len(words) > 1:
-        mid = len(words)//2; chosen = [" ".join(words[:mid]), " ".join(words[mid:])]
+        mid = len(words)//2
+        chosen = [" ".join(words[:mid]), " ".join(words[mid:])]
     return "\n".join([c.strip() for c in chosen if c.strip()])
 
 # -------------------- TTS --------------------
-def _rate_to_atempo(rate_str: str, default: float = 1.15) -> float:
+def _rate_to_atempo(rate_str: str, default: float = 1.08) -> float:
     try:
         if not rate_str: return default
         rate_str = rate_str.strip()
@@ -220,23 +231,29 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             try:
                 asyncio.run(_edge_save_simple())
             except RuntimeError:
-                nest_asyncio.apply(); loop = asyncio.get_event_loop()
+                nest_asyncio.apply()
+                loop = asyncio.get_event_loop()
                 loop.run_until_complete(_edge_save_simple())
 
-            run(["ffmpeg","-y","-hide_banner","-loglevel","error",
-                 "-i", mp3,
-                 "-ar","48000","-ac","1","-acodec","pcm_s16le",
-                 "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
-                 wav_out])
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", mp3,
+                "-ar","48000","-ac","1","-acodec","pcm_s16le",
+                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+                wav_out
+            ])
             pathlib.Path(mp3).unlink(missing_ok=True)
             return ffprobe_dur(wav_out) or 0.0
 
         except WSServerHandshakeError as e:
             if getattr(e, "status", None) == 401 or "401" in str(e):
-                print("⚠️ edge-tts 401 → hızlı fallback TTS"); break
-            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
+                print("⚠️ edge-tts 401 → hızlı fallback TTS")
+                break
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}")
+            time.sleep(0.8)
         except Exception as e:
-            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}")
+            time.sleep(0.8)
 
     # Google fallback
     try:
@@ -247,11 +264,13 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
         open(mp3, "wb").write(r.content)
 
-        run(["ffmpeg","-y","-hide_banner","-loglevel","error",
-             "-i", mp3,
-             "-ar","48000","-ac","1","-acodec","pcm_s16le",
-             "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
-             wav_out])
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
+            wav_out
+        ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         return ffprobe_dur(wav_out) or 0.0
     except Exception as e2:
@@ -259,23 +278,17 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 4.0
 
-# -------------------- Video compose --------------------
-CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
+# -------------------- Video helpers --------------------
+def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, float]:
+    """Süreyi en yakın kare sayısına yuvarlar; (frames, frames/fps) döner."""
+    frames = max(2, int(round(seconds * fps)))
+    return frames, frames / float(fps)
 
-def _ff_color(c: str) -> str:
-    c = (c or "").strip()
-    if c.startswith("#"): return "0x" + c[1:].upper()
-    if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c): return c
-    return "white"
-
-def make_segment(src: str, dur: float, outp: str):
-    """
-    Her segmenti tam CFR (sabit FPS) ve sabit süreyle üretir:
-    fps -> setpts=N/FPS/TB -> trim=end_frame
-    """
-    dur = max(0.8, min(dur, 6.5))
-    n_frames = max(2, int(round(dur * TARGET_FPS)))
-    fade = max(0.05, min(0.12, dur/8.0))
+def make_segment(src: str, dur_s: float, outp: str):
+    """Kaynak klipten tam CFR süreli segment üret (trim'i kareye göre yap)."""
+    frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
+    fade = max(0.05, min(0.12, qdur/8.0))
+    fade_out_st = max(0.0, qdur - fade)
 
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
@@ -283,24 +296,24 @@ def make_segment(src: str, dur: float, outp: str):
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
         f"fps={TARGET_FPS},"
         f"setpts=N/{TARGET_FPS}/TB,"
-        f"trim=start_frame=0:end_frame={n_frames},"
+        f"trim=start_frame=0:end_frame={frames},"
         f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={max(0.0, dur-fade):.2f}:d={fade:.2f}"
+        f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
     )
 
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", src,
         "-vf", vf,
-        "-r", str(TARGET_FPS),
-        "-vsync","cfr",
+        "-r", str(TARGET_FPS), "-vsync","cfr",
         "-an",
         "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p",
+        "-pix_fmt","yuv420p","-movflags","+faststart",
         outp
     ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
+    """Altyazıyı segment üzerinde (CFR) çiz — PTS sabit olduğu için kayıp olmaz."""
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, max_lines=5)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
@@ -330,35 +343,39 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
 
     try:
-        run(["ffmpeg","-y","-i",seg,"-vf",vf_advanced,"-c:v","libx264","-preset","medium",
-             "-crf",str(max(16,CRF_VISUAL-3)),"-movflags","+faststart", outp])
+        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",seg,"-vf",vf_advanced,
+             "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+             "-movflags","+faststart", outp])
     except Exception as e:
         print(f"⚠️ drawtext advanced failed, fallback simple: {e}")
-        run(["ffmpeg","-y","-i",seg,"-vf",vf_simple,"-c:v","libx264","-preset","medium",
-             "-crf",str(max(16,CRF_VISUAL-2)),"-movflags","+faststart", outp])
+        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",seg,"-vf",vf_simple,
+             "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-2)),
+             "-movflags","+faststart", outp])
     finally:
         pathlib.Path(tf).unlink(missing_ok=True)
 
 def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
+    """Video kısa ise son kareyi klonla."""
     vdur = ffprobe_dur(video_in)
-    if vdur >= target_sec - 0.05:
-        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes()); return
+    if vdur >= target_sec - 0.02:
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
+        return
     extra = max(0.0, target_sec - vdur)
-    print(f"🧩 Video kısa, son kare {extra:.2f}s kadar klonlanacak")
     run([
-        "ffmpeg","-y","-i", video_in,
-        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f}[v]",
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", video_in,
+        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
         "-map","[v]",
-        "-r", str(TARGET_FPS),
+        "-r", str(TARGET_FPS), "-vsync","cfr",
         "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart",
         outp
     ])
 
 def concat_videos_filter(files: List[str], outp: str):
-    """Concat demuxer yerine filter_complex ile CFR concat: PTS drift birikmez."""
+    """Concat (filter_complex) ile CFR zinciri — PTS drift birikmez."""
     if not files: raise RuntimeError("concat_videos_filter: empty")
-    inputs, filters = [], []
+    inputs = []; filters = []
     for i, p in enumerate(files):
         inputs += ["-i", p]
         filters.append(f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
@@ -375,7 +392,7 @@ def concat_videos_filter(files: List[str], outp: str):
     ])
 
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
-    """Final videoyu tam olarak 'target_frames' kareye keser (CFR)."""
+    """Final videoyu tam 'target_frames' kareye kes (CFR)."""
     target_frames = max(2, int(target_frames))
     vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
     run([
@@ -388,48 +405,51 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
         outp
     ])
 
+# -------------------- Audio concat (lossless, no resample) --------------------
 def concat_audios(files: List[str], outp: str):
+    """
+    Tüm WAV'lar 48kHz/mono/PCM_s16le; concat demuxer + -c copy ile sample-exact birleşir.
+    """
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst, "w", encoding="utf-8") as f:
-        for p in files: f.write(f"file '{p}'\n")
+        for p in files:
+            f.write(f"file '{p}'\n")
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-f","concat","-safe","0","-i", lst,
-        "-ar","48000","-ac","1",
-        "-af","aresample=async=1:first_pts=0,dynaudnorm=g=6:f=300",
+        "-c","copy",
         outp
     ])
-    try: pathlib.Path(lst).unlink(missing_ok=True)
-    except: pass
+    pathlib.Path(lst).unlink(missing_ok=True)
+
+def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
+    """
+    Sesi tam (target_frames / FPS) saniyeye kilitle.
+    """
+    dur = target_frames / float(TARGET_FPS)
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", audio_in,
+        "-af", f"atrim=end={dur:.6f},asetpts=N/SR/TB",
+        "-ar","48000","-ac","1",
+        "-c:a","pcm_s16le",
+        outp
+    ])
 
 def mux(video: str, audio: str, outp: str):
-    """Süreler önceden hizalı; -shortest kullanmıyoruz."""
-    try:
-        vd, ad = ffprobe_dur(video), ffprobe_dur(audio)
-        if abs(vd - ad) > 0.15:
-            md = min(vd, ad, 45.0)
-            tv = video.replace(".mp4","_temp.mp4")
-            ta = audio.replace(".wav","_temp.wav")
-            run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",video,"-t",f"{md:.3f}","-c","copy", tv])
-            run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",audio,"-t",f"{md:.3f}","-c","copy", ta])
-            video, audio = tv, ta
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i",video,"-i",audio,
-            "-map","0:v:0","-map","1:a:0",
-            "-c:v","copy","-c:a","aac","-b:a","256k",
-            "-movflags","+faststart",
-            "-muxpreload","0","-muxdelay","0",
-            "-avoid_negative_ts","make_zero",
-            outp
-        ])
-        for f in (video, audio):
-            if f.endswith("_temp.mp4") or f.endswith("_temp.wav"):
-                pathlib.Path(f).unlink(missing_ok=True)
-    except Exception as e:
-        print(f"⚠️ Mux hatası, basit birleştirme deneniyor: {e}")
-        run(["ffmpeg","-y","-i",video,"-i",audio,"-c","copy", outp])
+    """Süreler eşit — mux'ta kopya; encoder delay'i bastır."""
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", video, "-i", audio,
+        "-map","0:v:0","-map","1:a:0",
+        "-c:v","copy",
+        "-c:a","aac","-b:a","256k",
+        "-movflags","+faststart",
+        "-muxpreload","0","-muxdelay","0",
+        "-avoid_negative_ts","make_zero",
+        outp
+    ])
 
 # -------------------- Gemini (optional) --------------------
 ENHANCED_GEMINI_TEMPLATES = {
@@ -446,7 +466,8 @@ def _gemini_call(prompt: str, model: str) -> dict:
     payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.8}}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     r = requests.post(url, headers=headers, json=payload, timeout=60)
-    if r.status_code != 200: raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
+    if r.status_code != 200:
+        raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
     data = r.json()
     txt = ""
     try: txt = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -479,7 +500,7 @@ Avoid for 180 days:
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return country, topic, sentences, terms, title, desc, tags
 
-# -------------------- Per-scene queries (1–2 kelime) --------------------
+# -------------------- Per-scene queries --------------------
 _STOP = set("""
 a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
 this that these those is are was were be been being have has had do does did can could should would may might will shall
@@ -551,7 +572,7 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mod
         queries.append(picked)
     return queries
 
-# -------------------- Pexels search (tek odak, tekrar önleme) --------------------
+# -------------------- Pexels (tek odak + tekrar önleme) --------------------
 _USED_PEXELS_IDS_RUNTIME = set()
 
 def _pexels_headers():
@@ -642,7 +663,7 @@ def main():
     # 1) İçerik
     if USE_GEMINI and GEMINI_API_KEY:
         banlist = _recent_topics_for_prompt()
-        chosen = None; last = None
+        chosen, last = None, None
         for _ in range(8):
             try:
                 ctry, tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(MODE, CHANNEL_NAME, banlist)
@@ -650,11 +671,14 @@ def main():
                 sig = f"{MODE}|{tpc}|{sents[0] if sents else ''}"
                 h = _hash12(sig)
                 if not _is_recent(h, window_days=180):
-                    _record_recent(h, MODE, tpc); chosen = last; break
+                    _record_recent(h, MODE, tpc)
+                    chosen = last; break
                 else:
-                    banlist.insert(0, tpc); time.sleep(1.2)
+                    banlist.insert(0, tpc)
+                    time.sleep(1.0)
             except Exception as e:
-                print(f"Gemini error: {str(e)[:160]}"); time.sleep(1)
+                print(f"Gemini error: {str(e)[:160]}")
+                time.sleep(0.8)
         if chosen is None:
             if last:
                 ctry, tpc, sents, search_terms, ttl, desc, tags = last
@@ -694,77 +718,101 @@ def main():
     # 2) TTS
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
-    wavs, metas = [], []
+    wavs, metas = [], []   # metas: [(clean_text, duration)]
     processed_sentences = []
+
     print("🎤 TTS…")
     for i, s in enumerate(sentences):
         base = normalize_sentence(s)
         processed_sentences.append(base)
         w = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
-        d = tts_to_wav(base, w)
-        wavs.append(w); metas.append((base, d))
-        print(f"   {i+1}/{len(sentences)}: {d:.1f}s")
+        d = tts_to_wav(base, w)  # 48kHz/mono/pcm_s16le + dynaudnorm + atempo
+        wavs.append(w)
+        metas.append((base, d))
+        print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
     sentences = processed_sentences
 
-    # 3) Pexels — sahne başına 1–2 kelime
+    # 3) Pexels — sahne başına net sorgular
     per_scene_queries = build_per_scene_queries(sentences, search_terms or [], MODE, topic=tpc)
     print("🔎 Per-scene queries:")
-    for q in per_scene_queries: print(f"   • {q}")
+    for q in per_scene_queries:
+        print(f"   • {q}")
 
-    # 4) Pexels seçim + indirme
     picked = []
     for q in per_scene_queries:
         vid, link = pexels_pick_one(q)
         if vid and link: picked.append((vid, link))
-    if not picked: raise RuntimeError("Pexels: hiçbir sonuç bulunamadı (per-scene).")
+    if not picked:
+        raise RuntimeError("Pexels: hiçbir sonuç bulunamadı (per-scene).")
 
-    clips=[]
-    for idx,(vid,link) in enumerate(picked):
+    clips = []
+    for idx, (vid, link) in enumerate(picked):
         try:
-            f = str(pathlib.Path(tmp)/f"clip_{idx:02d}_{vid}.mp4")
+            f = str(pathlib.Path(tmp) / f"clip_{idx:02d}_{vid}.mp4")
             with requests.get(link, stream=True, timeout=120) as rr:
                 rr.raise_for_status()
-                with open(f,"wb") as w:
-                    for ch in rr.iter_content(8192): w.write(ch)
-            if pathlib.Path(f).stat().st_size > 500_000: clips.append(f)
+                with open(f, "wb") as w:
+                    for ch in rr.iter_content(8192):
+                        w.write(ch)
+            if pathlib.Path(f).stat().st_size > 400_000:
+                clips.append(f)
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
-    if len(clips) < len(sentences):
-        print("⚠️ Yeterli klip yok; mevcut klipler döndürülerek kullanılacak.")
 
-    # 5) Segment + altyazı
+    if len(clips) < len(sentences):
+        print("⚠️ Yeterli klip yok; mevcut klipleri döndürerek kullanılacak.")
+
+    # 4) Segment + altyazı (her segment CFR + tam süre)
     print("🎬 Segments…")
-    segs=[]
-    for i,(base_text, d) in enumerate(metas):
-        base = str(pathlib.Path(tmp)/f"seg_{i:02d}.mp4")
+    segs = []
+    for i, (base_text, d) in enumerate(metas):
+        base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(clips[i % len(clips)], d, base)
-        colored = str(pathlib.Path(tmp)/f"segsub_{i:02d}.mp4")
-        draw_capcut_text(base, base_text, CAPTION_COLORS[i % len(CAPTION_COLORS)], font, colored, is_hook=(i==0))
+        colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
+        draw_capcut_text(
+            base,
+            base_text,
+            CAPTION_COLORS[i % len(CAPTION_COLORS)],
+            font,
+            colored,
+            is_hook=(i == 0)
+        )
         segs.append(colored)
 
-    # 6) Birleştir
+    # 5) Birleştir (filter_complex concat) + Ses birleştir (lossless)
     print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp)/"video_concat.mp4"); concat_videos_filter(segs, vcat)
-    acat = str(pathlib.Path(tmp)/"audio_concat.wav"); concat_audios(wavs, acat)
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 7) Süre & kare kilidi
+    # 6) Süre & kare kilitleme (kritik)
     adur = ffprobe_dur(acat)
     vdur = ffprobe_dur(vcat)
+
+    # Gerekirse video'yu audio süresine pad et (çok ufak farklar için)
+    if vdur + 0.02 < adur:
+        vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
+        pad_video_to_duration(vcat, adur, vcat_padded)
+        vcat = vcat_padded
+        vdur = ffprobe_dur(vcat)
+
+    # Audio karesine göre kesin kilit
     a_frames = max(2, int(round(adur * TARGET_FPS)))
 
-    if vdur + 0.06 < adur:
-        vcat_pad = str(pathlib.Path(tmp)/"video_padded.mp4")
-        pad_video_to_duration(vcat, adur, vcat_pad)
-        vcat = vcat_pad
-
-    vcat_exact = str(pathlib.Path(tmp)/"video_exact.mp4")
+    # Video: tam kareye kes
+    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4")
     enforce_video_exact_frames(vcat, a_frames, vcat_exact)
     vcat = vcat_exact
 
-    vdur = ffprobe_dur(vcat); adur = ffprobe_dur(acat)
-    print(f"🔒 Locked frames: video={vdur:.3f}s  audio={adur:.3f}s  (fps={TARGET_FPS})")
+    # Audio: tam süreye kes (frame->saniye)
+    acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav")
+    lock_audio_duration(acat, a_frames, acat_exact)
+    acat = acat_exact
 
-    # 8) Mux
+    # Debug ölçüm
+    vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
+    print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
+
+    # 7) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
@@ -772,9 +820,9 @@ def main():
     print("🔄 Mux…")
     mux(vcat, acat, outp)
     final = ffprobe_dur(outp)
-    print(f"✅ Saved: {outp} ({final:.1f}s)")
+    print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 9) Metadata
+    # 8) Metadata
     def _ok_str(x): return isinstance(x, str) and len(x.strip()) > 0
     if _ok_str(ttl):
         meta = {
@@ -798,7 +846,7 @@ def main():
             "defaultAudioLanguage": LANG
         }
 
-    # 10) Upload (opsiyonel)
+    # 9) Upload (varsa env)
     try:
         print("📤 Uploading to YouTube…")
         vid_id = upload_youtube(outp, meta)
@@ -806,10 +854,12 @@ def main():
     except Exception as e:
         print(f"❌ Upload skipped: {e}")
 
-    # 11) Temizlik
+    # 10) Temizlik
     try:
-        import shutil; shutil.rmtree(tmp); print("🧹 Cleaned temp files")
-    except: pass
+        shutil.rmtree(tmp)
+        print("🧹 Cleaned temp files")
+    except:
+        pass
 
 if __name__ == "__main__":
     main()
