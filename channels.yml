@@ -173,6 +173,12 @@ channels:
     search_terms: ["typing hands 4k", "phone macro", "laptop desk", "wifi router", "app close up"]
     content_focus: "Fast, reliable device tips with simple visuals and step-by-step voiceover"
 
+  - name: "SpaceVista 60"
+    mode: "space_news"
+    topic: "Fast & Clear Space Explainers"
+    search_terms: ["rocket launch 4k", "planet surface", "star field", "telescope", "nebula"]
+    content_focus: "Tight, factual space updates and explainers with clean cosmic visuals"
+
 
 
 
