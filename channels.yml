@@ -227,6 +227,13 @@ channels:
    search_terms: ["tidy desk 4k", "drawer organizer top down", "pantry jars", "closet folding", "cable management"]
    content_focus: "Repeatable, small-step organization with neutral, logo-free visuals"
 
+ - name: "RoadVista 60"
+   mode: "country_facts"
+   topic: "Scenic Road Mini-Guides"
+   search_terms: ["mountain pass aerial", "coastal highway aerial", "desert road 4k", "forest road", "bridge viewpoint"]
+   content_focus: "What to see, when to go, and one safety cue per drive"
+
+
 
 
 
