@@ -209,6 +209,13 @@ channels:
    search_terms: ["mountain trail 4k", "waterfall aerial", "coastal path", "forest hike", "lake viewpoint"]
    content_focus: "One scenic spot per short with when-to-go and a simple on-trail tip"
 
+ - name: "Ocean Pulse"
+   mode: "country_facts"
+   topic: "One-Minute Ocean & Coast Science"
+   search_terms: ["ocean waves 4k", "rocky coast aerial", "lighthouse coast", "tide pool", "stormy sea"]
+   content_focus: "Visual coastal explainers with clear safety and science cues"
+
+
 
 
 
