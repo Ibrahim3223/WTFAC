@@ -203,6 +203,13 @@ channels:
    search_terms: ["minimal desk 4k", "typing hands", "notebook writing", "morning window light", "calm workspace"]
    content_focus: "Short, repeatable routines with uncluttered visuals and step-by-step captions"
 
+ - name: "TrailScape 60"
+   mode: "country_facts"
+   topic: "Beautiful Trails & Landmarks in 60s"
+   search_terms: ["mountain trail 4k", "waterfall aerial", "coastal path", "forest hike", "lake viewpoint"]
+   content_focus: "One scenic spot per short with when-to-go and a simple on-trail tip"
+
+
 
 
 
