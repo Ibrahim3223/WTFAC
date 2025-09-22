@@ -148,3 +148,10 @@ channels:
     topic: "Daily Sports Updates & Athletic Highlights"
     search_terms: ["sports stadium 4k", "athletes training", "scoreboard", "sports crowd", "championship"]
     content_focus: "Daily sports news, game highlights, and athletic achievements across various sports"
+
+  - name: "Planet Snapshot"
+    mode: "country_facts"
+    topic: "Fast Geography & Country Curiosities"
+    search_terms: ["country landscape 4k", "city skyline", "world travel", "cultural heritage", "monument"]
+    content_focus: "Memorable country facts about geography, culture, and record-setting places"
+
