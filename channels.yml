@@ -161,4 +161,11 @@ channels:
     search_terms: ["city skyline 4k", "urban timelapse", "aerial city", "bridge", "metro station"]
     content_focus: "Quick, visual explanations of city design, landmarks, and infrastructure"
 
+  - name: "Eco Habit Hacks"
+    mode: "fixit_fast"
+    topic: "One-Minute Sustainable Living Tips"
+    search_terms: ["home kitchen 4k", "daylight interior", "eco lifestyle", "reusable bottle", "forest close up"]
+    content_focus: "Practical, low-cost sustainability tips with clean household visuals"
+
+
 
