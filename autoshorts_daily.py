@@ -311,26 +311,58 @@ def _ff_color(c: str) -> str:
     return "white"
 
 def make_segment(src: str, dur: float, outp: str):
-    dur  = max(0.8, min(dur, 5.0))
+    """
+    Her sahne videosunu TTS süresine birebir eşitler:
+      - Kaynak uzun ise tam sürede KIRPAR.
+      - Kaynak kısa ise tpad ile SON KAREYİ klonlayarak UZATIR.
+    Böylece sahne-bazında senkron bozulmaz ve birikme yapmaz.
+    """
+    dur = max(0.8, float(dur))
+    vsrc = ffprobe_dur(src)
+    if vsrc <= 0:
+        vsrc = dur
+
+    # Fade süreleri (sahnenin %12'si, makul aralık)
     fade = max(0.05, min(0.12, dur/8))
-    vf = (
+
+    # Ortak pre-proc zinciri (renk/fps/crop)
+    pre = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
-        f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={max(0.0, dur-fade):.2f}:d={fade:.2f},"
-        f"fps={TARGET_FPS}"              # <- ek: FPS sabitle
+        f"fps={TARGET_FPS}"
     )
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", src, "-t", f"{dur:.3f}",
-        "-vf", vf,
-        "-r", str(TARGET_FPS),           # <- çıktı fps
-        "-vsync","cfr",                  # <- CFR
-        "-an",
-        "-c:v","libx264","-preset","fast","-crf","22","-pix_fmt","yuv420p",
-        outp
-    ])
+
+    # Kaynak kısa mı?
+    extra = max(0.0, dur - vsrc + 0.001)
+
+    if extra > 0.0:
+        # 1) pre → tpad ile extra kadar uzat → tam sonuna fade-out
+        vf = f"{pre},tpad=stop_mode=clone:stop_duration={extra:.3f},fade=t=in:st=0:d={fade:.2f},fade=t=out:st={max(0.0, dur-fade):.2f}:d={fade:.2f}"
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", src,
+            "-vf", vf,
+            "-t", f"{dur:.3f}",
+            "-r", str(TARGET_FPS),
+            "-vsync","cfr",
+            "-an",
+            "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL)," -pix_fmt","yuv420p",
+            outp
+        ])
+    else:
+        # 2) pre → tam sürede kırp → sonuna fade-out
+        vf = f"{pre},fade=t=in:st=0:d={fade:.2f},fade=t=out:st={max(0.0, dur-fade):.2f}:d={fade:.2f}"
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", src, "-t", f"{dur:.3f}",
+            "-vf", vf,
+            "-r", str(TARGET_FPS),
+            "-vsync","cfr",
+            "-an",
+            "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),"-pix_fmt","yuv420p",
+            outp
+        ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """
@@ -777,12 +809,12 @@ def main():
     if len(clips) < len(sentences):
         print("⚠️ Yeterli klip yok; mevcut klipleri döndürerek kullanılacak.")
 
-    # 5) Segment + altyazı (video süresi = TTS süresi → senkron)
+    # 5) Segment + altyazı (video süresi = TTS süresi → sahne-bazında senkron)
     print("🎬 Segments…")
     segs = []
     for i, (base_text, d) in enumerate(metas):
         base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        make_segment(clips[i % len(clips)], d, base)  # CFR + sabit FPS
+        make_segment(clips[i % len(clips)], d, base)  # her sahne tam d saniye
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
             base,
@@ -799,22 +831,17 @@ def main():
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 7) Süre eşitleme (kritik):
-    #    - Video kısa ise: video'yu pad (freeze-frame) → ses bitene kadar uzat
-    #    - Video uzun ise: video'yu SES süresine kısalt (ses TTS olduğu için korunur)
+    # 7) Süre eşitleme (ek güvenlik):
     adur = ffprobe_dur(acat)
     vdur = ffprobe_dur(vcat)
 
     if vdur + 0.08 < adur:
-        # Video kısa → pad et
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
         pad_video_to_duration(vcat, adur, vcat_padded)
         vcat = vcat_padded
         vdur = ffprobe_dur(vcat)
         print(f"🧩 Padded video to match audio: v={vdur:.2f}s, a={adur:.2f}s")
-
     elif adur + 0.08 < vdur:
-        # Video uzun → SES süresine kısalt (ses öncelikli)
         vcat_trim = str(pathlib.Path(tmp) / "video_trim.mp4")
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -826,7 +853,7 @@ def main():
         vdur = ffprobe_dur(vcat)
         print(f"✂️  Trimmed video to match audio: v={vdur:.2f}s, a={adur:.2f}s")
 
-    # 8) Mux (shortest YOK; süreler zaten eşit)
+    # 8) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Short"
     outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
@@ -836,7 +863,7 @@ def main():
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.1f}s)")
 
-    # 9) Metadata (title/desc yoksa akıllı fallback)
+    # 9) Metadata
     def _ok_str(x): return isinstance(x, str) and len(x.strip()) > 0
     if _ok_str(ttl):
         meta = {
@@ -878,5 +905,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
