@@ -233,6 +233,13 @@ channels:
    search_terms: ["mountain pass aerial", "coastal highway aerial", "desert road 4k", "forest road", "bridge viewpoint"]
    content_focus: "What to see, when to go, and one safety cue per drive"
 
+ - name: "Wild Pattern Atlas"
+   mode: "country_facts"
+   topic: "The Science of Natural Textures"
+   search_terms: ["fur macro", "feather macro", "bark texture", "sand dune aerial", "rock strata"]
+   content_focus: "One pattern per short with function, formation, and a memory hook"
+
+
 
 
 
