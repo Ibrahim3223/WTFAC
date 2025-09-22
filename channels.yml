@@ -197,6 +197,13 @@ channels:
    search_terms: ["time lapse clouds", "storm shelf cloud", "rainy city 4k", "wind over grass", "sunrise fog"]
    content_focus: "One concept per short with strong sky visuals and plain-language takeaways"
 
+ - name: "Focus Rituals"
+   mode: "fixit_fast"
+   topic: "One Practical Routine for Better Focus"
+   search_terms: ["minimal desk 4k", "typing hands", "notebook writing", "morning window light", "calm workspace"]
+   content_focus: "Short, repeatable routines with uncluttered visuals and step-by-step captions"
+
+
 
 
 
