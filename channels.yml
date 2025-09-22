@@ -167,5 +167,12 @@ channels:
     search_terms: ["home kitchen 4k", "daylight interior", "eco lifestyle", "reusable bottle", "forest close up"]
     content_focus: "Practical, low-cost sustainability tips with clean household visuals"
 
+  - name: "Pocket Tech Tricks"
+    mode: "fixit_fast"
+    topic: "One-Minute Fixes for Everyday Tech"
+    search_terms: ["typing hands 4k", "phone macro", "laptop desk", "wifi router", "app close up"]
+    content_focus: "Fast, reliable device tips with simple visuals and step-by-step voiceover"
+
+
 
 
