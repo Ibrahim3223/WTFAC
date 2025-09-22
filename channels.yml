@@ -155,3 +155,10 @@ channels:
     search_terms: ["country landscape 4k", "city skyline", "world travel", "cultural heritage", "monument"]
     content_focus: "Memorable country facts about geography, culture, and record-setting places"
 
+  - name: "CityFrame Stories"
+    mode: "country_facts"
+    topic: "Urban Facts & Skyline Insights"
+    search_terms: ["city skyline 4k", "urban timelapse", "aerial city", "bridge", "metro station"]
+    content_focus: "Quick, visual explanations of city design, landmarks, and infrastructure"
+
+
