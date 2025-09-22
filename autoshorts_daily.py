@@ -211,7 +211,7 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
     return "\n".join([c.strip() for c in chosen if c.strip()])
 
 # -------------------- TTS --------------------
-def _rate_to_atempo(rate_str: str, default: float = 1.12) -> float:
+def _rate_to_atempo(rate_str: str, default: float = 1.08) -> float:
     try:
         if not rate_str: return default
         rate_str = rate_str.strip()
@@ -400,8 +400,7 @@ def concat_videos(files: List[str], outp: str):
 
 def concat_audios(files: List[str], outp: str):
     """
-    WAV’ları ardışık birleştirir, 48kHz’e sabitler.
-    Sadece sesi birleştirir; video eşitlemesi main() içinde yapılır.
+    WAV’ları ardışık birleştirir, 48kHz’e sabitler. Yalnızca sesi toplar.
     """
     if not files:
         raise RuntimeError("concat_audios: empty file list")
@@ -415,8 +414,10 @@ def concat_audios(files: List[str], outp: str):
         "-af","dynaudnorm=g=6:f=300",
         outp
     ])
-    try: pathlib.Path(lst).unlink(missing_ok=True)
-    except: pass
+    try:
+        pathlib.Path(lst).unlink(missing_ok=True)
+    except:
+        pass
 
 def mux(video: str, audio: str, outp: str):
     """
@@ -769,6 +770,24 @@ def main():
         pad_video_to_duration(vcat, adur, vcat_padded)
         vcat = vcat_padded
 
+        # --- Audio/Video toplam süre eşitleme (drift/son-kare donmasını engelle) ---
+    adur = ffprobe_dur(acat)
+    vdur = ffprobe_dur(vcat)
+
+    # Video kısaysa → videoyu audio’ya pad et (freeze-frame, CFR korunur)
+    if vdur + 0.06 < adur:
+        vcat_padded = str(pathlib.Path(tmp)/"video_padded.mp4")
+        pad_video_to_duration(vcat, adur, vcat_padded)
+        vcat = vcat_padded
+        vdur = ffprobe_dur(vcat)
+
+    # Tersi durumda audio uzunsa hafifçe kırp (drift’i sıfırla)
+    if adur + 0.06 < vdur:
+        acat_trim = str(pathlib.Path(tmp)/"audio_trim.wav")
+        run(["ffmpeg","-y","-i", acat, "-t", f"{vdur:.3f}", "-c", "copy", acat_trim])
+        acat = acat_trim
+        adur = ffprobe_dur(acat)
+
     total = ffprobe_dur(acat)
     print(f"📏 Total audio: {total:.1f}s (target {TARGET_MIN_SEC}-{TARGET_MAX_SEC}s)")
     if total < TARGET_MIN_SEC:
@@ -816,3 +835,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
