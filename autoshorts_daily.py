@@ -22,7 +22,9 @@ GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 TARGET_FPS       = 25
 CRF_VISUAL       = 22
-CAPTION_MAX_LINE = 22
+# ---- Caption tuneables (NEW) ----
+CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))  # 22 → 28
+CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))   # 5  → 6 (otomatik 8’e kadar çıkar)
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 
@@ -159,39 +161,54 @@ def clean_caption_text(s: str) -> str:
         t = t[0].upper() + t[1:]
     return t
 
-def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = 5) -> str:
+def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
+    """
+    Mobil dostu, KESMESİZ sarmalayıcı.
+    - Önce 2..max_lines aralığında dengeli bölmeyi dener.
+    - Sığmazsa font küçültmeye uygun olacak şekilde greedy wrap yapar.
+    - Gerekirse satır sayısını max_lines+2'ye (örn. 8) kadar otomatik artırır.
+    """
     text = (text or "").strip()
-    if not text: return text
+    if not text:
+        return text
+
     words = text.split()
-    def distribute_into(k: int) -> List[str]:
+    HARD_CAP = max_lines + 2  # gerektiğinde +2 satıra izin
+
+    # 1) Dengeli bölme denemesi (metni k eşit parçaya)
+    def distribute_into(k: int) -> list[str]:
         per = math.ceil(len(words) / k)
         chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(k)]
         return [c for c in chunks if c]
-    chosen = None
+
     for k in range(2, max_lines + 1):
         cand = distribute_into(k)
         if cand and all(len(c) <= max_line_length for c in cand):
-            chosen = cand; break
-    if not chosen:
-        chosen = distribute_into(max_lines)
-        fixed=[]
-        for c in chosen:
-            if len(c) <= max_line_length + 6:
-                fixed.append(c)
+            return "\n".join(cand)
+
+    # 2) Greedy wrap (KELİME BAZLI, kesmeden)
+    def greedy(width: int, k_cap: int) -> list[str]:
+        lines = []
+        buf, L = [], 0
+        for w in words:
+            add = (1 if buf else 0) + len(w)
+            if L + add > width and buf:
+                lines.append(" ".join(buf))
+                buf = [w]; L = len(w)
             else:
-                ws = c.split(); buf=[]; L=0
-                for w in ws:
-                    add = (1 if buf else 0) + len(w)
-                    if L + add > max_line_length and buf:
-                        fixed.append(" ".join(buf)); buf=[w]; L=len(w)
-                    else:
-                        buf.append(w); L += add
-                if buf: fixed.append(" ".join(buf))
-        chosen = fixed[:max_lines]
-    if len(chosen) == 1 and len(words) > 1:
-        mid = len(words)//2
-        chosen = [" ".join(words[:mid]), " ".join(words[mid:])]
-    return "\n".join([c.strip() for c in chosen if c.strip()])
+                buf.append(w); L += add
+        if buf: lines.append(" ".join(buf))
+        # Gerekirse satır sayısını HARD_CAP'e kadar artırmak için
+        if len(lines) > k_cap and k_cap < HARD_CAP:
+            # genişleyen cap ile tekrar sar
+            return greedy(width, HARD_CAP)
+        return lines
+
+    lines = greedy(max_line_length, max_lines)
+
+    # Asla kesme yok: HARD_CAP'i aşsa bile tüm satırları döndür.
+    # (font boyutunu aşağıda draw_capcut_text dinamik küçültür)
+    return "\n".join([ln.strip() for ln in lines if ln.strip()])
 
 # -------------------- TTS --------------------
 def _rate_to_atempo(rate_str: str, default: float = 1.08) -> float:
@@ -325,36 +342,51 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     """
-    ALTYAZI KİLİT: segment süresini bozmayacak şekilde caption uygula
-    ve çıkışı input ile aynı frame sayısına TRIM’le.
+    Caption overlay + CFR/PTS kilidi.
+    Metin asla kesilmez; satır sayısına ve en uzun satıra göre dinamik font küçültme yapılır.
+    Çıkış frame sayısı, giriş segmentinin frame sayısıyla aynıdır.
     """
-    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, max_lines=5)
+    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
     # hedef frame sayısını segmentten al
     seg_dur = ffprobe_dur(seg)
-    frames, _ = quantize_to_frames(seg_dur, TARGET_FPS)
-    n_lines = max(1, len(wrapped.split("\n")))
-    maxchars = max((len(l) for l in wrapped.split("\n")), default=1)
+    frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
-    base = 58 if is_hook else 48
+    lines = wrapped.split("\n")
+    n_lines = max(1, len(lines))
+    maxchars = max((len(l) for l in lines), default=1)
+
+    # Dinamik font boyutu (satır & uzunluk bazlı)
+    base = 60 if is_hook else 50
     ratio = CAPTION_MAX_LINE / max(1, maxchars)
-    fs = int(base * min(1.0, max(0.55, ratio)))
-    if n_lines >= 4: fs = int(fs * 0.92)
-    if n_lines >= 5: fs = int(fs * 0.88)
-    fs = max(28, fs)
+    fs = int(base * min(1.0, max(0.50, ratio)))  # alt sınır %50
+    # satır arttıkça kademeli küçült
+    if n_lines >= 5: fs = int(fs * 0.92)
+    if n_lines >= 6: fs = int(fs * 0.88)
+    if n_lines >= 7: fs = int(fs * 0.84)
+    if n_lines >= 8: fs = int(fs * 0.80)
+    fs = max(22, fs)  # güvenli alt sınır
 
-    y_pos = "(h*0.58 - text_h/2)" if n_lines >= 4 else "h-h/3-text_h/2"
+    # Yerleşim: satır fazlaysa biraz yukarı
+    if n_lines >= 6:
+        y_pos = "(h*0.55 - text_h/2)"
+    elif n_lines >= 4:
+        y_pos = "(h*0.58 - text_h/2)"
+    else:
+        y_pos = "h-h/3-text_h/2"
+
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
 
     vf_overlay = f"{shadow},{box},{main}"
-    # *** KİLİT *** overlay sonrası CFR + PTS + TRIM (EXACT FRAME COUNT)
+    # overlay sonrası CFR + PTS + TRIM ile tam frame kilidi
     vf = f"{vf_overlay},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
 
     tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
@@ -369,10 +401,10 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             "-pix_fmt","yuv420p","-movflags","+faststart",
             tmp_out
         ])
-        # güvenlik: yine de tam frames olsun
+        # emniyet: tam kare kilidi
         enforce_video_exact_frames(tmp_out, frames, outp)
     except Exception as e:
-        print(f"⚠️ drawtext failed ({e}), using simple overlay")
+        print(f"⚠️ drawtext failed ({e}), falling back to simple overlay")
         vf_simple = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -869,3 +901,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
