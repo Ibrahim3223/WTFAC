@@ -317,19 +317,34 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> float:
 
 def make_segment(src: str, dur: float, outp: str):
     """
-    Her segmente TAM kare sayısı üretir:
-      frames = round(dur * TARGET_FPS)
-    Böylece concat sonrası toplam süre sesle birebir eşleşir.
+    Her segmenti tam CFR (sabit FPS) ve sabit süreyle üret.
     """
-    dur = max(0.8, min(dur, 5.0))
-    frames = max(2, int(round(dur * TARGET_FPS)))  # en az 2 kare
-    fade = max(0.05, min(0.12, dur/8))
+    dur = max(0.8, min(dur, 6.5))
+    n_frames = max(2, int(round(dur * TARGET_FPS)))
+    fade = max(0.05, min(0.12, dur/8.0))
 
-    vf_core = (
+    vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
-        "eq=brightness=0.02:contrast=1.08:saturation=1.1"
-    )
+        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
+        f"fps={TARGET_FPS},"
+        "setpts=N/{}/TB,"  # frame-tabanlı zaman
+        "trim=start_frame=0:end_frame={},"  # tam kare sayısına kes
+        f"fade=t=in:st=0:d={fade:.2f},"
+        f"fade=t=out:st={max(0.0, dur-fade):.2f}:d={fade:.2f}"
+    ).format(TARGET_FPS, n_frames)
+
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", src,
+        "-vf", vf,
+        "-r", str(TARGET_FPS),
+        "-vsync","cfr",
+        "-an",
+        "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p",
+        outp
+    ])
 
     # CFR garanti: fps sabitle → tam kare sayısına trim → PTS'i kare indeksine bağla
     vf = (
@@ -443,10 +458,35 @@ def concat_videos(files: List[str], outp: str):
     ]
     run(args)
 
+
+
+def concat_videos_filter(files: List[str], outp: str):
+    """
+    Concat demuxer yerine filter_complex ile CFR concat: PTS drift birikmez.
+    """
+    if not files:
+        raise RuntimeError("concat_videos_filter: empty")
+    inputs = []
+    filters = []
+    for i, p in enumerate(files):
+        inputs += ["-i", p]
+        filters.append(f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
+    filtergraph = ";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(len(files))) + f"concat=n={len(files)}:v=1:a=0[v]"
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        *inputs,
+        "-filter_complex", filtergraph,
+        "-map","[v]",
+        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart",
+        outp
+    ])
+
+
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     """
-    Final video akışını TAM olarak target_frames kareye keser.
-    Pad gerekiyorsa önce main() içinde pad_video_to_duration çağrılır.
+    Final videoyu tam olarak 'target_frames' kareye keser (CFR).
     """
     target_frames = max(2, int(target_frames))
     vf = (
@@ -457,8 +497,7 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", video_in,
         "-vf", vf,
-        "-r", str(TARGET_FPS),
-        "-vsync","cfr",
+        "-r", str(TARGET_FPS), "-vsync","cfr",
         "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart",
         outp
@@ -844,13 +883,12 @@ def main():
     if len(clips) < len(sentences):
         print("⚠️ Yeterli klip yok; mevcut klipleri döndürerek kullanılacak.")
 
-    # 5) Segment + altyazı (video süresi = TTS süresi → senkron, kare-quantize)
+    # 5) Segment + altyazı (video süresi = TTS süresi → senkron)
     print("🎬 Segments…")
     segs = []
     for i, (base_text, d) in enumerate(metas):
-        d_q = quantize_to_frames(max(0.8, min(d, 5.0)), TARGET_FPS)
         base = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        make_segment(clips[i % len(clips)], d_q, base)
+        make_segment(clips[i % len(clips)], d, base)  # ← d kullan
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
             base,
@@ -862,12 +900,12 @@ def main():
         )
         segs.append(colored)
 
-    # 6) Birleştir (CFR + sabit FPS)
+    # 6) Birleştir (CFR + sabit FPS, filter_complex)
     print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos(segs, vcat)
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # === Süre eşitleme (karekare hassas) ===
+    # === Süre & kare eşitleme (karekare hassas) ===
     adur = ffprobe_dur(acat)
     vdur = ffprobe_dur(vcat)
 
@@ -880,6 +918,15 @@ def main():
         pad_video_to_duration(vcat, adur, vcat_pad)
         vcat = vcat_pad
         vdur = ffprobe_dur(vcat)
+
+    # Son adım: videoyu tam kare sayısına kilitle
+    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4")
+    enforce_video_exact_frames(vcat, a_frames, vcat_exact)
+    vcat = vcat_exact
+
+    # Debug
+    vdur = ffprobe_dur(vcat); adur = ffprobe_dur(acat)
+    print(f"🔒 Locked frames: video={vdur:.3f}s  audio={adur:.3f}s  (fps={TARGET_FPS})")
 
     # Bu noktada video >= audio olabilir.
     # Son kez kareye kilitle: tam olarak ses kare sayısına sabitle.
@@ -943,4 +990,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
