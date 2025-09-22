@@ -191,6 +191,13 @@ channels:
    search_terms: ["home kitchen 4k", "chopping hands", "stovetop steam", "glass containers", "herbs close up"]
    content_focus: "Actionable techniques with top-down b-roll and clear captions"
 
+ - name: "Weather Window 60"
+   mode: "country_facts"
+   topic: "Fast, Visual Weather Explanations"
+   search_terms: ["time lapse clouds", "storm shelf cloud", "rainy city 4k", "wind over grass", "sunrise fog"]
+   content_focus: "One concept per short with strong sky visuals and plain-language takeaways"
+
+
 
 
 
