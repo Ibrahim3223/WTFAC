@@ -1,4 +1,4 @@
-# autoshorts_daily.py — Relevance-first Pexels + per-scene queries + hard A/V lock
+# autoshorts_daily.py — Relevance-first Pexels + per-scene queries + hard A/V & caption lock
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict
@@ -280,12 +280,10 @@ def tts_to_wav(text: str, wav_out: str) -> float:
 
 # -------------------- Video helpers --------------------
 def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, float]:
-    """Süreyi en yakın kare sayısına yuvarlar; (frames, frames/fps) döner."""
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
 def make_segment(src: str, dur_s: float, outp: str):
-    """Kaynak klipten tam CFR süreli segment üret (trim'i kareye göre yap)."""
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
@@ -312,15 +310,33 @@ def make_segment(src: str, dur_s: float, outp: str):
         outp
     ])
 
+def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
+    target_frames = max(2, int(target_frames))
+    vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", video_in,
+        "-vf", vf,
+        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart",
+        outp
+    ])
+
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    """Altyazıyı segment üzerinde (CFR) çiz — PTS sabit olduğu için kayıp olmaz."""
+    """
+    ALTYAZI KİLİT: segment süresini bozmayacak şekilde caption uygula
+    ve çıkışı input ile aynı frame sayısına TRIM’le.
+    """
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, max_lines=5)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    lines = wrapped.split("\n")
-    n_lines = max(1, len(lines))
-    maxchars = max((len(l) for l in lines), default=1)
+    # hedef frame sayısını segmentten al
+    seg_dur = ffprobe_dur(seg)
+    frames, _ = quantize_to_frames(seg_dur, TARGET_FPS)
+    n_lines = max(1, len(wrapped.split("\n")))
+    maxchars = max((len(l) for l in wrapped.split("\n")), default=1)
 
     base = 58 if is_hook else 48
     ratio = CAPTION_MAX_LINE / max(1, maxchars)
@@ -330,32 +346,49 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     fs = max(28, fs)
 
     y_pos = "(h*0.58 - text_h/2)" if n_lines >= 4 else "h-h/3-text_h/2"
-
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
-
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
 
-    vf_advanced = f"{shadow},{box},{main}"
-    vf_simple   = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85"
+    vf_overlay = f"{shadow},{box},{main}"
+    # *** KİLİT *** overlay sonrası CFR + PTS + TRIM (EXACT FRAME COUNT)
+    vf = f"{vf_overlay},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
 
+    tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
     try:
-        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",seg,"-vf",vf_advanced,
-             "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
-             "-movflags","+faststart", outp])
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", seg,
+            "-vf", vf,
+            "-r", str(TARGET_FPS), "-vsync","cfr",
+            "-an",
+            "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+            "-pix_fmt","yuv420p","-movflags","+faststart",
+            tmp_out
+        ])
+        # güvenlik: yine de tam frames olsun
+        enforce_video_exact_frames(tmp_out, frames, outp)
     except Exception as e:
-        print(f"⚠️ drawtext advanced failed, fallback simple: {e}")
-        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i",seg,"-vf",vf_simple,
-             "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-2)),
-             "-movflags","+faststart", outp])
+        print(f"⚠️ drawtext failed ({e}), using simple overlay")
+        vf_simple = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", seg,
+            "-vf", vf_simple,
+            "-r", str(TARGET_FPS), "-vsync","cfr",
+            "-an",
+            "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-2)),
+            "-pix_fmt","yuv420p","-movflags","+faststart",
+            outp
+        ])
     finally:
         pathlib.Path(tf).unlink(missing_ok=True)
+        pathlib.Path(tmp_out).unlink(missing_ok=True)
 
 def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
-    """Video kısa ise son kareyi klonla."""
     vdur = ffprobe_dur(video_in)
     if vdur >= target_sec - 0.02:
         pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
@@ -373,7 +406,6 @@ def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     ])
 
 def concat_videos_filter(files: List[str], outp: str):
-    """Concat (filter_complex) ile CFR zinciri — PTS drift birikmez."""
     if not files: raise RuntimeError("concat_videos_filter: empty")
     inputs = []; filters = []
     for i, p in enumerate(files):
@@ -391,25 +423,8 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
-    """Final videoyu tam 'target_frames' kareye kes (CFR)."""
-    target_frames = max(2, int(target_frames))
-    vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", video_in,
-        "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart",
-        outp
-    ])
-
-# -------------------- Audio concat (lossless, no resample) --------------------
+# -------------------- Audio concat (lossless) --------------------
 def concat_audios(files: List[str], outp: str):
-    """
-    Tüm WAV'lar 48kHz/mono/PCM_s16le; concat demuxer + -c copy ile sample-exact birleşir.
-    """
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst, "w", encoding="utf-8") as f:
@@ -424,9 +439,6 @@ def concat_audios(files: List[str], outp: str):
     pathlib.Path(lst).unlink(missing_ok=True)
 
 def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
-    """
-    Sesi tam (target_frames / FPS) saniyeye kilitle.
-    """
     dur = target_frames / float(TARGET_FPS)
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -438,7 +450,6 @@ def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
     ])
 
 def mux(video: str, audio: str, outp: str):
-    """Süreler eşit — mux'ta kopya; encoder delay'i bastır."""
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", video, "-i", audio,
@@ -762,7 +773,7 @@ def main():
     if len(clips) < len(sentences):
         print("⚠️ Yeterli klip yok; mevcut klipleri döndürerek kullanılacak.")
 
-    # 4) Segment + altyazı (her segment CFR + tam süre)
+    # 4) Segment + altyazı (her segment CFR + tam süre, caption-locked)
     print("🎬 Segments…")
     segs = []
     for i, (base_text, d) in enumerate(metas):
@@ -784,31 +795,26 @@ def main():
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 6) Süre & kare kilitleme (kritik)
+    # 6) Süre & kare kilitleme
     adur = ffprobe_dur(acat)
     vdur = ffprobe_dur(vcat)
 
-    # Gerekirse video'yu audio süresine pad et (çok ufak farklar için)
     if vdur + 0.02 < adur:
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
         pad_video_to_duration(vcat, adur, vcat_padded)
         vcat = vcat_padded
         vdur = ffprobe_dur(vcat)
 
-    # Audio karesine göre kesin kilit
     a_frames = max(2, int(round(adur * TARGET_FPS)))
 
-    # Video: tam kareye kes
     vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4")
     enforce_video_exact_frames(vcat, a_frames, vcat_exact)
     vcat = vcat_exact
 
-    # Audio: tam süreye kes (frame->saniye)
     acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav")
     lock_audio_duration(acat, a_frames, acat_exact)
     acat = acat_exact
 
-    # Debug ölçüm
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
