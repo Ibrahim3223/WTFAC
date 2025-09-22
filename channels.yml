@@ -221,6 +221,13 @@ channels:
    search_terms: ["plant growth timelapse", "city timelapse", "cloud timelapse", "melting ice macro", "star trails"]
    content_focus: "One phenomenon per short, anchored to a single powerful timelapse"
 
+ - name: "Orderly Home 60"
+   mode: "fixit_fast"
+   topic: "One-Minute Home Organization"
+   search_terms: ["tidy desk 4k", "drawer organizer top down", "pantry jars", "closet folding", "cable management"]
+   content_focus: "Repeatable, small-step organization with neutral, logo-free visuals"
+
+
 
 
 
