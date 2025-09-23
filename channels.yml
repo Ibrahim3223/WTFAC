@@ -275,6 +275,13 @@ channels:
    search_terms: ["kettle boiling steam", "laundry spinning drum", "pigeons walking", "traffic light close up", "toaster pop slow motion"]
    content_focus: "Deadpan epic voiceover + ordinary b-roll = contrast comedy"
 
+ - name: "Corporate Jargon Translator"
+   mode: "country_facts"
+   topic: "Buzzwords into Plain English"
+   search_terms: ["typing hands desk", "office corridor", "whiteboard close up", "printer room", "sticky notes top down"]
+   content_focus: "Dry translations of office clichés with clean b-roll"
+
+
 
 
 
