@@ -293,6 +293,13 @@ channels:
    search_terms: ["coffee spill slow motion", "printer error light", "office chair spin", "door close slow motion", "microwave timer close up"]
    content_focus: "Escalation structure + deadpan delivery over close-up props"
 
+ - name: "Wrong Way First"
+   mode: "fixit_fast"
+   topic: "How-Not-To Comedy with Quick Fixes"
+   search_terms: ["messy desk cables", "crooked frame wall", "kitchen burn smoke", "packing suitcase messy", "tripod wrong setup"]
+   content_focus: "Do it wrong on purpose, then fix in two beats"
+
+
 
 
 
