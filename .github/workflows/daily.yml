@@ -1,6 +1,5 @@
 name: Daily Shorts (single channel)
 
-# 🔒 Minimum tetikleyici: elle çalıştırma
 on:
   workflow_dispatch:
     inputs:
@@ -9,39 +8,51 @@ on:
         required: true
         type: string
 
-# 🔐 Sıkı izinler (varsayılanları geniş olabiliyor)
 permissions:
   contents: read
   actions: read
   checks: read
   id-token: none
 
-# 🚧 Aynı işi üst üste başlatma (özellikle elle tetiklerde)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || inputs.environment }}
   cancel-in-progress: false
 
 jobs:
   build-upload:
-    # İstersen sadece main dalından koştur:
-    # if: startsWith(github.ref, 'refs/heads/main')
     runs-on: ubuntu-latest
 
-    # Environment'a bağlı secret/vars kullanımı
+    # Environment'a bağlı secret/vars
     environment: ${{ inputs.environment }}
 
-    # Kaba kullanım/loopları sınırlamak için (opsiyonel)
     timeout-minutes: 30
 
     env:
-      TZ:                ${{ vars.TZ || 'UTC' }}
-      CHANNEL_NAME:      ${{ inputs.environment }}
-      MODE:              ${{ vars.MODE || 'default' }}
-      LANG:              ${{ vars.LANG || 'en' }}
-      VISIBILITY:        ${{ vars.VISIBILITY || 'public' }}
-      TTS_VOICE:         ${{ vars.TTS_VOICE || '' }}
-      TARGET_MIN_SEC:    ${{ vars.TARGET_MIN_SEC || '20' }}
-      TARGET_MAX_SEC:    ${{ vars.TARGET_MAX_SEC || '40' }}
+      TZ:                 ${{ vars.TZ || 'UTC' }}
+      # —— içerik kontrolü
+      CHANNEL_NAME:       ${{ inputs.environment }}
+      MODE:               ${{ vars.MODE || 'default' }}
+      LANG:               ${{ vars.LANG || 'en' }}
+      VISIBILITY:         ${{ vars.VISIBILITY || 'public' }}
+      TOPIC:              ${{ vars.TOPIC || '' }}
+      SEARCH_TERMS:       ${{ vars.SEARCH_TERMS || '' }}   # JSON dizi veya virgüllü string; script ikisini de okur
+      ROTATION_SEED:      ${{ vars.ROTATION_SEED || '0' }}
+      # —— TTS / Caption
+      TTS_VOICE:          ${{ vars.TTS_VOICE || '' }}
+      TTS_RATE:           ${{ vars.TTS_RATE || '+12%' }}
+      CAPTION_MAX_LINE:   ${{ vars.CAPTION_MAX_LINE || '28' }}
+      CAPTION_MAX_LINES:  ${{ vars.CAPTION_MAX_LINES || '6' }}
+      TARGET_MIN_SEC:     ${{ vars.TARGET_MIN_SEC || '22' }}
+      TARGET_MAX_SEC:     ${{ vars.TARGET_MAX_SEC || '42' }}
+      # —— Gemini (opsiyonel)
+      USE_GEMINI:         ${{ vars.USE_GEMINI || '0' }}
+      GEMINI_MODEL:       ${{ vars.GEMINI_MODEL || 'gemini-1.5-flash' }}
+      # —— API keys (secrets)
+      PEXELS_API_KEY:     ${{ secrets.PEXELS_API_KEY }}
+      GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+      YT_CLIENT_ID:       ${{ secrets.YT_CLIENT_ID }}
+      YT_CLIENT_SECRET:   ${{ secrets.YT_CLIENT_SECRET }}
+      YT_REFRESH_TOKEN:   ${{ secrets.YT_REFRESH_TOKEN }}
 
     steps:
       - name: Checkout
@@ -57,8 +68,7 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          restore-keys: ${{ runner.os }}-pip-
 
       - name: Install ffmpeg
         run: |
