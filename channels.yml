@@ -245,6 +245,13 @@ channels:
    search_terms: ["spiral staircase 4k", "tiled floor pattern", "stone arch bridge", "fountain water arc", "ripple circles"]
    content_focus: "One visual, one math idea, a sticky takeaway"
 
+ - name: "Mechanism Minute"
+   mode: "country_facts"
+   topic: "How Everyday Mechanisms Work"
+   search_terms: ["macro gears 4k", "conveyor machine", "belt and pulley", "cam mechanism", "robotic arm close up"]
+   content_focus: "One mechanism, clear diagrammatic captions, real examples"
+
+
 
 
 
