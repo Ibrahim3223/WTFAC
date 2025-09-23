@@ -263,6 +263,13 @@ channels:
    search_terms: ["suspension bridge aerial", "cable stayed bridge", "stone arch bridge", "highway tunnel light trails", "river crossing"]
    content_focus: "Design idea + visual labels + best viewing cue"
 
+ - name: "Object Origins"
+   mode: "country_facts"
+   topic: "The Design Histories of Everyday Things"
+   search_terms: ["macro paper clip", "ceramic mug on table", "light switch close up", "zipper macro", "pencil close up"]
+   content_focus: "One object, one turning point, one usability lesson"
+
+
 
 
 
