@@ -257,6 +257,13 @@ channels:
    search_terms: ["window light interior 4k", "lamp corner", "wall wash", "led strip ambient", "desk setup lighting"]
    content_focus: "Practical lighting moves with clean overlays and immediate results"
 
+ - name: "Bridge & Tunnel Atlas"
+   mode: "country_facts"
+   topic: "Beautiful Crossings Explained in 60s"
+   search_terms: ["suspension bridge aerial", "cable stayed bridge", "stone arch bridge", "highway tunnel light trails", "river crossing"]
+   content_focus: "Design idea + visual labels + best viewing cue"
+
+
 
 
 
