@@ -239,6 +239,13 @@ channels:
    search_terms: ["fur macro", "feather macro", "bark texture", "sand dune aerial", "rock strata"]
    content_focus: "One pattern per short with function, formation, and a memory hook"
 
+ - name: "Hidden Math IRL"
+   mode: "country_facts"
+   topic: "Geometry & Ratios Found in Real Scenes"
+   search_terms: ["spiral staircase 4k", "tiled floor pattern", "stone arch bridge", "fountain water arc", "ripple circles"]
+   content_focus: "One visual, one math idea, a sticky takeaway"
+
+
 
 
 
