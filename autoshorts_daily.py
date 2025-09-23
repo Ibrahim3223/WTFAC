@@ -24,6 +24,7 @@ GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 # SEARCH_TERMS env: JSON list ya da virgül ayraçlı string olabilir
 def _parse_terms(s: str) -> List[str]:
+    TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
     s = (s or "").strip()
     if not s: return []
     try:
@@ -561,37 +562,75 @@ def _domain_synonyms(all_text: str) -> List[str]:
     return list(s)
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mode: str, topic: Optional[str]=None) -> List[str]:
-    topic = topic or ""
+    """
+    Cümlelerden sağlam 2-gram çıkar; işe yaramazsa:
+      1) SEARCH_TERMS rotasyonu
+      2) TOPIC'ten anahtarlar
+      3) Son emniyet: 'macro detail' vb.
+    """
+    topic = (topic or "").strip()
     texts_cap = [topic] + sentences
     texts_all = " ".join([topic] + sentences)
+
     phrase_pool = _proper_phrases(texts_cap) + _domain_synonyms(texts_all)
-    global_tokens=[]
-    for s in sentences: global_tokens += _lower_tokens(s)
-    seen=set(); global_tokens=[w for w in global_tokens if not (w in seen or seen.add(w))]
+
+    def _tok4(s: str) -> List[str]:
+        s = re.sub(r"[^A-Za-z0-9 ]+", " ", (s or "").lower())
+        toks = [w for w in s.split() if len(w) >= 4 and w not in _STOP and w not in _GENERIC_BAD]
+        return toks
+
+    # Kullanıcı SEARCH_TERMS'i normalize et
     fb=[]
     for t in (fallback_terms or []):
         t = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
         if not t: continue
         ws = [w for w in t.split() if w not in _STOP and w not in _GENERIC_BAD]
-        if ws: fb.append(" ".join(ws[:2]))
+        if ws:
+            fb.append(" ".join(ws[:2]))  # 1-2 kelime
+
+    # TOPIC'ten 1-2 anahtar
+    topic_keys = _tok4(topic)[:2]
+    topic_key_join = " ".join(topic_keys) if topic_keys else ""
+
     queries=[]
+    fb_idx = 0
     for s in sentences:
         s_low = " " + (s or "").lower() + " "
         picked=None
+
+        # 1) Proper phrase havuzu (ör. 'stone arch')
         for ph in phrase_pool:
             if f" {ph} " in s_low:
                 picked = ph; break
+
+        # 2) Cümleden 2-gram
         if not picked:
-            toks = [w for w in _lower_tokens(s) if w not in _GENERIC_BAD]
-            if len(toks)>=2: picked = f"{toks[0]} {toks[1]}"
-            elif len(toks)==1: picked = toks[0]
-        if not picked and global_tokens: picked = global_tokens[0]
-        if not picked and fb: picked = fb[0]
-        if picked and len(picked.split())>2:
-            ws = picked.split(); picked = f"{ws[-2]} {ws[-1]}"
-        if picked in ("great","nice","good","bad",None,""):
-            picked = (fb[0] if fb else (global_tokens[0] if global_tokens else "portrait"))
+            toks = _tok4(s)
+            if len(toks) >= 2:
+                picked = f"{toks[0]} {toks[1]}"
+            elif len(toks) == 1:
+                picked = toks[0]
+
+        # 3) SEARCH_TERMS rotasyonu
+        if (not picked or len(picked) < 4) and fb:
+            picked = fb[fb_idx % len(fb)]
+            fb_idx += 1
+
+        # 4) TOPIC’ten anahtar
+        if (not picked or len(picked) < 4) and topic_key_join:
+            picked = topic_key_join
+
+        # 5) Son emniyet
+        if not picked or picked in ("great","nice","good","bad","things","stuff"):
+            picked = "macro detail"
+
+        # Aşırı uzun üç+ kelime varsa son iki kelimeye indir
+        if len(picked.split()) > 2:
+            w = picked.split()
+            picked = f"{w[-2]} {w[-1]}"
+
         queries.append(picked)
+
     return queries
 
 # -------------------- Pexels (tek odak + tekrar önleme) --------------------
@@ -684,7 +723,7 @@ def main():
     random.seed(ROTATION_SEED or int(time.time()))
 
     # 1) İçerik (TOPIC lock + SEARCH_TERMS seed)
-    topic_lock = TOPIC_RAW
+    topic_lock = TOPIC
     user_terms = SEARCH_TERMS_ENV
 
     if USE_GEMINI and GEMINI_API_KEY:
@@ -867,3 +906,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
