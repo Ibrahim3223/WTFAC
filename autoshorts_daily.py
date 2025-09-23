@@ -265,7 +265,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
         open(mp3, "wb").write(r.content)
         run([
-            "ffmpeg","-y","-hide-banner","-loglevel","error",
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
             "-ar","48000","-ac","1","-acodec","pcm_s16le",
             "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
@@ -657,8 +657,9 @@ def main():
         chosen, last = None, None
         for _ in range(4):
             try:
-                ctry, tpc, sents, search_terms, ttl, desc, tags =
-                    build_via_gemini(MODE, CHANNEL_NAME, topic_lock, user_terms, banlist)
+                ctry, tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(
+                    MODE, CHANNEL_NAME, topic_lock, user_terms, banlist
+                )
                 last = (ctry, tpc, sents, search_terms, ttl, desc, tags)
                 sig = f"{MODE}|{tpc}|{sents[0] if sents else ''}"
                 h = _hash12(sig)
@@ -779,7 +780,7 @@ def main():
     # 9) Upload (guard)
     missing = [k for k in ("YT_CLIENT_ID","YT_CLIENT_SECRET","YT_REFRESH_TOKEN") if not os.getenv(k)]
     if missing:
-        print(f"❌ Upload skipped: missing {', '.join(missing)}");  # Guardrail — loglarda hatayı net gör
+        print(f"❌ Upload skipped: missing {', '.join(missing)}")
     else:
         try:
             print("📤 Uploading to YouTube…")
