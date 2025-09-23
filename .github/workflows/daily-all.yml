@@ -1,48 +1,51 @@
 name: Daily Shorts (all channels)
 
+# ⏰ Zamanlanmış + elle tetik
 on:
   schedule:
-    # 20:00 America/New_York yıl boyu (DST güvenli: iki UTC saatinde tetikler)
-    - cron: "0 0 * * *"   # 00:00 UTC ≈ 20:00 ET (DST)
-    - cron: "0 1 * * *"   # 01:00 UTC ≈ 20:00 ET (Standard Time)
-  workflow_dispatch:
+    # Her gün 12:00 UTC (TZ env ile oynayabilirsin)
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  id-token: none
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  # channels.yml -> matrix üret
   make-matrix:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install PyYAML
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyyaml
-
-      - id: build
+      - name: Build matrix from channels.yml
+        id: build
+        shell: bash
         run: |
           python - <<'PY'
-          import os, json, yaml
-          with open("channels.yml", "r", encoding="utf-8") as f:
-              data = yaml.safe_load(f) or {}
-          items = []
-          for c in (data.get("channels") or []):
-              items.append({
-                  "name":       c.get("name"),
-                  "env":        c.get("env", c.get("name")),
-                  "mode":       c.get("mode", "country_facts"),
-                  "lang":       c.get("lang", "en"),
-                  "visibility": c.get("visibility", "public")
+          import yaml, json, sys
+          data = yaml.safe_load(open("channels.yml", "r", encoding="utf-8"))
+          # channels: [{name, env, mode, lang, visibility, seed}]
+          mx = {"include": []}
+          for ch in data.get("channels", []):
+              mx["include"].append({
+                  "name": ch["name"],
+                  "env": ch["env"],
+                  "mode": ch.get("mode","default"),
+                  "lang": ch.get("lang","en"),
+                  "visibility": ch.get("visibility","public"),
+                  "seed": ch.get("seed","0"),
               })
-          matrix = {"include": items}
-          print("Matrix size:", len(items))
-          with open(os.environ["GITHUB_OUTPUT"], "a") as g:
-              g.write(f"matrix={json.dumps(matrix)}\n")
+          print("::set-output name=matrix::" + json.dumps(mx))
           PY
 
   build-upload:
@@ -52,86 +55,54 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
 
+    # Environment bazlı secret/vars için env bağlı koşu
     environment: ${{ matrix.env }}
+
+    timeout-minutes: 35
 
     env:
       TZ:                ${{ vars.TZ || 'UTC' }}
       CHANNEL_NAME:      ${{ matrix.name }}
       MODE:              ${{ vars.MODE || matrix.mode }}
-      LANG:              ${{ vars.DEFAULT_LANG || matrix.lang }}
-      VISIBILITY:        ${{ vars.DEFAULT_VISIBILITY || matrix.visibility }}
-      TTS_VOICE:         ${{ vars.TTS_VOICE || 'en-US-AriaNeural' }}
-      TTS_RATE:          ${{ vars.TTS_RATE || '+10%' }}
-      USE_GEMINI:        ${{ vars.USE_GEMINI || '0' }}
-      GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-      GEMINI_PROMPT:     ${{ vars.GEMINI_PROMPT }}
-      ROTATION_SEED:     ${{ vars.ROTATION_SEED || '0' }}
-
-      PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
-      GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
-      YT_CLIENT_ID:      ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET:  ${{ secrets.YT_CLIENT_SECRET }}
-      YT_REFRESH_TOKEN:  ${{ secrets.YT_REFRESH_TOKEN }}
+      LANG:              ${{ vars.LANG || matrix.lang }}
+      VISIBILITY:        ${{ vars.VISIBILITY || matrix.visibility }}
+      TTS_VOICE:         ${{ vars.TTS_VOICE || '' }}
+      TARGET_MIN_SEC:    ${{ vars.TARGET_MIN_SEC || '20' }}
+      TARGET_MAX_SEC:    ${{ vars.TARGET_MAX_SEC || '40' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # ET gününe göre tek-kez çalıştır (ikinci cron'u atla)
-      - name: Compute ET date
-        id: etdate
-        run: |
-          python - <<'PY'
-          import datetime, os
-          try:
-              from zoneinfo import ZoneInfo
-              now = datetime.datetime.now(ZoneInfo("America/New_York"))
-          except Exception:
-              now = datetime.datetime.utcnow()
-          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
-              fh.write(f"date={now.strftime('%Y-%m-%d')}\n")
-          PY
-
-      - name: Restore daily-run cache (skip if already ran)
-        id: cache
-        uses: actions/cache/restore@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          path: .daily_run_stamp
-          key: daily-run-${{ steps.etdate.outputs.date }}
+          python-version: "3.10"
 
-      - name: Stop if already ran today
-        if: steps.cache.outputs.cache-hit == 'true'
-        run: |
-          echo "Already ran for ${{ steps.etdate.outputs.date }} ET — skipping."
-          exit 0
-
-      - uses: actions/setup-python@v5
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
-          python-version: "3.11"
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-      - name: Install FFmpeg
+      - name: Install ffmpeg
         run: |
-          sudo apt-get update -y
+          sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Install Python deps
+      - name: Install deps
         run: |
-          python -m pip install --upgrade pip
-          pip install -q edge-tts google-api-python-client google-auth google-auth-oauthlib requests nest-asyncio pyyaml
+          python -V
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Echo channel
-        run: |
-          echo "Generating & uploading for: ${{ matrix.name }}"
-          mkdir -p out
+      - name: Prepare output dir
+        run: mkdir -p out
 
       - name: Run generator & upload
         run: python autoshorts_daily.py
-
-      - name: Save daily-run cache (mark execution for ET date)
-        if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: .daily_run_stamp
-          key: daily-run-${{ steps.etdate.outputs.date }}
 
       - name: Save video artifact
         if: ${{ always() && hashFiles('out/*.mp4') != '' }}
@@ -139,4 +110,5 @@ jobs:
         with:
           name: ${{ matrix.env }}-last-video
           path: out/*.mp4
+          retention-days: 2
           if-no-files-found: ignore
