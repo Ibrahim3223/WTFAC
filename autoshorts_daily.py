@@ -20,12 +20,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-# ---- Channel intent (NEW) ----
+# ---- Channel intent (topic + search terms) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
-# SEARCH_TERMS env: JSON list ya da virgül ayraçlı string olabilir
+
 def _parse_terms(s: str) -> List[str]:
-    TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
     s = (s or "").strip()
     if not s: return []
     try:
@@ -33,16 +32,14 @@ def _parse_terms(s: str) -> List[str]:
         if isinstance(data, list): return [str(x).strip() for x in data if str(x).strip()]
     except Exception:
         pass
-    # "a","b","c" veya a,b,c
-    s = s.strip()
-    s = re.sub(r'^[\[\(]|\s*[\]\)]$', '', s)
-    parts = re.split(r'\s*,\s*', s)
+    s = re.sub(r'^[\[\(]|\s*[\]\)]$', '', s.strip())
+    parts = re.split(r'\s*,\s*|\s*\|\s*', s)
     return [p.strip().strip('"').strip("'") for p in parts if p.strip()]
+
 SEARCH_TERMS_ENV = _parse_terms(os.getenv("SEARCH_TERMS", ""))
 
 TARGET_FPS       = 25
 CRF_VISUAL       = 22
-# ---- Caption tuneables (NEW) ----
 CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))
 CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
 
@@ -465,16 +462,79 @@ def mux(video: str, audio: str, outp: str):
 # -------------------- Gemini (topic-locked) --------------------
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a 25–40s YouTube Short.
-Output STRICT JSON with keys: country, topic, sentences (7–8), search_terms (4–8), title, description, tags.""",
+Return STRICT JSON with keys: country, topic, sentences (7–8), search_terms (4–8), title, description, tags.""",
     "country_facts": """Create amazing country facts.
 EXACTLY 7–8 short sentences (6–12 words).
-Output STRICT JSON: country, topic, sentences, search_terms, title, description, tags."""
+Return STRICT JSON: country, topic, sentences, search_terms, title, description, tags."""
 }
+
+# ---- Strong content guardrails ----
+LOW_INFO_BAD = {
+    "one crisp idea","clear example","tiny twist","no fluff","the point",
+    "see it","learn it","done","try this today","interesting shorts",
+    "fun fact","did you know","amazing secret"
+}
+
+def is_low_information(sent: str) -> bool:
+    s = (sent or "").strip().lower()
+    if len(s.split()) < 5: return True
+    for b in LOW_INFO_BAD:
+        if b in s: return True
+    # çok genel kelime yoğunluğu
+    generic = {"thing","things","stuff","nice","good","bad","great","cool","today","example"}
+    toks = re.findall(r"[a-z0-9]+", s)
+    if sum(1 for t in toks if t in generic) >= 2: return True
+    return False
+
+def _topic_outline_script(topic: str, lang: str="en") -> List[str]:
+    t = (topic or "This Topic").strip()
+    # Dilli ama somut bir iskelet (7–8 cümle)
+    if (lang or "en").startswith("tr"):
+        return [
+            f"{t} için hızlı bir görsel rehber.",
+            "Önce ekranda gerçekten görülebilen bir örnek seç.",
+            "Ardından bunun nasıl çalıştığını kısa bir mekanizma ile açıkla.",
+            "Bir sayı ya da oran ver; akılda kalıcı olsun.",
+            "Konuyu güçlendiren ikinci bir somut örnek göster.",
+            "Yaygın bir yanılgıyı tek cümlede düzelt.",
+            "Evde denenecek çok küçük bir adım öner.",
+            "Finalde izleyiciyi düşünmeye çağıran tek bir soru sor."
+        ]
+    return [
+        f"{t}, in a fast visual guide.",
+        "Start with a real object viewers can recognize.",
+        "Explain the mechanism in one concrete sentence.",
+        "Drop one number or ratio that actually matters.",
+        "Show a second, unmistakable visual example.",
+        "Correct a common misconception in one line.",
+        "Offer a tiny action viewers can try today.",
+        "End with a single question that sticks."
+    ]
+
+def rehydrate_sentences(topic: str, sentences: List[str]) -> List[str]:
+    # Zayıfsa güvenli bir outline ile yeniden yaz
+    strong = []
+    if not sentences: return _topic_outline_script(topic, LANG)
+    for s in sentences:
+        if is_low_information(s):
+            strong.append(None)
+        else:
+            strong.append(s)
+    if any(x is None for x in strong):
+        outline = _topic_outline_script(topic, LANG)
+        j = 0
+        for i in range(len(strong)):
+            if strong[i] is None:
+                strong[i] = outline[j % len(outline)]
+                j += 1
+    # uzunluk/sınırlar
+    strong = [clean_caption_text(x) for x in strong if x]
+    return (strong + _topic_outline_script(topic, LANG))[:8]
 
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
-    payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.7}}
+    payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.6}}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     r = requests.post(url, headers=headers, json=payload, timeout=60)
     if r.status_code != 200:
@@ -493,13 +553,24 @@ def build_via_gemini(mode: str, channel_name: str, topic_lock: str, user_terms: 
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:8]) if user_terms else "(none)"
     topic_line = topic_lock or "Amazing Facts"
-    guardrails = """
+
+    guardrails = f"""
 RULES (MANDATORY):
-- STAY ON TOPIC: Keep content aligned to the provided channel TOPIC exactly.
-- DO NOT pivot to 'country facts' or geography unless the TOPIC explicitly asks for it.
-- Keep each sentence short, concrete, and visually anchorable for stock b-roll.
-- Return ONLY JSON, no prose, no markdown.
+- HARD TOPIC LOCK: Stay strictly on "{topic_line}". Do NOT drift to country facts or unrelated trivia.
+- Write exactly 7–8 sentences, each 6–12 words.
+- Structure:
+  1) Hook tied to a real, nameable visual.
+  2) Mechanism: why it works, in plain words.
+  3) Number/ratio that matters (e.g., 1:phi, 60%, 3:2).
+  4) Second visual example (place/object), unambiguous.
+  5) Contrast/misconception correction (one line).
+  6) Micro-application the viewer can try.
+  7) Sticky closing line or question.
+- BAN generic fillers: {", ".join(sorted(LOW_INFO_BAD))}
+- Prefer nouns/proper nouns that map to b-roll.
+- Return JSON only, no prose/markdown.
 """
+
     prompt = f"""{template}
 
 Channel: {channel_name}
@@ -514,15 +585,14 @@ Avoid recent/duplicate topics for 180 days:
     country = str(data.get("country") or "World").strip()
     topic   = topic_line  # force lock
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
-    sentences = [s for s in sentences if s][:8]
+    sentences = rehydrate_sentences(topic, sentences)[:8]
     terms = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
     terms = [t.strip() for t in terms if isinstance(t,str) and t.strip()]
-    # merge user terms to front
     if user_terms:
         pref = [t for t in user_terms if t not in terms]
         terms = pref + terms
-    title = (data.get("title") or "").strip()
+    title = (data.get("title") or f"{topic_line} — in 60s").strip()
     desc  = (data.get("description") or "").strip()
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return country, topic, sentences, terms, title, desc, tags
@@ -563,12 +633,6 @@ def _domain_synonyms(all_text: str) -> List[str]:
     return list(s)
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mode: str, topic: Optional[str]=None) -> List[str]:
-    """
-    Cümlelerden sağlam 2-gram çıkar; işe yaramazsa:
-      1) SEARCH_TERMS rotasyonu
-      2) TOPIC'ten anahtarlar
-      3) Son emniyet: 'macro detail' vb.
-    """
     topic = (topic or "").strip()
     texts_cap = [topic] + sentences
     texts_all = " ".join([topic] + sentences)
@@ -580,16 +644,14 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mod
         toks = [w for w in s.split() if len(w) >= 4 and w not in _STOP and w not in _GENERIC_BAD]
         return toks
 
-    # Kullanıcı SEARCH_TERMS'i normalize et
     fb=[]
     for t in (fallback_terms or []):
         t = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
         if not t: continue
         ws = [w for w in t.split() if w not in _STOP and w not in _GENERIC_BAD]
         if ws:
-            fb.append(" ".join(ws[:2]))  # 1-2 kelime
+            fb.append(" ".join(ws[:2]))
 
-    # TOPIC'ten 1-2 anahtar
     topic_keys = _tok4(topic)[:2]
     topic_key_join = " ".join(topic_keys) if topic_keys else ""
 
@@ -598,40 +660,22 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mod
     for s in sentences:
         s_low = " " + (s or "").lower() + " "
         picked=None
-
-        # 1) Proper phrase havuzu (ör. 'stone arch')
         for ph in phrase_pool:
             if f" {ph} " in s_low:
                 picked = ph; break
-
-        # 2) Cümleden 2-gram
         if not picked:
             toks = _tok4(s)
-            if len(toks) >= 2:
-                picked = f"{toks[0]} {toks[1]}"
-            elif len(toks) == 1:
-                picked = toks[0]
-
-        # 3) SEARCH_TERMS rotasyonu
+            if len(toks) >= 2: picked = f"{toks[0]} {toks[1]}"
+            elif len(toks) == 1: picked = toks[0]
         if (not picked or len(picked) < 4) and fb:
-            picked = fb[fb_idx % len(fb)]
-            fb_idx += 1
-
-        # 4) TOPIC’ten anahtar
+            picked = fb[fb_idx % len(fb)]; fb_idx += 1
         if (not picked or len(picked) < 4) and topic_key_join:
             picked = topic_key_join
-
-        # 5) Son emniyet
         if not picked or picked in ("great","nice","good","bad","things","stuff"):
             picked = "macro detail"
-
-        # Aşırı uzun üç+ kelime varsa son iki kelimeye indir
         if len(picked.split()) > 2:
-            w = picked.split()
-            picked = f"{w[-2]} {w[-1]}"
-
+            w = picked.split(); picked = f"{w[-2]} {w[-1]}"
         queries.append(picked)
-
     return queries
 
 # -------------------- Pexels (tek odak + tekrar önleme) --------------------
@@ -727,53 +771,53 @@ def main():
     topic_lock = TOPIC
     user_terms = SEARCH_TERMS_ENV
 
-    if USE_GEMINI and GEMINI_API_KEY:
-        banlist = _recent_topics_for_prompt()
-        chosen, last = None, None
-        for _ in range(6):
-            try:
-                ctry, tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(MODE, CHANNEL_NAME, topic_lock, user_terms, banlist)
-                last = (ctry, tpc, sents, search_terms, ttl, desc, tags)
-                sig = f"{MODE}|{tpc}|{sents[0] if sents else ''}"
-                h = _hash12(sig)
-                if not _is_recent(h, window_days=180):
-                    _record_recent(h, MODE, tpc)
-                    chosen = last; break
+    if topic_lock:
+        if USE_GEMINI and GEMINI_API_KEY:
+            banlist = _recent_topics_for_prompt()
+            chosen, last = None, None
+            for _ in range(5):
+                try:
+                    ctry, tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(MODE, CHANNEL_NAME, topic_lock, user_terms, banlist)
+                    last = (ctry, tpc, sents, search_terms, ttl, desc, tags)
+                    sig = f"{MODE}|{tpc}|{sents[0] if sents else ''}"
+                    h = _hash12(sig)
+                    if not _is_recent(h, window_days=180):
+                        _record_recent(h, MODE, tpc)
+                        chosen = last; break
+                    else:
+                        banlist.insert(0, tpc); time.sleep(0.5)
+                except Exception as e:
+                    print(f"Gemini error: {str(e)[:160]}"); time.sleep(0.5)
+            if chosen is None:
+                if last:
+                    ctry, tpc, sents, search_terms, ttl, desc, tags = last
+                    sents = rehydrate_sentences(tpc, sents)
                 else:
-                    banlist.insert(0, tpc)
-                    time.sleep(0.6)
-            except Exception as e:
-                print(f"Gemini error: {str(e)[:160]}"); time.sleep(0.6)
-        if chosen is None:
-            if last:
-                ctry, tpc, sents, search_terms, ttl, desc, tags = last
-            else:
-                # Fallback: TOPIC’a uygun çok kısa iskelet
-                ctry, tpc = "World", (topic_lock or "Interesting Shorts")
-                sents = [
-                    f"{tpc} in 60 seconds.",
-                    "One crisp idea per scene.",
-                    "Clear example you can visualize.",
-                    "A tiny twist to remember it.",
-                    "No fluff—just the point.",
-                    "See it. Learn it. Done.",
-                    "Would you try this today?",
-                ]
-                search_terms = user_terms or ["b-roll", "macro detail", "timelapse city"]
-                ttl = desc = ""; tags = []
+                    ctry, tpc = "World", (topic_lock or "Shorts")
+                    sents = _topic_outline_script(tpc, LANG)
+                    search_terms = user_terms or []
+                    ttl = f"{tpc} — in 60s"; desc = ""; tags = []
+        else:
+            ctry, tpc = "World", (topic_lock or "Shorts")
+            sents = _topic_outline_script(tpc, LANG)
+            search_terms = user_terms or []
+            ttl = f"{tpc} — in 60s"; desc = ""; tags = []
     else:
-        ctry, tpc = "World", (topic_lock or "Interesting Shorts")
-        sents = [
-            f"{tpc} in 60 seconds.",
-            "One crisp idea per scene.",
-            "Clear example you can visualize.",
-            "A tiny twist to remember it.",
-            "No fluff—just the point.",
-            "See it. Learn it. Done.",
-            "Would you try this today?",
-        ]
-        search_terms = user_terms or ["b-roll", "macro detail", "timelapse city"]
-        ttl = desc = ""; tags = []
+        # topic yoksa eski davranış
+        if USE_GEMINI and GEMINI_API_KEY:
+            try:
+                ctry, tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(MODE, CHANNEL_NAME, "Interesting Visual Science", user_terms, _recent_topics_for_prompt())
+            except Exception as e:
+                print(f"Gemini error: {str(e)[:160]}")
+                ctry, tpc = "World", "Visual Facts"
+                sents = _topic_outline_script(tpc, LANG)
+                search_terms = user_terms or []
+                ttl = f"{tpc} — in 60s"; desc = ""; tags = []
+        else:
+            ctry, tpc = "World", "Visual Facts"
+            sents = _topic_outline_script(tpc, LANG)
+            search_terms = user_terms or []
+            ttl = f"{tpc} — in 60s"; desc = ""; tags = []
 
     sentences = sents
     print(f"📝 Content: {ctry} | {tpc}")
@@ -868,12 +912,17 @@ def main():
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8) Metadata
+    # 8) Metadata (daha anlamlı)
     def _ok_str(x): return isinstance(x, str) and len(x.strip()) > 0
+    def _desc_from_sentences(ss: List[str]) -> str:
+        bullets = [f"• {s}" for s in ss[:5]]
+        tags = " ".join(f"#{w}" for w in re.findall(r'[A-Za-z]{3,}', (tpc or ""))[:4])
+        return "\n".join(bullets) + (("\n\n" + tags + " #shorts") if tags else "\n\n#shorts")
+
     if _ok_str(ttl):
         meta = {
             "title": ttl[:95],
-            "description": (desc or "")[:4900],
+            "description": ((desc or _desc_from_sentences(sentences))[:4900]),
             "tags": (tags[:15] if isinstance(tags, list) else []),
             "privacy": VISIBILITY,
             "defaultLanguage": LANG,
@@ -882,11 +931,11 @@ def main():
     else:
         hook = (sentences[0].rstrip(" .!?") if sentences else (tpc or "Shorts"))
         title = f"{hook} — {tpc}"
-        description = "• " + "\n• ".join(sentences[:6]) + f"\n\n#shorts"
+        description = _desc_from_sentences(sentences)
         meta = {
             "title": title[:95],
             "description": description[:4900],
-            "tags": ["shorts","education","broll","learn","tips","visual"],
+            "tags": ["shorts","education","broll","learn","visual","explainer"],
             "privacy": VISIBILITY,
             "defaultLanguage": LANG,
             "defaultAudioLanguage": LANG
@@ -907,5 +956,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
