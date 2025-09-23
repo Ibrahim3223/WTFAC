@@ -1,300 +1,400 @@
 channels:
-  - name: "WT Facts About Countries"
+  - env: "WT Facts About Countries"
+    name: "WT Facts About Countries"
     mode: "country_facts"
+    lang: "en"
+    visibility: "public"
     topic: "Amazing Country Secrets & Cultural Facts"
-    search_terms: ["country landscape 4k", "cultural heritage", "city skyline", "world travel", "monuments"]
-    content_focus: "Surprising facts about different countries, their culture, geography, and hidden secrets"
+    search_terms: ["country landscape 4k","cultural heritage","city skyline","world travel","monuments"]
 
-  - name: "Tales of The Forgotten Realms"
+  - env: "Tales of The Forgotten Realms"
+    name: "Tales of The Forgotten Realms"
     mode: "history_story"
+    lang: "en"
+    visibility: "public"
     topic: "Forgotten Historical Tales & Lost Stories"
-    search_terms: ["ancient ruins 4k", "historical manuscripts", "old castle", "medieval", "archaeology"]
-    content_focus: "Lesser-known historical events, ancient civilizations, and forgotten stories from the past"
+    search_terms: ["ancient ruins 4k","historical manuscripts","old castle","medieval","archaeology"]
 
-  - name: "Famous Quotes Explained"
+  - env: "Famous Quotes Explained"
+    name: "Famous Quotes Explained"
     mode: "quotes"
+    lang: "en"
+    visibility: "public"
     topic: "Wisdom Behind Famous Quotes"
-    search_terms: ["library books 4k", "thinking person", "wisdom concept", "philosophy", "writing"]
-    content_focus: "Breaking down famous quotes, their origins, meanings, and life applications"
+    search_terms: ["library books 4k","thinking person","wisdom concept","philosophy","writing"]
 
-  - name: "TaxWise USA"
+  - env: "TaxWise USA"
+    name: "TaxWise USA"
     mode: "taxwise_usa"
+    lang: "en"
+    visibility: "public"
     topic: "US Tax Tips & Money Saving Strategies"
-    search_terms: ["calculator 4k", "office desk", "documents", "money", "business"]
-    content_focus: "Educational tax tips, deductions, and financial planning for US taxpayers"
+    search_terms: ["calculator 4k","office desk","documents","money","business"]
 
-  - name: "Echo of the Unknown"
+  - env: "Echo of the Unknown"
+    name: "Echo of the Unknown"
     mode: "horror_story"
+    lang: "en"
+    visibility: "public"
     topic: "Mysterious & Spine-Chilling Tales"
-    search_terms: ["dark forest 4k", "mysterious fog", "old house", "candle light", "shadows"]
-    content_focus: "Family-friendly mysterious stories, urban legends, and unexplained phenomena"
+    search_terms: ["dark forest 4k","mysterious fog","old house","candle light","shadows"]
 
-  - name: "World Briefing"
+  - env: "World Briefing"
+    name: "World Briefing"
     mode: "daily_news"
+    lang: "en"
+    visibility: "public"
     topic: "Today's Most Important Global News"
-    search_terms: ["newsroom 4k", "world map", "city timelapse", "press conference", "global"]
-    content_focus: "Daily international news summaries and important global developments"
+    search_terms: ["newsroom 4k","world map","city timelapse","press conference","global"]
 
-  - name: "Flashback Minute"
+  - env: "Flashback Minute"
+    name: "Flashback Minute"
     mode: "history_story"
+    lang: "en"
+    visibility: "public"
     topic: "This Day in History - Important Events"
-    search_terms: ["historical photos", "vintage documents", "timeline", "calendar", "archive"]
-    content_focus: "Significant historical events that happened on today's date throughout history"
+    search_terms: ["historical photos","vintage documents","timeline","calendar","archive"]
 
-  - name: "Universe Jumper"
+  - env: "Universe Jumper"
+    name: "Universe Jumper"
     mode: "alt_universe"
+    lang: "en"
+    visibility: "public"
     topic: "What If Different Characters Lived in Other Worlds"
-    search_terms: ["space universe 4k", "portal effects", "cosmic background", "dimension", "multiverse"]
-    content_focus: "Creative scenarios imagining how different character types would adapt to alternate universes"
+    search_terms: ["space universe 4k","portal effects","cosmic background","dimension","multiverse"]
 
-  - name: "If They Lived Today"
+  - env: "If They Lived Today"
+    name: "If They Lived Today"
     mode: "if_lived_today"
+    lang: "en"
+    visibility: "public"
     topic: "Historical Figures in Modern Times"
-    search_terms: ["modern city 4k", "technology", "smartphone", "contemporary life", "social media"]
-    content_focus: "Imagining how famous historical figures would adapt to and influence today's world"
+    search_terms: ["modern city 4k","technology","smartphone","contemporary life","social media"]
 
-  - name: "Rewind Retro Media"
+  - env: "Rewind Retro Media"
+    name: "Rewind Retro Media"
     mode: "nostalgia_story"
+    lang: "en"
+    visibility: "public"
     topic: "Nostalgic Memories & Retro Culture"
-    search_terms: ["vintage tv 4k", "retro games", "old radio", "cassette tapes", "80s 90s"]
-    content_focus: "Nostalgic content about past decades, retro technology, and childhood memories"
+    search_terms: ["vintage tv 4k","retro games","old radio","cassette tapes","80s 90s"]
 
-  - name: "Cricket Queens"
+  - env: "Cricket Queens"
+    name: "Cricket Queens"
     mode: "cricket_women"
+    lang: "en"
+    visibility: "public"
     topic: "Women's Cricket Highlights & Stories"
-    search_terms: ["women cricket 4k", "female athletes", "cricket stadium", "sports action", "champions"]
-    content_focus: "Women's cricket achievements, player stories, and match highlights"
+    search_terms: ["women cricket 4k","female athletes","cricket stadium","sports action","champions"]
 
-  - name: "GalacticUpdate"
+  - env: "GalacticUpdate"
+    name: "GalacticUpdate"
     mode: "space_news"
+    lang: "en"
+    visibility: "public"
     topic: "Latest Space Discoveries & Cosmic News"
-    search_terms: ["space station 4k", "rocket launch", "planets", "astronaut", "telescope"]
-    content_focus: "Daily space exploration news, astronomical discoveries, and cosmic phenomena"
+    search_terms: ["space station 4k","rocket launch","planets","astronaut","telescope"]
 
-  - name: "Cinematic Echo"
+  - env: "Cinematic Echo"
+    name: "Cinematic Echo"
     mode: "movie_secrets"
+    lang: "en"
+    visibility: "public"
     topic: "Hidden Movie Facts & Behind-the-Scenes Secrets"
-    search_terms: ["movie theater 4k", "film set", "cinema camera", "director", "hollywood"]
-    content_focus: "Movie trivia, behind-the-scenes facts, filmmaking secrets, and cinema history"
+    search_terms: ["movie theater 4k","film set","cinema camera","director","hollywood"]
 
-  - name: "CritterFact"
+  - env: "CritterFact"
+    name: "CritterFact"
     mode: "animal_facts"
+    lang: "en"
+    visibility: "public"
     topic: "Amazing Animal Abilities & Wildlife Secrets"
-    search_terms: ["wildlife 4k", "animal close up", "nature documentary", "safari", "zoo"]
-    content_focus: "Fascinating animal behaviors, abilities, and surprising facts about wildlife"
+    search_terms: ["wildlife 4k","animal close up","nature documentary","safari","zoo"]
 
-  - name: "WildWonderCaps"
+  - env: "WildWonderCaps"
+    name: "WildWonderCaps"
     mode: "animal_facts"
+    lang: "en"
+    visibility: "public"
     topic: "Incredible Wildlife Moments & Animal Wonders"
-    search_terms: ["wild animals 4k", "nature reserve", "animal behavior", "wildlife photography", "jungle"]
-    content_focus: "Spectacular wildlife footage, animal intelligence, and nature's amazing moments"
+    search_terms: ["wild animals 4k","nature reserve","animal behavior","wildlife photography","jungle"]
 
-  - name: "NextGen Update"
+  - env: "NextGen Update"
+    name: "NextGen Update"
     mode: "tech_news"
+    lang: "en"
+    visibility: "public"
     topic: "Latest Technology Breakthroughs & Innovations"
-    search_terms: ["technology 4k", "innovation lab", "gadgets", "AI research", "tech conference"]
-    content_focus: "Current technology news, gadget reviews, and breakthrough innovations"
+    search_terms: ["technology 4k","innovation lab","gadgets","AI research","tech conference"]
 
-  - name: "BeyondAxis"
+  - env: "BeyondAxis"
+    name: "BeyondAxis"
     mode: "utopic_tech"
+    lang: "en"
+    visibility: "public"
     topic: "Future Utopian Technology & Tomorrow's Innovations"
-    search_terms: ["futuristic city 4k", "hologram", "flying cars", "clean energy", "smart home"]
-    content_focus: "Positive visions of future technology that could improve humanity's quality of life"
+    search_terms: ["futuristic city 4k","hologram","flying cars","clean energy","smart home"]
 
-  - name: "BehindTheFame"
+  - env: "BehindTheFame"
+    name: "BehindTheFame"
     mode: "fame_story"
+    lang: "en"
+    visibility: "public"
     topic: "Celebrity Success Stories & Behind-the-Fame Tales"
-    search_terms: ["red carpet 4k", "stage lights", "studio", "paparazzi", "awards ceremony"]
-    content_focus: "Inspiring stories of how celebrities achieved success, using generic examples and archetypes"
+    search_terms: ["red carpet 4k","stage lights","studio","paparazzi","awards ceremony"]
 
-  - name: "One Day Inside"
+  - env: "One Day Inside"
+    name: "One Day Inside"
     mode: "post_apoc"
+    lang: "en"
+    visibility: "public"
     topic: "Post-Apocalyptic Survival Stories & Future Scenarios"
-    search_terms: ["abandoned city 4k", "survival gear", "wasteland", "bunker", "rebuilding"]
-    content_focus: "Family-friendly post-apocalyptic scenarios focusing on resilience, hope, and human adaptation"
+    search_terms: ["abandoned city 4k","survival gear","wasteland","bunker","rebuilding"]
 
-  - name: "Gods Unleashed"
+  - env: "Gods Unleashed"
+    name: "Gods Unleashed"
     mode: "mythology_battle"
+    lang: "en"
+    visibility: "public"
     topic: "Epic Mythological Battles & Divine Encounters"
-    search_terms: ["ancient temple 4k", "mythology art", "divine light", "epic battle", "legends"]
-    content_focus: "Epic mythological scenarios and divine encounters from various world mythologies"
+    search_terms: ["ancient temple 4k","mythology art","divine light","epic battle","legends"]
 
-  - name: "Microworld Stories"
+  - env: "Microworld Stories"
+    name: "Microworld Stories"
     mode: "kids_story"
+    lang: "en"
+    visibility: "public"
     topic: "Fun Educational Stories for Young Minds"
-    search_terms: ["children playing 4k", "colorful animation", "playground", "learning", "imagination"]
-    content_focus: "Educational and entertaining stories designed to inspire and teach children"
+    search_terms: ["children playing 4k","colorful animation","playground","learning","imagination"]
 
-  - name: "Bot Gone Wild"
+  - env: "Bot Gone Wild"
+    name: "Bot Gone Wild"
     mode: "ai_alt"
+    lang: "en"
+    visibility: "public"
     topic: "AI Integration in Daily Life & Future Scenarios"
-    search_terms: ["robot assistant 4k", "smart home", "AI interface", "automation", "helpful robots"]
-    content_focus: "Positive scenarios about AI integration, focusing on helpful and beneficial applications"
+    search_terms: ["robot assistant 4k","smart home","AI interface","automation","helpful robots"]
 
-  - name: "SkySynthLab"
+  - env: "SkySynthLab"
+    name: "SkySynthLab"
     mode: "ai_future"
+    lang: "en"
+    visibility: "public"
     topic: "AI Development Theories & Future Possibilities"
-    search_terms: ["AI laboratory 4k", "computer code", "neural networks", "research lab", "innovation"]
-    content_focus: "Educational content about AI development, focusing on verified research and realistic possibilities"
+    search_terms: ["AI laboratory 4k","computer code","neural networks","research lab","innovation"]
 
-  - name: "FixIt Fast"
+  - env: "FixIt Fast"
+    name: "FixIt Fast"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "Quick DIY Repair Tips & Household Solutions"
-    search_terms: ["toolbox 4k", "repair work", "DIY project", "workshop", "fixing"]
-    content_focus: "Safe and practical repair tips for common household problems and maintenance"
+    search_terms: ["toolbox 4k","repair work","DIY project","workshop","fixing"]
 
-  - name: "GameDay 60"
+  - env: "GameDay 60"
+    name: "GameDay 60"
     mode: "sports_news"
+    lang: "en"
+    visibility: "public"
     topic: "Daily Sports Updates & Athletic Highlights"
-    search_terms: ["sports stadium 4k", "athletes training", "scoreboard", "sports crowd", "championship"]
-    content_focus: "Daily sports news, game highlights, and athletic achievements across various sports"
+    search_terms: ["sports stadium 4k","athletes training","scoreboard","sports crowd","championship"]
 
-  - name: "Planet Snapshot"
+  - env: "Planet Snapshot"
+    name: "Planet Snapshot"
     mode: "country_facts"
+    lang: "en"
+    visibility: "public"
     topic: "Fast Geography & Country Curiosities"
-    search_terms: ["country landscape 4k", "city skyline", "world travel", "cultural heritage", "monument"]
-    content_focus: "Memorable country facts about geography, culture, and record-setting places"
+    search_terms: ["country landscape 4k","city skyline","world travel","cultural heritage","monument"]
 
-  - name: "CityFrame Stories"
-    mode: "country_facts"
+  - env: "CityFrame Stories"
+    name: "CityFrame Stories"
+    mode: "urban_facts"
+    lang: "en"
+    visibility: "public"
     topic: "Urban Facts & Skyline Insights"
-    search_terms: ["city skyline 4k", "urban timelapse", "aerial city", "bridge", "metro station"]
-    content_focus: "Quick, visual explanations of city design, landmarks, and infrastructure"
+    search_terms: ["city skyline 4k","urban timelapse","aerial city","bridge","metro station"]
 
-  - name: "Eco Habit Hacks"
-    mode: "fixit_fast"
+  - env: "Eco Habit Hacks"
+    name: "Eco Habit Hacks"
+    mode: "eco_habits"
+    lang: "en"
+    visibility: "public"
     topic: "One-Minute Sustainable Living Tips"
-    search_terms: ["home kitchen 4k", "daylight interior", "eco lifestyle", "reusable bottle", "forest close up"]
-    content_focus: "Practical, low-cost sustainability tips with clean household visuals"
+    search_terms: ["home kitchen 4k","daylight interior","eco lifestyle","reusable bottle","forest close up"]
 
-  - name: "Pocket Tech Tricks"
+  - env: "Pocket Tech Tricks"
+    name: "Pocket Tech Tricks"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "One-Minute Fixes for Everyday Tech"
-    search_terms: ["typing hands 4k", "phone macro", "laptop desk", "wifi router", "app close up"]
-    content_focus: "Fast, reliable device tips with simple visuals and step-by-step voiceover"
+    search_terms: ["typing hands 4k","phone macro","laptop desk","wifi router","app close up"]
 
-  - name: "SpaceVista 60"
+  - env: "SpaceVista 60"
+    name: "SpaceVista 60"
     mode: "space_news"
+    lang: "en"
+    visibility: "public"
     topic: "Fast & Clear Space Explainers"
-    search_terms: ["rocket launch 4k", "planet surface", "star field", "telescope", "nebula"]
-    content_focus: "Tight, factual space updates and explainers with clean cosmic visuals"
+    search_terms: ["rocket launch 4k","planet surface","star field","telescope","nebula"]
 
-  - name: "MicroNature Minute"
-    mode: "country_facts"
+  - env: "MicroNature Minute"
+    name: "MicroNature Minute"
+    mode: "nature_micro"
+    lang: "en"
+    visibility: "public"
     topic: "Tiny Ecosystems & Macro Nature Facts"
-    search_terms: ["macro forest 4k", "dew drops macro", "mushroom gills", "leaf veins backlight", "insect macro b roll"]
-    content_focus: "Short science facts tied to macro visuals; calming yet informative pacing"
+    search_terms: ["macro forest 4k","dew drops macro","mushroom gills","leaf veins backlight","insect macro b roll"]
 
-  - name: "Kitchen Logic Lab"
+  - env: "Kitchen Logic Lab"
+    name: "Kitchen Logic Lab"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "Practical 60s Cooking & Food Science Tips"
-    search_terms: ["home kitchen 4k", "chopping hands", "stovetop steam", "glass containers", "herbs close up"]
-    content_focus: "Actionable techniques with top-down b-roll and clear captions"
+    search_terms: ["home kitchen 4k","chopping hands","stovetop steam","glass containers","herbs close up"]
 
-  - name: "Weather Window 60"
-    mode: "country_facts"
+  - env: "Weather Window 60"
+    name: "Weather Window 60"
+    mode: "weather_bits"
+    lang: "en"
+    visibility: "public"
     topic: "Fast, Visual Weather Explanations"
-    search_terms: ["time lapse clouds", "storm shelf cloud", "rainy city 4k", "wind over grass", "sunrise fog"]
-    content_focus: "One concept per short with strong sky visuals and plain-language takeaways"
+    search_terms: ["time lapse clouds","storm shelf cloud","rainy city 4k","wind over grass","sunrise fog"]
 
-  - name: "Focus Rituals"
+  - env: "Focus Rituals"
+    name: "Focus Rituals"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "One Practical Routine for Better Focus"
-    search_terms: ["minimal desk 4k", "typing hands", "notebook writing", "morning window light", "calm workspace"]
-    content_focus: "Short, repeatable routines with uncluttered visuals and step-by-step captions"
+    search_terms: ["minimal desk 4k","typing hands","notebook writing","morning window light","calm workspace"]
 
-  - name: "TrailScape 60"
-    mode: "country_facts"
+  - env: "TrailScape 60"
+    name: "TrailScape 60"
+    mode: "travel_spot"
+    lang: "en"
+    visibility: "public"
     topic: "Beautiful Trails & Landmarks in 60s"
-    search_terms: ["mountain trail 4k", "waterfall aerial", "coastal path", "forest hike", "lake viewpoint"]
-    content_focus: "One scenic spot per short with when-to-go and a simple on-trail tip"
+    search_terms: ["mountain trail 4k","waterfall aerial","coastal path","forest hike","lake viewpoint"]
 
-  - name: "Ocean Pulse"
-    mode: "country_facts"
+  - env: "Ocean Pulse"
+    name: "Ocean Pulse"
+    mode: "coast_science"
+    lang: "en"
+    visibility: "public"
     topic: "One-Minute Ocean & Coast Science"
-    search_terms: ["ocean waves 4k", "rocky coast aerial", "lighthouse coast", "tide pool", "stormy sea"]
-    content_focus: "Visual coastal explainers with clear safety and science cues"
+    search_terms: ["ocean waves 4k","rocky coast aerial","lighthouse coast","tide pool","stormy sea"]
 
-  - name: "Timelapse Lab"
-    mode: "country_facts"
+  - env: "Timelapse Lab"
+    name: "Timelapse Lab"
+    mode: "timelapse_science"
+    lang: "en"
+    visibility: "public"
     topic: "Visual Science Through Time"
-    search_terms: ["plant growth timelapse", "city timelapse", "cloud timelapse", "melting ice macro", "star trails"]
-    content_focus: "One phenomenon per short, anchored to a single powerful timelapse"
+    search_terms: ["plant growth timelapse","city timelapse","cloud timelapse","melting ice macro","star trails"]
 
-  - name: "Orderly Home 60"
+  - env: "Orderly Home 60"
+    name: "Orderly Home 60"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "One-Minute Home Organization"
-    search_terms: ["tidy desk 4k", "drawer organizer top down", "pantry jars", "closet folding", "cable management"]
-    content_focus: "Repeatable, small-step organization with neutral, logo-free visuals"
+    search_terms: ["tidy desk 4k","drawer organizer top down","pantry jars","closet folding","cable management"]
 
-  - name: "RoadVista 60"
-    mode: "country_facts"
+  - env: "RoadVista 60"
+    name: "RoadVista 60"
+    mode: "travel_spot"
+    lang: "en"
+    visibility: "public"
     topic: "Scenic Road Mini-Guides"
-    search_terms: ["mountain pass aerial", "coastal highway aerial", "desert road 4k", "forest road", "bridge viewpoint"]
-    content_focus: "What to see, when to go, and one safety cue per drive"
+    search_terms: ["mountain pass aerial","coastal highway aerial","desert road 4k","forest road","bridge viewpoint"]
 
-  - name: "Wild Pattern Atlas"
-    mode: "country_facts"
+  - env: "Wild Pattern Atlas"
+    name: "Wild Pattern Atlas"
+    mode: "animal_patterns"
+    lang: "en"
+    visibility: "public"
     topic: "The Science of Natural Textures"
-    search_terms: ["fur macro", "feather macro", "bark texture", "sand dune aerial", "rock strata"]
-    content_focus: "One pattern per short with function, formation, and a memory hook"
+    search_terms: ["fur macro","feather macro","bark texture","sand dune aerial","rock strata"]
 
-  - name: "Hidden Math IRL"
-    mode: "country_facts"
+  - env: "Hidden Math IRL"
+    name: "Hidden Math IRL"
+    mode: "math_visuals"
+    lang: "en"
+    visibility: "public"
     topic: "Geometry & Ratios Found in Real Scenes"
-    search_terms: ["spiral staircase 4k", "tiled floor pattern", "stone arch bridge", "fountain water arc", "ripple circles"]
-    content_focus: "One visual, one math idea, a sticky takeaway"
+    search_terms: ["spiral staircase 4k","tiled floor pattern","stone arch bridge","fountain water arc","ripple circles"]
 
-  - name: "Mechanism Minute"
-    mode: "country_facts"
+  - env: "Mechanism Minute"
+    name: "Mechanism Minute"
+    mode: "mechanism_explain"
+    lang: "en"
+    visibility: "public"
     topic: "How Everyday Mechanisms Work"
-    search_terms: ["macro gears 4k", "conveyor machine", "belt and pulley", "cam mechanism", "robotic arm close up"]
-    content_focus: "One mechanism, clear diagrammatic captions, real examples"
+    search_terms: ["macro gears 4k","conveyor machine","belt and pulley","cam mechanism","robotic arm close up"]
 
-  - name: "LightCraft Studio"
+  - env: "LightCraft Studio"
+    name: "LightCraft Studio"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "One-Minute Lighting for Real Rooms"
-    search_terms: ["window light interior 4k", "lamp corner", "wall wash", "led strip ambient", "desk setup lighting"]
-    content_focus: "Practical lighting moves with clean overlays and immediate results"
+    search_terms: ["window light interior 4k","lamp corner","wall wash","led strip ambient","desk setup lighting"]
 
-  - name: "Bridge & Tunnel Atlas"
-    mode: "country_facts"
+  - env: "Bridge & Tunnel Atlas"
+    name: "Bridge & Tunnel Atlas"
+    mode: "urban_facts"
+    lang: "en"
+    visibility: "public"
     topic: "Beautiful Crossings Explained in 60s"
-    search_terms: ["suspension bridge aerial", "cable stayed bridge", "stone arch bridge", "highway tunnel light trails", "river crossing"]
-    content_focus: "Design idea + visual labels + best viewing cue"
+    search_terms: ["suspension bridge aerial","cable stayed bridge","stone arch bridge","highway tunnel light trails","river crossing"]
 
-  - name: "Object Origins"
-    mode: "country_facts"
+  - env: "Object Origins"
+    name: "Object Origins"
+    mode: "object_history"
+    lang: "en"
+    visibility: "public"
     topic: "The Design Histories of Everyday Things"
-    search_terms: ["macro paper clip", "ceramic mug on table", "light switch close up", "zipper macro", "pencil close up"]
-    content_focus: "One object, one turning point, one usability lesson"
+    search_terms: ["macro paper clip","ceramic mug on table","light switch close up","zipper macro","pencil close up"]
 
-  - name: "Epic Mundane"
-    mode: "country_facts"
+  - env: "Epic Mundane"
+    name: "Epic Mundane"
+    mode: "deadpan_comedy"
+    lang: "en"
+    visibility: "public"
     topic: "Overdramatic Narration for Ordinary Things"
-    search_terms: ["kettle boiling steam", "laundry spinning drum", "pigeons walking", "traffic light close up", "toaster pop slow motion"]
-    content_focus: "Deadpan epic voiceover + ordinary b-roll = contrast comedy"
+    search_terms: ["kettle boiling steam","laundry spinning drum","pigeons walking","traffic light close up","toaster pop slow motion"]
 
-  - name: "Corporate Jargon Translator"
-    mode: "country_facts"
+  - env: "Corporate Jargon Translator"
+    name: "Corporate Jargon Translator"
+    mode: "office_plain"
+    lang: "en"
+    visibility: "public"
     topic: "Buzzwords into Plain English"
-    search_terms: ["typing hands desk", "office corridor", "whiteboard close up", "printer room", "sticky notes top down"]
-    content_focus: "Dry translations of office clichés with clean b-roll"
+    search_terms: ["typing hands desk","office corridor","whiteboard close up","printer room","sticky notes top down"]
 
-  - name: "Pet Inner Monologue"
-    mode: "country_facts"
+  - env: "Pet Inner Monologue"
+    name: "Pet Inner Monologue"
+    mode: "pet_caption"
+    lang: "en"
+    visibility: "public"
     topic: "Cats & Dogs, Captioned Thoughts"
-    search_terms: ["cat by window", "dog head tilt", "pet on sofa", "pet toy on carpet", "empty pet bowl close up"]
-    content_focus: "Warm VO + captions over simple pet b-roll; family-friendly humor"
+    search_terms: ["cat by window","dog head tilt","pet on sofa","pet toy on carpet","empty pet bowl close up"]
 
-  - name: "Tiny Drama Dept."
-    mode: "country_facts"
+  - env: "Tiny Drama Dept."
+    name: "Tiny Drama Dept."
+    mode: "deadpan_comedy"
+    lang: "en"
+    visibility: "public"
     topic: "Soap-Opera Narration for Tiny Problems"
-    search_terms: ["coffee spill slow motion", "printer error light", "office chair spin", "door close slow motion", "microwave timer close up"]
-    content_focus: "Escalation structure + deadpan delivery over close-up props"
+    search_terms: ["coffee spill slow motion","printer error light","office chair spin","door close slow motion","microwave timer close up"]
 
-  - name: "Wrong Way First"
+  - env: "Wrong Way First"
+    name: "Wrong Way First"
     mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
     topic: "How-Not-To Comedy with Quick Fixes"
-    search_terms: ["messy desk cables", "crooked frame wall", "kitchen burn smoke", "packing suitcase messy", "tripod wrong setup"]
-    content_focus: "Do it wrong on purpose, then fix in two beats"
+    search_terms: ["messy desk cables","crooked frame wall","kitchen burn smoke","packing suitcase messy","tripod wrong setup"]
