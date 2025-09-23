@@ -287,6 +287,13 @@ channels:
    search_terms: ["cat by window", "dog head tilt", "pet on sofa", "pet toy on carpet", "empty pet bowl close up"]
    content_focus: "Warm VO + captions over simple pet b-roll; family-friendly humor"
 
+ - name: "Tiny Drama Dept."
+   mode: "country_facts"
+   topic: "Soap-Opera Narration for Tiny Problems"
+   search_terms: ["coffee spill slow motion", "printer error light", "office chair spin", "door close slow motion", "microwave timer close up"]
+   content_focus: "Escalation structure + deadpan delivery over close-up props"
+
+
 
 
 
