@@ -269,6 +269,13 @@ channels:
    search_terms: ["macro paper clip", "ceramic mug on table", "light switch close up", "zipper macro", "pencil close up"]
    content_focus: "One object, one turning point, one usability lesson"
 
+ - name: "Epic Mundane"
+   mode: "country_facts"
+   topic: "Overdramatic Narration for Ordinary Things"
+   search_terms: ["kettle boiling steam", "laundry spinning drum", "pigeons walking", "traffic light close up", "toaster pop slow motion"]
+   content_focus: "Deadpan epic voiceover + ordinary b-roll = contrast comedy"
+
+
 
 
 
