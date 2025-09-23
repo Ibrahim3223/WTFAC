@@ -39,6 +39,7 @@ jobs:
       GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
       CAPTION_MAX_LINE:  ${{ vars.CAPTION_MAX_LINE || '28' }}
       CAPTION_MAX_LINES: ${{ vars.CAPTION_MAX_LINES || '6' }}
+      PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
 
     steps:
       - name: Checkout
