@@ -22,6 +22,7 @@ GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # ---- Channel intent (NEW) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
+TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 # SEARCH_TERMS env: JSON list ya da virgül ayraçlı string olabilir
 def _parse_terms(s: str) -> List[str]:
     TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
@@ -906,4 +907,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
