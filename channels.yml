@@ -251,6 +251,13 @@ channels:
    search_terms: ["macro gears 4k", "conveyor machine", "belt and pulley", "cam mechanism", "robotic arm close up"]
    content_focus: "One mechanism, clear diagrammatic captions, real examples"
 
+ - name: "LightCraft Studio"
+   mode: "fixit_fast"
+   topic: "One-Minute Lighting for Real Rooms"
+   search_terms: ["window light interior 4k", "lamp corner", "wall wash", "led strip ambient", "desk setup lighting"]
+   content_focus: "Practical lighting moves with clean overlays and immediate results"
+
+
 
 
 
