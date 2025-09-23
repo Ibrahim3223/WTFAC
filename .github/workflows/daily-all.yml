@@ -2,7 +2,7 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # 12:00 UTC
+    - cron: "0 12 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -29,21 +29,21 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import yaml, json, sys, pathlib
-          data = yaml.safe_load(open("channels.yml", "r", encoding="utf-8"))
+          import yaml, json
+          data = yaml.safe_load(open("channels.yml","r",encoding="utf-8"))
           mx = {"include": []}
           for ch in data.get("channels", []):
               mx["include"].append({
                   "name": ch["name"],
-                  "env":  ch["env"],                       # environment adı (UI ile birebir)
-                  "mode": ch.get("mode","default"),
+                  "env": ch.get("env", ch["name"]),
+                  "mode": ch.get("mode","freeform"),
                   "lang": ch.get("lang","en"),
                   "visibility": ch.get("visibility","public"),
                   "seed": ch.get("seed","0"),
+                  "topic": ch.get("topic",""),
+                  "search_terms": ch.get("search_terms", []),
               })
-          out = json.dumps(mx, ensure_ascii=False)
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
-              f.write(f"matrix={out}\n")
+          print(f"::set-output name=matrix::{json.dumps(mx)}")
           PY
 
   build-upload:
@@ -53,37 +53,27 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
 
-    # Her job ilgili environment’ı açar
     environment: ${{ matrix.env }}
 
     timeout-minutes: 35
 
     env:
-      TZ:                 ${{ vars.TZ || 'UTC' }}
-      # —— içerik kontrolü
-      CHANNEL_NAME:       ${{ matrix.name }}
-      MODE:               ${{ vars.MODE || matrix.mode }}
-      LANG:               ${{ vars.LANG || matrix.lang }}
-      VISIBILITY:         ${{ vars.VISIBILITY || matrix.visibility }}
-      TOPIC:              ${{ vars.TOPIC || '' }}             # env->Variables içinden
-      SEARCH_TERMS:       ${{ vars.SEARCH_TERMS || '' }}      # JSON dizi veya virgüllü string
-      ROTATION_SEED:      ${{ vars.ROTATION_SEED || matrix.seed }}
-      # —— TTS / Caption
-      TTS_VOICE:          ${{ vars.TTS_VOICE || '' }}
-      TTS_RATE:           ${{ vars.TTS_RATE || '+12%' }}
-      CAPTION_MAX_LINE:   ${{ vars.CAPTION_MAX_LINE || '28' }}
-      CAPTION_MAX_LINES:  ${{ vars.CAPTION_MAX_LINES || '6' }}
-      TARGET_MIN_SEC:     ${{ vars.TARGET_MIN_SEC || '22' }}
-      TARGET_MAX_SEC:     ${{ vars.TARGET_MAX_SEC || '42' }}
-      # —— Gemini (opsiyonel)
-      USE_GEMINI:         ${{ vars.USE_GEMINI || '0' }}
-      GEMINI_MODEL:       ${{ vars.GEMINI_MODEL || 'gemini-1.5-flash' }}
-      # —— API keys (secrets)
-      PEXELS_API_KEY:     ${{ secrets.PEXELS_API_KEY }}
-      GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
-      YT_CLIENT_ID:       ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET:   ${{ secrets.YT_CLIENT_SECRET }}
-      YT_REFRESH_TOKEN:   ${{ secrets.YT_REFRESH_TOKEN }}
+      TZ:                ${{ vars.TZ || 'UTC' }}
+      CHANNEL_NAME:      ${{ matrix.name }}
+      # IMPORTANT: channel file wins
+      MODE:              ${{ matrix.mode }}
+      LANG:              ${{ vars.LANG || matrix.lang }}
+      VISIBILITY:        ${{ vars.VISIBILITY || matrix.visibility }}
+      TTS_VOICE:         ${{ vars.TTS_VOICE || '' }}
+      TARGET_MIN_SEC:    ${{ vars.TARGET_MIN_SEC || '22' }}
+      TARGET_MAX_SEC:    ${{ vars.TARGET_MAX_SEC || '40' }}
+      # Topic & search terms passthrough (env can override)
+      TOPIC:             ${{ vars.TOPIC || matrix.topic }}
+      SEARCH_TERMS:      ${{ vars.SEARCH_TERMS || toJSON(matrix.search_terms) }}
+      USE_GEMINI:        ${{ vars.USE_GEMINI || '1' }}
+      GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      CAPTION_MAX_LINE:  ${{ vars.CAPTION_MAX_LINE || '28' }}
+      CAPTION_MAX_LINES: ${{ vars.CAPTION_MAX_LINES || '6' }}
 
     steps:
       - name: Checkout
@@ -99,7 +89,8 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: ${{ runner.os }}-pip-
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install ffmpeg
         run: |
