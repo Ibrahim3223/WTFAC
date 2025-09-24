@@ -891,23 +891,29 @@ def main():
 
     # 3) Pexels — sahne başına net sorgular
     # hints güvenli doldurma (en az len(sentences))
-hints_for_queries = list(hints) if hints else []
-while len(hints_for_queries) < len(sentences):
-    hints_for_queries.append(hints_for_queries[-1] if hints_for_queries else "macro detail")
+    hints_for_queries = list(hints) if hints else []
+    while len(hints_for_queries) < len(sentences):
+        hints_for_queries.append(hints_for_queries[-1] if hints_for_queries else "macro detail")
 
-per_scene_queries = build_per_scene_queries(
-    sentences,
-    hints_for_queries,
-    (search_terms or user_terms or []),
-    topic_lock or "Interesting Shorts"
-)
+    # build_per_scene_queries imzan şu şekilde olmalı:
+    # build_per_scene_queries(sentences, hints_or_terms, fallback_terms, topic)
+    per_scene_queries = build_per_scene_queries(
+        sentences,
+        hints_for_queries,
+        (search_terms or user_terms or []),
+        topic_lock or "Interesting Shorts",
+    )
+
     print("🔎 Per-scene queries:")
-    for q in per_scene_queries: print(f"   • {q}")
+    for q in per_scene_queries:
+        print(f"   • {q}")
 
     picked = []
     for q in per_scene_queries:
         vid, link = pexels_pick_one(q)
-        if vid and link: picked.append((vid, link))
+        if vid and link:
+            picked.append((vid, link))
+
     if not picked:
         raise RuntimeError("Pexels: no results (per-scene).")
 
@@ -1034,4 +1040,5 @@ per_scene_queries = build_per_scene_queries(
 
 if __name__ == "__main__":
     main()
+
 
