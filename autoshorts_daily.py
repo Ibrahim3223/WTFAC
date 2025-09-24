@@ -679,26 +679,54 @@ def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
     try:
         for portrait in (True, False):
             data = _pexels_search(query, portrait_only=portrait, page=1, per_page=30)
-            cand = []; block = _blocklist_get_pexels()
-            for v in data.get("videos", []) or []:
+            cand = []
+            block = _blocklist_get_pexels()
+            for v in (data.get("videos", []) or []):
                 vid = int(v.get("id", 0))
-                if vid in block or vid in _USED_PEXELS_IDS_RUNTIME: continue
-                files = v.get("video_files", []) or []; if not files: continue
-                pf = [x for x in files if int(x.get("height",0)) >= int(x.get("width",0))] if portrait else files
-                if not pf: continue
-                pf.sort(key=lambda x: (abs(int(x.get("height",0))-1440) if portrait else 0, int(x.get("height",0))*int(x.get("width",0))))
-                best = pf[0]; h = int(best.get("height",0)); w = int(best.get("width",0))
-                if h < 720: continue
-                dur = float(v.get("duration",0)); dur_bonus = 1.0 if 2.0 <= dur <= 15.0 else 0.0
-                tokens = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
-                qtokens= set(re.findall(r"[a-z0-9]+", query.lower())); overlap = len(tokens & qtokens)
-                score = overlap*2.0 + dur_bonus + (1.0 if 1080 <= h else 0.0)
+                if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
+                    continue
+
+                # --- DÜZELTİLEN KISIM: tek satır + '; if ...' YOK ---
+                files = v.get("video_files", []) or []
+                if not files:
+                    continue
+                # -----------------------------------------------------
+
+                pf = (
+                    [x for x in files if int(x.get("height", 0)) >= int(x.get("width", 0))]
+                    if portrait else files
+                )
+                if not pf:
+                    continue
+
+                pf.sort(
+                    key=lambda x: (
+                        abs(int(x.get("height", 0)) - 1440) if portrait else 0,
+                        int(x.get("height", 0)) * int(x.get("width", 0)),
+                    )
+                )
+                best = pf[0]
+                h = int(best.get("height", 0))
+                w = int(best.get("width", 0))
+                if h < 720:
+                    continue
+
+                dur = float(v.get("duration", 0))
+                dur_bonus = 1.0 if 2.0 <= dur <= 15.0 else 0.0
+
+                tokens  = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
+                qtokens = set(re.findall(r"[a-z0-9]+", query.lower()))
+                overlap = len(tokens & qtokens)
+
+                score = overlap * 2.0 + dur_bonus + (1.0 if 1080 <= h else 0.0)
                 cand.append((score, vid, best.get("link")))
+
             if cand:
                 cand.sort(key=lambda x: x[0], reverse=True)
                 for _, vid, link in cand:
                     if vid not in _USED_PEXELS_IDS_RUNTIME:
-                        _USED_PEXELS_IDS_RUNTIME.add(vid); _blocklist_add_pexels([vid], days=30)
+                        _USED_PEXELS_IDS_RUNTIME.add(vid)
+                        _blocklist_add_pexels([vid], days=30)
                         print(f"   → Pexels pick [{query}] -> id={vid} | {link}")
                         return vid, link
         return None, None
@@ -970,3 +998,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
