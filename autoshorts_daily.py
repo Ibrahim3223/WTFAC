@@ -1,4 +1,4 @@
-# autoshorts_daily.py — Topic-locked content + quality gate + per-scene queries
+# autoshorts_daily.py — Topic-locked content + quality gate + per-scene queries (FIXED)
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple
@@ -174,8 +174,7 @@ def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
     t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
-    if t and t[0].islower():
-        t = t[0].upper() + t[1:]
+    if t and t[0].islower(): t = t[0].upper() + t[1:]
     return t
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
@@ -213,8 +212,7 @@ def _rate_to_atempo(rate_str: str, default: float = 1.08) -> float:
         rate_str = rate_str.strip()
         if rate_str.endswith("%"):
             val = float(rate_str.replace("%","")); return max(0.5, min(2.0, 1.0 + val/100.0))
-        if rate_str.endswith(("x","X")):
-            return max(0.5, min(2.0, float(rate_str[:-1])))
+        if rate_str.endswith(("x","X")): return max(0.5, min(2.0, float(rate_str[:-1])))
         v = float(rate_str); return max(0.5, min(2.0, v))
     except Exception:
         return default
@@ -224,8 +222,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
     from aiohttp.client_exceptions import WSServerHandshakeError
     text = (text or "").strip()
     if not text:
-        run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
-        return 1.0
+        run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out]); return 1.0
     mp3 = wav_out.replace(".wav", ".mp3")
     rate_env = os.getenv("TTS_RATE", "+15%")
     atempo = _rate_to_atempo(rate_env, default=1.15)
@@ -239,13 +236,10 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             try:
                 asyncio.run(_edge_save_simple())
             except RuntimeError:
-                nest_asyncio.apply()
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(_edge_save_simple())
+                nest_asyncio.apply(); loop = asyncio.get_event_loop(); loop.run_until_complete(_edge_save_simple())
             run([
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
-                "-i", mp3,
-                "-ar","48000","-ac","1","-acodec","pcm_s16le",
+                "-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le",
                 "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
                 wav_out
             ])
@@ -253,7 +247,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             return ffprobe_dur(wav_out) or 0.0
         except WSServerHandshakeError as e:
             if getattr(e, "status", None) == 401 or "401" in str(e):
-                print("⚠️ edge-tts 401 → hızlı fallback TTS"); break
+                print("⚠️ edge-tts 401 → fallback TTS"); break
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
         except Exception as e:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
@@ -266,46 +260,36 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         open(mp3, "wb").write(r.content)
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", mp3,
-            "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le",
             "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         return ffprobe_dur(wav_out) or 0.0
     except Exception as e2:
-        print(f"❌ TTS tüm yolları başarısız, sessizlik üretilecek: {e2}")
-        run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
-        return 4.0
+        print(f"❌ TTS failed, generating silence: {e2}")
+        run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out]); return 4.0
 
 # -------------------- Video helpers --------------------
 def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, float]:
-    frames = max(2, int(round(seconds * fps)))
-    return frames, frames / float(fps)
+    frames = max(2, int(round(seconds * fps))); return frames, frames / float(fps)
 
 def make_segment(src: str, dur_s: float, outp: str):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
-    fade = max(0.05, min(0.12, qdur/8.0))
-    fade_out_st = max(0.0, qdur - fade)
+    fade = max(0.05, min(0.12, qdur/8.0)); fade_out_st = max(0.0, qdur - fade)
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
-        f"fps={TARGET_FPS},"
-        f"setpts=N/{TARGET_FPS}/TB,"
+        f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,"
         f"trim=start_frame=0:end_frame={frames},"
-        f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
+        f"fade=t=in:st=0:d={fade:.2f},fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
     )
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", src,
-        "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-an",
-        "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart",
-        outp
+        "-i", src, "-vf", vf, "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-an", "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart", outp
     ])
 
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
@@ -313,77 +297,49 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", video_in,
-        "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-i", video_in, "-vf", vf, "-r", str(TARGET_FPS), "-vsync","cfr",
         "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart",
-        outp
+        "-pix_fmt","yuv420p","-movflags","+faststart", outp
     ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
-    seg_dur = ffprobe_dur(seg)
-    frames = max(2, int(round(seg_dur * TARGET_FPS)))
-    lines = wrapped.split("\n")
-    n_lines = max(1, len(lines))
-    maxchars = max((len(l) for l in lines), default=1)
-    base = 60 if is_hook else 50
-    ratio = CAPTION_MAX_LINE / max(1, maxchars)
+    seg_dur = ffprobe_dur(seg); frames = max(2, int(round(seg_dur * TARGET_FPS)))
+    lines = wrapped.split("\n"); n_lines = max(1, len(lines)); maxchars = max((len(l) for l in lines), default=1)
+    base = 60 if is_hook else 50; ratio = CAPTION_MAX_LINE / max(1, maxchars)
     fs = int(base * min(1.0, max(0.50, ratio)))
     if n_lines >= 5: fs = int(fs * 0.92)
     if n_lines >= 6: fs = int(fs * 0.88)
     if n_lines >= 7: fs = int(fs * 0.84)
     if n_lines >= 8: fs = int(fs * 0.80)
     fs = max(22, fs)
-    if n_lines >= 6:
-        y_pos = "(h*0.55 - text_h/2)"
-    elif n_lines >= 4:
-        y_pos = "(h*0.58 - text_h/2)"
-    else:
-        y_pos = "h-h/3-text_h/2"
-    col = _ff_color(color)
-    font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
+    y_pos = "(h*0.55 - text_h/2)" if n_lines >= 6 else ("(h*0.58 - text_h/2)" if n_lines >= 4 else "h-h/3-text_h/2")
+    col = _ff_color(color); font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
-    vf_overlay = f"{shadow},{box},{main}"
-    vf = f"{vf_overlay},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
+    vf = f"{shadow},{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
     tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
     try:
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", seg,
-            "-vf", vf,
-            "-r", str(TARGET_FPS), "-vsync","cfr",
-            "-an",
-            "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
-            "-pix_fmt","yuv420p","-movflags","+faststart",
-            tmp_out
-        ])
+        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", seg,"-vf", vf,"-r", str(TARGET_FPS),
+             "-vsync","cfr","-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+             "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out])
         enforce_video_exact_frames(tmp_out, frames, outp)
     finally:
-        pathlib.Path(tf).unlink(missing_ok=True)
-        pathlib.Path(tmp_out).unlink(missing_ok=True)
+        pathlib.Path(tf).unlink(missing_ok=True); pathlib.Path(tmp_out).unlink(missing_ok=True)
 
 def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     vdur = ffprobe_dur(video_in)
     if vdur >= target_sec - 0.02:
         pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes()); return
     extra = max(0.0, target_sec - vdur)
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", video_in,
-        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
-        "-map","[v]",
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart",
-        outp
-    ])
+    run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", video_in,
+         "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
+         "-map","[v]","-r", str(TARGET_FPS), "-vsync","cfr","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+         "-pix_fmt","yuv420p","-movflags","+faststart", outp])
 
 def concat_videos_filter(files: List[str], outp: str):
     if not files: raise RuntimeError("concat_videos_filter: empty")
@@ -392,16 +348,9 @@ def concat_videos_filter(files: List[str], outp: str):
         inputs += ["-i", p]
         filters.append(f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
     filtergraph = ";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(len(files))) + f"concat=n={len(files)}:v=1:a=0[v]"
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        *inputs,
-        "-filter_complex", filtergraph,
-        "-map","[v]",
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart",
-        outp
-    ])
+    run(["ffmpeg","-y","-hide_banner","-loglevel","error", *inputs, "-filter_complex", filtergraph,
+         "-map","[v]","-r", str(TARGET_FPS), "-vsync","cfr","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+         "-pix_fmt","yuv420p","-movflags","+faststart", outp])
 
 # -------------------- Audio concat (lossless) --------------------
 def concat_audios(files: List[str], outp: str):
@@ -409,32 +358,18 @@ def concat_audios(files: List[str], outp: str):
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst, "w", encoding="utf-8") as f:
         for p in files: f.write(f"file '{p}'\n")
-    run(["ffmpeg","-y","-hide_banner","-loglevel","error","-f","concat","-safe","0","-i", lst,"-c","copy",outp])
+    run(["ffmpeg","-y","-hide_banner","-loglevel","error","-f","concat","-safe","0","-i", lst,"-c","copy", outp])
     pathlib.Path(lst).unlink(missing_ok=True)
 
 def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
     dur = target_frames / float(TARGET_FPS)
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", audio_in,
-        "-af", f"atrim=end={dur:.6f},asetpts=N/SR/TB",
-        "-ar","48000","-ac","1",
-        "-c:a","pcm_s16le",
-        outp
-    ])
+    run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", audio_in,
+         "-af", f"atrim=end={dur:.6f},asetpts=N/SR/TB","-ar","48000","-ac","1","-c:a","pcm_s16le", outp])
 
 def mux(video: str, audio: str, outp: str):
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", video, "-i", audio,
-        "-map","0:v:0","-map","1:a:0",
-        "-c:v","copy",
-        "-c:a","aac","-b:a","256k",
-        "-movflags","+faststart",
-        "-muxpreload","0","-muxdelay","0",
-        "-avoid_negative_ts","make_zero",
-        outp
-    ])
+    run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", video,"-i", audio,
+         "-map","0:v:0","-map","1:a:0","-c:v","copy","-c:a","aac","-b:a","256k",
+         "-movflags","+faststart","-muxpreload","0","-muxdelay","0","-avoid_negative_ts","make_zero", outp])
 
 # -------------------- Gemini (topic-locked) --------------------
 ENHANCED_GEMINI_TEMPLATES = {
@@ -509,7 +444,8 @@ a an the and or but if while of to in on at from by with for about into over aft
 this that these those is are was were be been being have has had do does did can could should would may might will shall
 you your we our they their he she it its as than then so such very more most many much just also only even still yet
 """.split())
-_GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff","one","crisp","tiny","twist","fluff","point","today","done","learn","see"}
+_GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff",
+                "one","crisp","tiny","twist","fluff","point","today","done","learn","see","start","repeat","rule","action","example","shot"}
 
 def _lower_tokens(s: str) -> List[str]:
     s = re.sub(r"[^A-Za-z0-9 ]+", " ", (s or "")).lower()
@@ -536,6 +472,8 @@ def _domain_synonyms(all_text: str) -> List[str]:
         s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial bridge"])
     if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
         s.update(["ocean waves","coastal storm","rocky coast","lighthouse coast"])
+    if any(k in t for k in ["kitchen","office","desk","printer","microwave","spill","coffee"]):
+        s.update(["kitchen closeup","office desk closeup","microwave timer","coffee spill slow motion","printer error light"])
     return list(s)
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mode: str, topic: Optional[str]=None) -> List[str]:
@@ -558,8 +496,10 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mod
     topic_keys = _tok4(topic)[:2]
     topic_key_join = " ".join(topic_keys) if topic_keys else ""
 
-    queries=[]
-    fb_idx = 0
+    def _is_generic(q: str) -> bool:
+        return (not q) or any(w in _GENERIC_BAD for w in q.split()) or len(q) < 4
+
+    queries=[]; fb_idx = 0
     for s in sentences:
         s_low = " " + (s or "").lower() + " "
         picked=None
@@ -570,47 +510,135 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mod
             toks = _tok4(s)
             if len(toks) >= 2: picked = f"{toks[0]} {toks[1]}"
             elif len(toks) == 1: picked = toks[0]
-        if (not picked or len(picked) < 4) and fb:
+        if (_is_generic(picked)) and fb:
             picked = fb[fb_idx % len(fb)]; fb_idx += 1
-        if (not picked or len(picked) < 4) and topic_key_join:
+        if (_is_generic(picked)) and topic_key_join:
             picked = topic_key_join
-        if not picked:
+        if _is_generic(picked):
             picked = "macro detail"
         if len(picked.split()) > 2:
             w = picked.split(); picked = f"{w[-2]} {w[-1]}"
         queries.append(picked)
     return queries
 
-# -------------------- Content quality gate --------------------
+# -------------------- Content quality / deterministic per topic --------------------
 _BAD_CHUNKS = {"one crisp","clear example","tiny twist","fluff point","see it","learn it","done","would you try"}
 def _score_sentences(sentences: List[str], topic: str) -> float:
     if not sentences: return 0.0
     bad_hits = sum(1 for s in sentences if any(b in s.lower() for b in _BAD_CHUNKS))
     uniq = len(set(s.lower() for s in sentences))
     lens = [len(s.split()) for s in sentences]
-    within_len = sum(1 for L in lens if 5 <= L <= 16)
+    within_len = sum(1 for L in lens if 6 <= L <= 16)
     topical = sum(1 for s in sentences if any(t in s.lower() for t in _lower_tokens(topic)[:3]))
-    return within_len*0.3 + uniq*0.2 + topical*0.3 - bad_hits*0.6
+    return within_len*0.35 + uniq*0.2 + topical*0.35 - bad_hits*0.7
 
-def _deterministic_topic_script(topic: str, terms: List[str]) -> Tuple[List[str], str, str, List[str]]:
-    t = topic or "Interesting Shorts"
+def _deterministic_for_topic(topic: str, terms: List[str]) -> Tuple[List[str], str, str, List[str]]:
+    t = (topic or "Interesting Shorts").strip()
+
+    # Tiny Drama Dept. — mini soap-opera arc for small problems
+    if "Tiny" in t or "Drama" in t or "soap" in t.lower():
+        sents = [
+            "Disaster strikes: the coffee drips on the report.",
+            "Clock ticks. Stakes rise. A single napkin stands between ruin.",
+            "Close-up: spreading stain, like a storm on paper seas.",
+            "Plot twist: printer jams the reprint on page one.",
+            "Hero move: flip the page, crop the margin, breathe.",
+            "Cut to slow motion: clean swipe, crisis contained.",
+            "Resolution: lesson learned—lid first, send draft second.",
+            "Teaser: tomorrow, a stapler will betray us."
+        ]
+        title = "Tiny Drama Dept.: Coffee vs. The Report"
+        desc = ("Soap-opera narration for small problems.\n"
+                "• Coffee spill crisis\n• Printer jam twist\n• One tidy recovery\n")
+        tags = ["tiny drama","office comedy","coffee spill","shorts","narration"]
+        return sents[:8], title, desc, tags
+
+    # Ocean/coast science quick explainer
+    if "Ocean" in t or "Coast" in t or "tide" in t.lower():
+        sents = [
+            "Waves look wild, but wind writes their rhythm.",
+            "Watch the whitecaps: stronger gusts, shorter crests.",
+            "Coastline shape bends waves like glass bends light.",
+            "Sand bars trip the swell, forcing a clean break.",
+            "Storms stack systems—long period swells travel far.",
+            "Tide adds height, turning soft laps into shore pound.",
+            "Safety cue: if foam races sideways, exit rip flow.",
+            "Takeaway: read lines on water, not just the forecast."
+        ]
+        title = "Ocean Pulse: Read the Water in 30s"
+        desc = "One-minute coast science: wind, bathymetry, swell period, tide, safety."
+        tags = ["ocean","coast","wave science","rip current","shorts"]
+        return sents[:8], title, desc, tags
+
+    # Default visual explainer
     key = [w for w in _lower_tokens(t) if len(w)>=4][:2]
-    hook = f"{t}: one idea you'll remember."
-    facts = [
-        f"Start with a simple definition you can visualize.",
-        f"Show a real scene that proves the idea clearly.",
-        f"Add one counterexample so the rule feels real."
+    sents = [
+        f"{t}: one visual idea, zero fluff.",
+        "Start with a concrete scene you can point at.",
+        "Name the pattern; show where it appears again.",
+        "Add a small exception to make it believable.",
+        "Give a quick, testable rule of thumb.",
+        "Show a second angle to lock understanding.",
+        "One sentence takeaway the viewer can repeat.",
+        "End with a prompt to notice it today."
     ]
-    visuals = [
-        "Use a tight shot; label what to notice.",
-        "Repeat once from a different angle for clarity."
-    ]
-    close = "One takeaway, one action—try it once today."
-    sents = [hook] + facts + visuals + [close]
-    title = f"{t} in 30 seconds"
+    title = f"{t} — a 30s visual explainer"
     desc = f"Quick explainer: {t}\n" + "\n".join(f"• {x}" for x in sents[:6])
-    tags = [*key, "shorts","education","visual","broll"]
+    tags = [*key, "shorts","explainer","visual","broll"]
     return sents[:8], title, desc, tags
+
+# -------------------- Pexels (present & fixed) --------------------
+_USED_PEXELS_IDS_RUNTIME = set()
+
+def _pexels_headers():
+    if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
+    return {"Authorization": PEXELS_API_KEY}
+
+def _pexels_locale(lang: str) -> str:
+    return "tr-TR" if str(lang).lower().startswith("tr") else "en-US"
+
+def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
+    headers = _pexels_headers()
+    locale  = _pexels_locale(LANG)
+    try:
+        r = requests.get(
+            "https://api.pexels.com/videos/search",
+            headers=headers,
+            params={"query": query, "per_page": 15, "orientation":"portrait", "size":"large", "locale": locale},
+            timeout=30
+        )
+        if r.status_code != 200: return None, None
+        data = r.json() or {}
+        cand = []
+        block = _blocklist_get_pexels()
+        for v in data.get("videos", []):
+            vid = int(v.get("id", 0))
+            if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
+                continue
+            files = v.get("video_files", []) or []
+            if not files: continue
+            pf = [x for x in files if int(x.get("height",0)) >= int(x.get("width",0)) and int(x.get("height",0)) >= 1080]
+            if not pf: continue
+            pf.sort(key=lambda x: (abs(int(x.get("height",0))-1440), int(x.get("height",0))*int(x.get("width",0))))
+            best = pf[0]
+            h = int(best.get("height",0)); dur = float(v.get("duration",0))
+            dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
+            tokens = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
+            qtokens= set(re.findall(r"[a-z0-9]+", query.lower()))
+            overlap = len(tokens & qtokens)
+            score = overlap*2.0 + dur_bonus + (1.0 if 1080 <= h <= 1920 else 0.0)
+            cand.append((score, vid, best.get("link")))
+        if not cand: return None, None
+        cand.sort(key=lambda x: x[0], reverse=True)
+        for _, vid, link in cand:
+            if vid not in _USED_PEXELS_IDS_RUNTIME:
+                _USED_PEXELS_IDS_RUNTIME.add(vid)
+                _blocklist_add_pexels([vid], days=30)
+                print(f"   → Pexels pick [{query}] -> id={vid}")
+                return vid, link
+        return None, None
+    except Exception:
+        return None, None
 
 # -------------------- YouTube --------------------
 def yt_service():
@@ -674,17 +702,17 @@ def main():
             if last:
                 ctry, tpc, sents, search_terms, ttl, desc, tags = last
             else:
-                sents, ttl, desc, tags = _deterministic_topic_script(topic_lock or "Interesting Shorts", user_terms)
+                sents, ttl, desc, tags = _deterministic_for_topic(topic_lock or "Interesting Shorts", user_terms)
                 ctry, tpc, search_terms = "World", (topic_lock or "Interesting Shorts"), user_terms
     else:
-        sents, ttl, desc, tags = _deterministic_topic_script(topic_lock or "Interesting Shorts", user_terms)
+        sents, ttl, desc, tags = _deterministic_for_topic(topic_lock or "Interesting Shorts", user_terms)
         ctry, tpc, search_terms = "World", (topic_lock or "Interesting Shorts"), user_terms
 
     # --- QUALITY GATE ---
     score = _score_sentences(sents, tpc)
     if score < 4.0:
         print(f"⚠️ Low content score ({score:.2f}) → rebuilding deterministically.")
-        sents, ttl, desc, tags = _deterministic_topic_script(tpc, user_terms)
+        sents, ttl, desc, tags = _deterministic_for_topic(tpc, user_terms)
 
     sentences = sents
     print(f"📝 Content: {ctry} | {tpc} | {len(sentences)} lines")
@@ -724,8 +752,7 @@ def main():
                 rr.raise_for_status()
                 with open(f, "wb") as w:
                     for ch in rr.iter_content(8192): w.write(ch)
-            if pathlib.Path(f).stat().st_size > 400_000:
-                clips.append(f)
+            if pathlib.Path(f).stat().st_size > 400_000: clips.append(f)
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
 
