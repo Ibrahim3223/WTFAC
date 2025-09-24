@@ -2,7 +2,7 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "0 12 * * *"   # 12:00 UTC
   workflow_dispatch: {}
 
 permissions:
@@ -36,12 +36,11 @@ jobs:
               mx["include"].append({
                   "name": ch["name"],
                   "env": ch.get("env", ch["name"]),
-                  "mode": ch.get("mode","freeform"),
+                  # MODE artık opsiyonel: boş bırakabiliriz; kod route ediyor:
+                  "mode": ch.get("mode",""),
                   "lang": ch.get("lang","en"),
                   "visibility": ch.get("visibility","public"),
-                  "seed": ch.get("seed","0"),
-                  "topic": ch.get("topic",""),
-                  "search_terms": ch.get("search_terms", []),
+                  "seed": str(ch.get("seed","0")),
               })
           print(f"::set-output name=matrix::{json.dumps(mx)}")
           PY
@@ -51,37 +50,46 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 6             # 500 kanal ölçeği için API'ları boğmadan
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
 
     environment: ${{ matrix.env }}
-
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     env:
-      TZ:                ${{ vars.TZ || 'UTC' }}
-      CHANNEL_NAME:      ${{ matrix.name }}
-      # IMPORTANT: channel file wins
-      MODE:              ${{ matrix.mode }}
-      LANG:              ${{ vars.LANG || matrix.lang }}
-      VISIBILITY:        ${{ vars.VISIBILITY || matrix.visibility }}
-      TTS_VOICE:         ${{ vars.TTS_VOICE || '' }}
-      TARGET_MIN_SEC:    ${{ vars.TARGET_MIN_SEC || '22' }}
-      TARGET_MAX_SEC:    ${{ vars.TARGET_MAX_SEC || '40' }}
-      # Topic & search terms passthrough (env can override)
-      TOPIC:             ${{ vars.TOPIC || matrix.topic }}
-      SEARCH_TERMS:      ${{ vars.SEARCH_TERMS || toJSON(matrix.search_terms) }}
-      USE_GEMINI:        ${{ vars.USE_GEMINI || '1' }}
-      GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-      CAPTION_MAX_LINE:  ${{ vars.CAPTION_MAX_LINE || '28' }}
-      CAPTION_MAX_LINES: ${{ vars.CAPTION_MAX_LINES || '6' }}
-      PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
-      YT_CLIENT_ID:      ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET:  ${{ secrets.YT_CLIENT_SECRET }}
-      YT_REFRESH_TOKEN:  ${{ secrets.YT_REFRESH_TOKEN }}
+      TZ:                 ${{ vars.TZ || 'UTC' }}
+      CHANNEL_NAME:       ${{ matrix.name }}
+      MODE:               ${{ vars.MODE || matrix.mode }}   # genelde boş kalsın
+      LANG:               ${{ vars.LANG || matrix.lang }}
+      VISIBILITY:         ${{ vars.VISIBILITY || matrix.visibility }}
+      TTS_VOICE:          ${{ vars.TTS_VOICE || '' }}
+      TARGET_MIN_SEC:     ${{ vars.TARGET_MIN_SEC || '22' }}
+      TARGET_MAX_SEC:     ${{ vars.TARGET_MAX_SEC || '42' }}
+      ROTATION_SEED:      ${{ vars.ROTATION_SEED || github.run_number }}
+      USE_GEMINI:         '1'
+      GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+      PEXELS_API_KEY:     ${{ secrets.PEXELS_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ---- Restore caches (global + channel) ----
+      - name: Restore global content cache
+        id: cache-global-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            state_global_topics.json
+          key: global-state-v1
+
+      - name: Restore channel state cache
+        id: cache-channel-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            state_${{ matrix.env }}.json
+          key: chstate-${{ matrix.env }}-v1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -110,6 +118,12 @@ jobs:
       - name: Prepare output dir
         run: mkdir -p out
 
+      - name: Jitter
+        run: |
+          S=$(( ( RANDOM % 12 ) + 4 ))
+          echo "Sleeping $S sec to spread load..."
+          sleep $S
+
       - name: Run generator & upload
         run: python autoshorts_daily.py
 
@@ -121,3 +135,19 @@ jobs:
           path: out/*.mp4
           retention-days: 2
           if-no-files-found: ignore
+
+      - name: Save global content cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            state_global_topics.json
+          key: global-state-v1
+
+      - name: Save channel state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            state_${{ matrix.env }}.json
+          key: chstate-${{ matrix.env }}-v1
