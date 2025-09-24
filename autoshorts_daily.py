@@ -459,116 +459,141 @@ def mux(video: str, audio: str, outp: str):
         outp
     ])
 
-# -------------------- Gemini prompt (topic-locked scripted) --------------------
-TEMPLATE_BY_MODE = {
-    "country_facts": "Factual mini-explainers with concrete visuals.",
-    "fixit_fast": "Practical one-minute how-to with steps.",
-    "space_news": "Factual, current-space explainers (evergreen if needed).",
-    "freeform": "Entertaining mini stories with clear structure."
+# -------------------- Gemini (topic-locked, outline-first) --------------------
+ENHANCED_GEMINI_TEMPLATES = {
+    "_default": """You will write a YouTube Short script (25–40s) with 7 SCENES.
+Return STRICT JSON with keys:
+  country, topic, sentences (array of 7), search_terms (4–8), title, description, tags.
+
+HARD RULES:
+- DO NOT echo the topic text inside the sentences.
+- Each sentence must be 8–14 words, concrete and visual (contain an action/object).
+- No meta phrases like: "plot twist", "fluff", "crisp", "takeaway", "beat".
+- No abstract filler: "thing/things/stuff", "nice/great/good/bad", "concept/idea" without a noun you can film.
+- Reading order (exactly 7):
+  1) HOOK (visual & specific)
+  2) PROBLEM (what goes wrong)
+  3) STAKES (why it matters in daily life)
+  4) STEP 1 (simple fix)
+  5) STEP 2 (reinforcement/detail)
+  6) MISTAKE TO AVOID (one trap)
+  7) PAYOFF/CTA (result or 1-line call to try today)
+Only JSON. No markdown/prose outside JSON.""",
+
+    "country_facts": """Write 7 concrete, visual facts for a Short. Same JSON schema.
+Rules:
+- 7 sentences, 8–14 words each.
+- Each fact must mention a place/object/time you can show on screen.
+- No slogans or vague adjectives. Only JSON."""
 }
 
 def _gemini_call(prompt: str, model: str) -> dict:
-    if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
-    payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.7}}
+    payload = {"contents":[{"parts":[{"text": prompt}]}],
+               "generationConfig":{"temperature":0.55}}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     r = requests.post(url, headers=headers, json=payload, timeout=60)
     if r.status_code != 200:
         raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
     data = r.json()
-    txt = ""
-    try: txt = data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception: txt = json.dumps(data)
+    try:
+        txt = data["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        txt = json.dumps(data)
     m = re.search(r"\{(?:.|\n)*\}", txt)
-    if not m: raise RuntimeError("Gemini response parse error (no JSON)")
+    if not m:
+        raise RuntimeError("Gemini response parse error (no JSON)")
     raw = re.sub(r"^```json\s*|\s*```$", "", m.group(0).strip(), flags=re.MULTILINE)
     return json.loads(raw)
 
-# STRICT schema for watchable scripts
-PROMPT_SCHEMA = """
-Return STRICT JSON with:
-- title: string (<= 90 chars)
-- hook: string (8-16 words, concrete, no meta words)
-- scenes: array of 6-8 objects, each: { "visual": string (concrete image we can search), "narration": string (6-14 words, specific) }
-- payoff: string (one-sentence satisfying close; concrete)
-- tags: array of 5-12 short tags
-No extra keys. No markdown. Language: {lang}.
-HARD RULES:
-- ABSOLUTELY stay on TOPIC: "{topic}" for channel "{channel}". Do not switch to geography/country unless TOPIC says so.
-- No meta words: [scene, beat, hook, plot, disaster, twist, teaser].
-- Prefer numbers, names, places, objects. Avoid vague words [thing, stuff, nice, great].
-- Each 'visual' must be a stock-footage-friendly description we can search (e.g., 'coffee spills on printed report, close-up').
-- Keep narration concise and informative; avoid melodrama unless TOPIC implies it.
-"""
-
-def build_via_gemini_topic_locked(topic: str, user_terms: List[str]) -> dict:
-    mode_hint = TEMPLATE_BY_MODE.get(MODE, TEMPLATE_BY_MODE["freeform"])
-    avoid = "\n".join(f"- {b}" for b in _recent_topics_for_prompt()[:15]) or "(none)"
+def build_via_gemini(mode: str, channel_name: str, topic_lock: str,
+                     user_terms: List[str], banlist: List[str]) -> Tuple[str,str,List[str],List[str],str,str,List[str]]:
+    template = ENHANCED_GEMINI_TEMPLATES.get(mode, ENHANCED_GEMINI_TEMPLATES["_default"])
+    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:8]) if user_terms else "(none)"
-    prompt = f"""Create a 25–40s **YouTube Short** script with visual-first beats.
+    topic_line = topic_lock or "Interesting Shorts"
 
-Channel: {CHANNEL_NAME}
-Intent: {mode_hint}
-TOPIC (hard lock): {topic}
-Seed search terms (use/expand as needed, but don't ignore): {terms_hint}
-Avoid repeating recent topics for 180 days:
+    prompt = f"""{template}
+
+Channel: {channel_name}
+Language: {LANG}
+TOPIC (hard lock, do not echo in sentences): {topic_line}
+Seed search terms (use and expand, but do not ignore): {terms_hint}
+Avoid recent/duplicate topics for 180 days:
 {avoid}
-
-{PROMPT_SCHEMA.format(lang=LANG, topic=topic, channel=CHANNEL_NAME)}
 """
-    return _gemini_call(prompt, GEMINI_MODEL)
+    data = _gemini_call(prompt, GEMINI_MODEL)
 
-# -------------------- Quality gate --------------------
-META_WORDS = {"scene","beat","hook","plot","disaster","twist","teaser"}
-VAGUE = {"thing","things","stuff","nice","great","good","bad","start","move","show","idea","lesson","today","tomorrow"}
-MIN_NUM_SCENES, MAX_NUM_SCENES = 6, 8
+    country = str(data.get("country") or "World").strip()
+    topic   = topic_line  # force lock
+    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
+    sentences = [s for s in sentences if s][:7]  # exactly 7
+    terms = data.get("search_terms") or []
+    if isinstance(terms, str): terms=[terms]
+    terms = [t.strip() for t in terms if isinstance(t,str) and t.strip()]
+    if user_terms:
+        pref = [t for t in user_terms if t not in terms]
+        terms = pref + terms
+    title = (data.get("title") or "").strip()
+    desc  = (data.get("description") or "").strip()
+    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
+    return country, topic, sentences, terms, title, desc, tags
 
-def _score_script(scr: dict) -> Tuple[float, List[str]]:
-    reasons=[]
-    title = (scr.get("title") or "").strip()
-    hook  = (scr.get("hook") or "").strip()
-    scenes= scr.get("scenes") or []
-    payoff= (scr.get("payoff") or "").strip()
+# -------------------- Content quality gate --------------------
+BAD_TOKENS = {
+    "plot twist","fluff","crisp","beat","takeaway","meta","framework",
+    "thing","things","stuff","concept","idea","nice","great","good","bad"
+}
+def _contains_topic_echo(sent: str, topic: str) -> bool:
+    t = re.sub(r"[^a-z0-9 ]+"," ", (topic or "").lower()).strip()
+    s = re.sub(r"[^a-z0-9 ]+"," ", (sent or "").lower()).strip()
+    return len(t) > 0 and t in s
 
-    # structure
-    if not (MIN_NUM_SCENES <= len(scenes) <= MAX_NUM_SCENES):
-        reasons.append("scene_count")
-    # meta words penalty
-    def has_meta(s: str) -> bool:
-        s = s.lower()
-        return any(w in s for w in META_WORDS)
-    if has_meta(hook): reasons.append("meta_hook")
-    # visuals concrete?
-    concrete_cnt=0
-    narration_len_ok=0
-    unique_visuals=set()
-    for sc in scenes:
-        vis = (sc.get("visual") or "").strip()
-        nar = (sc.get("narration") or "").strip()
-        if vis and len(re.findall(r"[a-zA-Z]", vis))>=6 and not has_meta(vis) and len(vis.split())>=3:
-            concrete_cnt+=1
-        if 6 <= len(nar.split()) <= 14 and not has_meta(nar):
-            narration_len_ok+=1
-        if vis: unique_visuals.add(vis.lower())
-    if concrete_cnt < len(scenes): reasons.append("weak_visuals")
-    if narration_len_ok < len(scenes): reasons.append("narration_len")
-    if len(unique_visuals) < len(scenes): reasons.append("visual_dup")
-    # vagueness
-    vague_hits=0
-    for sc in scenes:
-        nar=(sc.get("narration") or "").lower()
-        vague_hits += sum(1 for w in VAGUE if f" {w} " in f" {nar} ")
-    if vague_hits>2: reasons.append("vague_words")
-    # numeric/detail reward
-    numeric=0
-    for sc in scenes:
-        if re.search(r"\b\d", (sc.get("narration") or "")): numeric+=1
-    # score
-    score = 10.0
-    for r in reasons: score -= 1.5
-    score += min(3.0, numeric*0.5)
-    score = max(0.0, min(10.0, score))
-    return score, reasons
+def _is_visual(sent: str) -> bool:
+    # Heuristik: en az bir somut isim ya da eylem
+    return bool(re.search(r"\b(coffee|printer|door|paper|screen|cup|button|steam|timer|light|desk|spill|wipe|press|fold|open|close|tilt|shake|hold|tap|pour|jam)\b", sent.lower()))
+
+def content_score(sentences: List[str], topic: str) -> float:
+    if len(sentences) != 7: return 0.0
+    score = 7.0
+    seen = set()
+    for s in sentences:
+        sl = s.lower()
+        if any(tok in sl for tok in BAD_TOKENS): score -= 1.2
+        if _contains_topic_echo(s, topic): score -= 1.2
+        if not _is_visual(s): score -= 0.8
+        key = re.sub(r"\W+"," ", sl)
+        if key in seen: score -= 0.6
+        seen.add(key)
+        w = len(s.split())
+        if not (8 <= w <= 14): score -= 0.5
+    # Basit sıralama kontrolü: hook ve payoff ipucu
+    if not re.search(r"\b(look|watch|see|ever|when|if|why)\b", sentences[0].lower()):
+        score -= 0.5
+    if not re.search(r"\b(try|today|now|next time)\b", sentences[-1].lower()):
+        score -= 0.5
+    return max(0.0, score)
+
+def deterministic_local_writer(topic: str, terms: List[str]) -> List[str]:
+    # SEARCH_TERMS içinden bir mikro-problem seç ve net, tekrar izlenir 7 sahne üret
+    seed = (terms[0] if terms else "coffee spill")
+    obj, fix1, fix2 = "coffee", "fold a towel under the mug", "wipe outward in one pass"
+    if "printer" in " ".join(terms).lower():
+        obj, fix1, fix2 = "printer jam", "open tray and fan pages", "print 3 clean test lines"
+    if "door" in " ".join(terms).lower():
+        obj, fix1, fix2 = "door slam", "add felt bumper", "tighten hinge once"
+
+    return [
+        f"Watch what goes wrong: {obj} in a normal office moment.",
+        f"The small failure wastes time and attention more than you think.",
+        f"First move: {fix1}; do it slowly and keep shot steady.",
+        f"Second move: {fix2}; show hands clearly, no fast cuts.",
+        "Avoid this mistake: overcorrecting fast, which makes the mess worse.",
+        "Result: cleaner desk and calmer pace within thirty seconds.",
+        "Try it today and replay if needed while you do it.",
+    ]
 
 def _fallback_from_terms(topic: str, terms: List[str]) -> dict:
     # deterministik, görsel -> anlatı eşleme
@@ -711,28 +736,60 @@ def main():
     topic_lock = TOPIC
     user_terms = SEARCH_TERMS_ENV
 
-    # 1) Script üretimi (TOPIC lock)
-    script = None
-    reasons_last = []
-    if USE_GEMINI and GEMINI_API_KEY and topic_lock:
+    # 1) İçerik (TOPIC lock + SEARCH_TERMS seed)
+    topic_lock = TOPIC
+    user_terms = SEARCH_TERMS_ENV
+
+    sentences = None
+    search_terms = None
+    ttl = desc = ""
+    tags = []
+
+    if USE_GEMINI and GEMINI_API_KEY:
+        banlist = _recent_topics_for_prompt()
+        last_pack = None
         for attempt in range(3):
             try:
-                cand = build_via_gemini_topic_locked(topic_lock, user_terms)
-                # schema guard
-                for k in ["title","hook","scenes","payoff"]:
-                    if k not in cand: raise RuntimeError(f"schema_missing:{k}")
-                score, reasons = _score_script(cand)
-                print(f"ℹ️ content_score={score:.2f} reasons={','.join(reasons) if reasons else '-'}")
-                reasons_last = reasons
-                if score >= 6.5:
-                    script = cand; break
+                ctry, tpc, sents, terms, ttl, desc, tags = build_via_gemini(
+                    MODE, CHANNEL_NAME, topic_lock, user_terms, banlist
+                )
+                last_pack = (ctry, tpc, sents, terms, ttl, desc, tags)
+                sc = content_score(sents, tpc)
+                print(f"🧪 Content score: {sc:.2f} (attempt {attempt+1})")
+                if sc >= 5.8:
+                    _record_recent(_hash12(f"{MODE}|{tpc}|{sents[0]}"), MODE, tpc)
+                    sentences, search_terms = sents, terms
+                    ctry_final, tpc_final = ctry, tpc
+                    break
+                else:
+                    # kötü içerik → tekrar denerken, mevcut konuyu “avoid” listesine ekle
+                    banlist.insert(0, tpc)
+                    time.sleep(0.5)
             except Exception as e:
                 print(f"Gemini error: {str(e)[:160]}")
-            time.sleep(0.5)
+                time.sleep(0.5)
 
-    if script is None:
-        print("⚠️ Low content score → using deterministic fallback.")
-        script = _fallback_from_terms(topic_lock or "Interesting Shorts", user_terms)
+        if sentences is None:
+            # Son çare: deterministik yerel yazar
+            ctry_final, tpc_final = "World", (topic_lock or "Interesting Shorts")
+            sentences = deterministic_local_writer(tpc_final, user_terms or [])
+            search_terms = user_terms or ["macro detail","close up","hands action","office desk"]
+            ttl = ""
+            desc = ""
+            tags = []
+
+    else:
+        # Gemini yoksa direkt deterministik iskelet
+        ctry_final, tpc_final = "World", (topic_lock or "Interesting Shorts")
+        sentences = deterministic_local_writer(tpc_final, user_terms or [])
+        search_terms = user_terms or ["macro detail","close up","hands action","office desk"]
+        ttl = ""
+        desc = ""
+        tags = []
+
+    # Son bir temizlik
+    sentences = [normalize_sentence(s) for s in sentences][:7]
+    print(f"📝 Content: {ctry_final} | {tpc_final} | {len(sentences)} lines")
 
     # 2) İçerik özet
     scenes = script.get("scenes") or []
@@ -834,17 +891,24 @@ def main():
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8) Metadata (hook + payoff)
-    title = (script.get("title") or (topic_lock or "Shorts")).strip()[:95]
-    desc_lines = [f"HOOK: {script.get('hook','').strip()}"]
-    for i, sc in enumerate(scenes[:6], 1):
-        desc_lines.append(f"{i}. {sc.get('narration','').strip()}")
-    desc_lines.append(f"\nPayoff: {script.get('payoff','').strip()}")
-    tags = script.get("tags") or ["shorts","visual","learn","tips","broll"]
+    # 8) Metadata (izlenebilirlik odaklı başlık/açıklama)
+    def _ok_str(x): return isinstance(x, str) and len(x.strip()) > 0
+
+    if _ok_str(ttl):
+        title = ttl[:95]
+        description = (desc or "")[:4900]
+    else:
+        hook = sentences[0].rstrip(". ")
+        title = (hook[:80] + " — " + tpc_final)[:95]
+        bullets = "• " + "\n• ".join(sentences[:6])
+        cta = "\n\nWatch again while you try it. #shorts"
+        description = (bullets + cta)[:4900]
+
     meta = {
         "title": title,
-        "description": ("\n".join(desc_lines))[:4900],
-        "tags": tags[:15],
+        "description": description,
+        "tags": (tags[:15] if isinstance(tags, list) and tags else
+                 ["shorts","howto","daily","visual","tips"]),
         "privacy": VISIBILITY,
         "defaultLanguage": LANG,
         "defaultAudioLanguage": LANG
@@ -865,3 +929,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
