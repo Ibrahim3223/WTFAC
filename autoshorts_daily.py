@@ -1,7 +1,7 @@
-# autoshorts_daily.py — Topic-first script, visual hints, looped first clip, stronger SEO (stable)
+# autoshorts_daily.py — Topic-first script, visual hints, looped first clip, stronger SEO
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 
 # -------------------- ENV / constants --------------------
 VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
@@ -9,7 +9,7 @@ TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = os.getenv("MODE", "freeform").strip().lower()   # sadece fallback
+MODE           = os.getenv("MODE", "freeform").strip().lower()   # sadece fallback, yönlendirme yapmaz
 LANG           = os.getenv("LANG", "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
@@ -102,7 +102,7 @@ def font_path():
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
-        "C:/Windows/Fonts/arial.ttf"
+        "C:/Windows/Fonts/arial.ttf",
     ]:
         if pathlib.Path(p).exists():
             return p
@@ -188,29 +188,25 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
             if len(uniq) >= limit: break
     return uniq
 
-# -------------------- Caption text & wrap --------------------
+# -------------------- Caption helpers (defined BEFORE draw_capcut_text) --------------------
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
-_META_LINE = re.compile(
-    r"^\s*(hook|setup|payoff|anchor|repeat|counterexample|b-?roll|cut to|direction|note|title|description|tags?)\b",
-    re.I,
-)
-
-def _is_meta_line(s: str) -> bool:
-    if _META_LINE.match(s): return True
-    low = s.lower()
-    bad_phrases = [
-        "see it", "learn it", "in 60 seconds", "plot twist", "watch:", "instrument notes:",
-        "key reading", "seven beats", "one clear tip", "you can see", "name the pattern"
-    ]
-    return any(bp in low for bp in bad_phrases)
+def _ff_color(c: str) -> str:
+    c = (c or "").strip()
+    if c.startswith("#"): return "0x" + c[1:].upper()
+    if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c): return c
+    return "white"
 
 def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
     t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
-    if t and not t[0].isupper():
-        t = t[0].upper() + t[1:]
+    BAD = {"one clear tip","see it","learn it","in 60 seconds","plot twist","watch:","instrument notes:","key reading"}
+    low = t.lower()
+    for b in BAD:
+        low = low.replace(b, "")
+    t = re.sub(r"\s+", " ", low).strip()
+    if t: t = t[0].upper() + t[1:]
     return t
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
@@ -364,7 +360,7 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
-    lines = [ln for ln in wrapped.split("\n") if ln.strip()]
+    lines = wrapped.split("\n")
     n_lines = max(1, len(lines))
     maxchars = max((len(l) for l in lines), default=1)
     base = 64 if is_hook else 50
@@ -478,39 +474,54 @@ def mux(video: str, audio: str, outp: str):
         outp
     ])
 
-# -------------------- Gemini (topic-first, robust parse) --------------------
+# -------------------- Gemini (topic-first, with visual_hints & hook) --------------------
 ENHANCED_GEMINI_TEMPLATES = {
     "_base": """Create a 25–40s YouTube Short for the given channel.
 Return STRICT JSON with keys:
 - hook_line (<=12 words, concrete, contains a number or contrast)
 - sentences (7–8 short lines, each 6–12 words, no meta-language)
-- visual_hints (same length as sentences; concrete b-roll ideas, 2–4 words)
+- visual_hints (same length as sentences; each a concrete b-roll idea, 2–4 words)
 - search_terms (4–10 terms, concrete visual nouns; no adjectives only)
-- title (compelling, 40–70 chars), description (>=1200 chars), tags (8–15)
+- title (compelling, 40–70 chars), description (>=1200 chars, informative), tags (8–15)
 Rules:
 - STAY ON TOPIC: exactly match the provided TOPIC. Do NOT pivot to geography/country facts unless TOPIC asks.
-- Avoid meta/filler ('in 60 seconds','see it','learn it','plot twist','watch:','instrument notes:','key reading').
+- Avoid generic fillers ('in 60 seconds', 'see it', 'learn it', 'plot twist', 'watch:', 'instrument notes:', 'key reading').
 - Every sentence should deliver one concrete idea a viewer can visualize.
 - Last sentence should callback to the hook (loop feel).
 Return ONLY JSON, no markdown/prose.""",
     "country_facts": """Make surprising but true micro-facts about places/culture, same JSON contract."""
 }
 
-def _extract_json_block(txt: str) -> Dict:
-    t = (txt or "").strip()
-    t = re.sub(r"^```json\s*", "", t, flags=re.I)
+def _extract_json_block(txt: str):
+    """Gemini bazen JSON dışına metin koyar; ilk dengeli { ... } bloğunu döndür.
+       Dönüş hem dict hem list olabilir; normalize edeceğiz."""
+    t = txt.strip()
+    t = re.sub(r"^```json\s*", "", t, flags=re.IGNORECASE)
     t = re.sub(r"^```\s*", "", t)
     t = re.sub(r"\s*```$", "", t)
+
+    # Doğrudan JSON deneyelim
     try:
-        return json.loads(t)
+        obj = json.loads(t)
+        return obj
     except Exception:
         pass
+
+    # İlk dengeli { ... } bloğu
     start = t.find("{")
-    if start == -1: raise RuntimeError("Gemini response parse error (no brace)")
+    if start == -1:
+        # Bazen liste gibi dönebilir: [ { ... } ]
+        try:
+            obj = json.loads(t)
+            return obj
+        except Exception:
+            raise RuntimeError("Gemini response parse error (no opening brace)")
+
     depth = 0
     for i in range(start, len(t)):
         ch = t[i]
-        if ch == "{": depth += 1
+        if ch == "{":
+            depth += 1
         elif ch == "}":
             depth -= 1
             if depth == 0:
@@ -518,12 +529,25 @@ def _extract_json_block(txt: str) -> Dict:
                 try:
                     return json.loads(block)
                 except Exception:
-                    block = re.sub(r",\s*}", "}", block)
-                    block = re.sub(r",\s*\]", "]", block)
-                    return json.loads(block)
-    raise RuntimeError("Gemini response parse error (unbalanced)")
+                    block2 = re.sub(r",\s*}", "}", block)
+                    block2 = re.sub(r",\s*\]", "]", block2)
+                    return json.loads(block2)
+    raise RuntimeError("Gemini response parse error (unbalanced braces)")
 
-def _gemini_call(prompt: str, model: str) -> Dict:
+def _normalize_json_root(obj):
+    """dict bekleriz; eğer list ise ilk dict öğeyi al."""
+    if isinstance(obj, dict):
+        return obj
+    if isinstance(obj, list):
+        for x in obj:
+            if isinstance(x, dict):
+                return x
+        # list ama içinde dict yoksa boş dict dön
+        return {}
+    # başka bir tip ise yine boş dict
+    return {}
+
+def _gemini_call(prompt: str, model: str):
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
     payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.7}}
@@ -536,86 +560,77 @@ def _gemini_call(prompt: str, model: str) -> Dict:
         txt = data["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:
         txt = json.dumps(data)
-    return _extract_json_block(txt)
-
-def _clean_and_fill_sentences(raw_lines: List[str], topic: str) -> List[str]:
-    lines = []
-    for s in (raw_lines or []):
-        s = normalize_sentence(s)
-        if not s or _is_meta_line(s): continue
-        s = clean_caption_text(s)
-        if not s or _is_meta_line(s): continue
-        if len(s.split()) <= 3: continue
-        lines.append(s)
-    if len(lines) < 7:
-        base = topic or "Quick visual insight"
-        fillers = [
-            f"{base}: start with a clear view.",
-            "Zoom into one striking detail.",
-            "Name the pattern in plain words.",
-            "Show a quick contrast example.",
-            "Return to the pattern with context.",
-            "Compress it into a tiny rule.",
-            "Call back to where we started."
-        ]
-        lines = fillers[:7]
-    return lines[:7]
+    obj = _extract_json_block(txt)
+    return _normalize_json_root(obj)
 
 def build_via_gemini(topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],List[str],str,str,List[str]]:
-    template = ENHANCED_GEMINI_TEMPLATES["_base"]
-    if MODE == "country_facts":
-        template = ENHANCED_GEMINI_TEMPLATES["country_facts"]
+    template = ENHANCED_GEMINI_TEMPLATES["country_facts"] if MODE == "country_facts" else ENHANCED_GEMINI_TEMPLATES["_base"]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:8]) if user_terms else "(none)"
     guard = """
 Hard constraints:
-- Use the TOPIC exactly.
-- Each 'visual_hints[i]' must be filmable b-roll (e.g., 'stone arch drone', 'macro gears', 'stormy coast').
-- 'hook_line' must contain a number or a contrast.
+- Use the given TOPIC exactly.
+- Each 'visual_hints[i]' must be directly filmable b-roll (e.g., 'stone arch drone', 'cathedral interior', 'macro gears', 'stormy coast').
+- The 'hook_line' must contain a number or contrast ('X vs Y', 'two ways', '3-second test').
 """
     prompt = f"""{template}
 
 Channel: {CHANNEL_NAME}
 Language: {LANG}
 TOPIC (hard lock): {topic_lock or "Interesting Shorts"}
-Seed search terms (use & expand): {terms_hint}
+Seed search terms (use, expand; do not ignore): {terms_hint}
 Avoid recently used topics (180 days):
 {avoid}
 {guard}
 """
     data = _gemini_call(prompt, GEMINI_MODEL)
-    hook  = str(data.get("hook_line") or "").strip()
-    raw_s = data.get("sentences") or []
-    if isinstance(raw_s, str): raw_s = [raw_s]
-    lines = _clean_and_fill_sentences(list(raw_s), topic_lock)
-    hints = [str(x).strip() for x in (data.get("visual_hints") or []) if str(x).strip()]
 
-    # hints güvenli default
+    hook      = str(data.get("hook_line") or "").strip()
+    sentences = [clean_caption_text(s) for s in (data.get("sentences") or []) if str(s).strip()]
+    hints     = [str(x).strip() for x in (data.get("visual_hints") or []) if str(x).strip()]
+
+    # En az 7 sahne + 1 hook garanti
+    if len(sentences) < 7:
+        base = topic_lock or "Quick visual insight"
+        fillers = [
+            f"{base}: one clear, concrete beat.",
+            "Anchor it to a visual trigger.",
+            "Name the pattern in seven words.",
+            "Show one counterexample for contrast.",
+            "Repeat once in a new context.",
+            "Compress it to a short cue.",
+            "Close by calling back to the start."
+        ]
+        sentences = fillers[:7]
+        if not hook:
+            hook = "Two ways you can spot this fast."
+
+    # Hints azsa doldur
     default_hints = []
     tl = (topic_lock or "").lower()
     if any(k in tl for k in ["nature","eco","micro","macro"]):
         default_hints = ["leaf macro","dew drops macro","mushroom gills","insect macro","forest moss","stream pebbles","leaf veins"]
     elif any(k in tl for k in ["space","cosmic","planet","astronomy"]):
-        default_hints = ["rocket launch","planet surface","star field","telescope","nebula","iss window","milky way"]
+        default_hints = ["rocket launch","planet surface","star field","telescope","nebula drift","iss window","milky way"]
     elif any(k in tl for k in ["bridge","tunnel","urban","city"]):
         default_hints = ["city bridge drone","stone arch","metro station","aerial skyline","river pier","traffic timelapse","spiral stairs"]
     else:
         default_hints = ["macro gears","timelapse city","close-up hands","notebook topdown","river ripples","window light","walking feet"]
-    while len(hints) < len(lines):
-        hints.append(default_hints[min(len(hints), len(default_hints)-1)])
 
-    terms = data.get("search_terms") or []
+    while len(hints) < 7:
+        hints.append(default_hints[len(hints) % len(default_hints)])
+
+    terms     = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
     terms = [t.strip() for t in terms if isinstance(t,str) and t.strip()]
     if user_terms:
         pref = [t for t in user_terms if t not in terms]
         terms = (pref + terms)[:12]
 
-    ttl  = (data.get("title") or "").strip()
-    desc = (data.get("description") or "").strip()
-    tags = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-
-    return hook, lines, hints, terms, ttl, desc, tags
+    ttl      = (data.get("title") or "").strip()
+    desc     = (data.get("description") or "").strip()
+    tags     = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
+    return hook, sentences[:7], hints[:7], terms, ttl, desc, tags
 
 # -------------------- Per-scene queries --------------------
 _STOP = set("""
@@ -644,12 +659,15 @@ def build_per_scene_queries(sentences: List[str], hints: List[str], fallback_ter
     for i, s in enumerate(sentences):
         picked=None
         if i < len(hints):
-            cand = re.sub(r"[^a-z0-9 ]+"," ", hints[i].lower()).strip()
+            cand = hints[i].lower().strip()
+            cand = re.sub(r"[^a-z0-9 ]+"," ", cand)
             if len(cand) >= 4: picked = " ".join(cand.split()[:3])
         if not picked:
             toks = _tok4(s)
-            if len(toks) >= 2: picked = f"{toks[0]} {toks[1]}"
-            elif len(toks) == 1: picked = toks[0]
+            if len(toks) >= 2:
+                picked = f"{toks[0]} {toks[1]}"
+            elif len(toks) == 1:
+                picked = toks[0]
         if (not picked or len(picked) < 4) and fb:
             picked = fb[i % len(fb)]
         if (not picked or len(picked) < 4) and topic_key_join:
@@ -659,7 +677,7 @@ def build_per_scene_queries(sentences: List[str], hints: List[str], fallback_ter
         queries.append(picked)
     return queries
 
-# -------------------- Pexels search (diversify) --------------------
+# -------------------- Pexels search (relaxed second pass) --------------------
 _USED_PEXELS_IDS_RUNTIME = set()
 
 def _pexels_headers():
@@ -855,7 +873,7 @@ def main():
         search_terms = user_terms or ["macro detail","timelapse city","drone bridge"]
         ttl, desc, tags = "", "", []
 
-    sentences = [hook] + sents
+    sentences = [hook] + sents  # hook 0. satır
     print(f"📝 Content: {topic_lock or 'Topic'} | {len(sentences)} lines (hook+{len(sents)})")
 
     # 2) TTS
@@ -887,22 +905,10 @@ def main():
         print(f"   • {q}")
 
     picked = []
-    used_vid_ids = set()
     for q in per_scene_queries:
         vid, link = pexels_pick_one(q)
         if vid and link:
             picked.append((vid, link))
-            used_vid_ids.add(vid)
-
-    # çeşitlendirme: en az 5 farklı klip dene
-    if len(used_vid_ids) < 5:
-        widen = ["macro detail","abstract texture","timelapse city night","nature macro 4k","slow motion water","close up hands","aerial city"]
-        for w in widen:
-            if len(used_vid_ids) >= 5: break
-            vid, link = pexels_pick_one(w)
-            if vid and link and vid not in used_vid_ids:
-                picked.append((vid, link))
-                used_vid_ids.add(vid)
 
     if not picked:
         raise RuntimeError("Pexels: no results (per-scene).")
@@ -918,26 +924,18 @@ def main():
                     for ch in rr.iter_content(8192):
                         w.write(ch)
             if pathlib.Path(f).stat().st_size > 300_000:
-                clips.append((vid, f))
+                clips.append(f)
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
 
-    if not clips:
-        raise RuntimeError("No clips downloaded.")
+    if len(clips) < len(sentences):
+        print("⚠️ Not enough unique clips; rotating existing ones.")
 
-    # arka arkaya aynı klip gelmesin: hafif karıştır
-    if len(clips) > 2:
-        head = clips[0]
-        tail = clips[1:]
-        random.shuffle(tail)
-        clips = [head] + tail
-
-    # 4) Segment + altyazı + LOOP HİLESİ
+    # 4) Segment + altyazı + LOOP
     print("🎬 Segments…")
     segs = []
-
-    first_clip_src = clips[0][1]
-    first_clip_total = ffprobe_dur(first_clip_src) or 4.0
+    first_clip_src = clips[0 % len(clips)]
+    first_clip_total = ffprobe_dur(first_clip_src)
     half = max(0.0, first_clip_total/2.0 - 0.25)
 
     for i, (base_text, d) in enumerate(metas):
@@ -946,7 +944,7 @@ def main():
         elif i == len(metas)-1:
             src = first_clip_src; start_at = 0.0
         else:
-            src = clips[i % len(clips)][1]; start_at = 0.0
+            src = clips[i % len(clips)]; start_at = 0.0
 
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(src, d, base, start_at=start_at)
@@ -994,19 +992,11 @@ def main():
     # 8) Metadata
     def _ok(x): return isinstance(x, str) and x.strip()
     title = (hook if _ok(hook) else sentences[0])[:95]
-    if _ok(ttl): title = ttl[:95]
-
-    if _ok(desc) and len(desc) >= 1000:
-        description = desc[:4900]
-        tag_list = tags[:15] if tags else _mk_hashtags(TOPIC or "Shorts", search_terms)
-    else:
-        description = _desc_boost(TOPIC or "Shorts", sentences, search_terms)
-        tag_list = _mk_hashtags(TOPIC or "Shorts", search_terms)
-
+    description = (desc[:4900] if _ok(desc) and len(desc) >= 1000 else _desc_boost(TOPIC or "Shorts", sentences, search_terms))
     meta = {
         "title": title,
         "description": description,
-        "tags": [t.lstrip("#") for t in tag_list],
+        "tags": (tags[:15] if tags else _mk_hashtags(TOPIC or "Shorts", search_terms)),
         "privacy": VISIBILITY,
         "defaultLanguage": LANG,
         "defaultAudioLanguage": LANG
@@ -1030,4 +1020,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
