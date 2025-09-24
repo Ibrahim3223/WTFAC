@@ -1,40 +1,41 @@
-# autoshorts_daily.py — Topic-first + mode auto-route + quality gates + per-scene Pexels + A/V lock
+# autoshorts_daily.py — Topic-locked + Quality-checked script gen, per-scene Pexels, hard A/V lock, safe YouTube upload
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 
 # -------------------- ENV / constants --------------------
-VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
-TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
-TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
+VOICE_STYLE      = os.getenv("TTS_STYLE", "narration-professional")
+TARGET_MIN_SEC   = float(os.getenv("TARGET_MIN_SEC", "22"))
+TARGET_MAX_SEC   = float(os.getenv("TARGET_MAX_SEC", "42"))
 
-CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = (os.getenv("MODE", "") or "").strip().lower()  # optional
-LANG           = os.getenv("LANG", "en")
-VISIBILITY     = os.getenv("VISIBILITY", "public")
-ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
-OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
+CHANNEL_NAME     = os.getenv("CHANNEL_NAME", "DefaultChannel")
+# MODE artık içerik yönlendirmez; sadece geriye dönük uyumluluk için okunuyor.
+MODE             = (os.getenv("MODE", "freeform") or "freeform").strip().lower()
+LANG             = os.getenv("LANG", "en").strip()
+VISIBILITY       = os.getenv("VISIBILITY", "public").strip()
+ROTATION_SEED    = int(os.getenv("ROTATION_SEED", "0"))
+OUT_DIR          = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+PEXELS_API_KEY   = os.getenv("PEXELS_API_KEY", "")
+GEMINI_API_KEY   = os.getenv("GEMINI_API_KEY", "")
+USE_GEMINI       = os.getenv("USE_GEMINI", "1") == "1"
+GEMINI_MODEL     = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-# ---- Channel intent (TOPIC + SEARCH_TERMS) ----
+UPLOAD_TO_YT     = os.getenv("UPLOAD_TO_YT", "1") == "1"
+
+# ---- Channel intent (TOPIC lock) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
-TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
+TOPIC     = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
 def _parse_terms(s: str) -> List[str]:
     s = (s or "").strip()
     if not s: return []
-    # JSON list?
     try:
         data = json.loads(s)
         if isinstance(data, list):
             return [str(x).strip() for x in data if str(x).strip()]
     except Exception:
         pass
-    # "a","b","c" veya a,b,c
     s = re.sub(r'^[\[\(]|\s*[\]\)]$', '', s)
     parts = re.split(r'\s*,\s*', s)
     return [p.strip().strip('"').strip("'") for p in parts if p.strip()]
@@ -46,8 +47,9 @@ CRF_VISUAL       = 22
 CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))
 CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
 
+SAFE_TOPIC = TOPIC or "Interesting Shorts"
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
-GLOBAL_STATE_FILE = "state_global_topics.json"
+GLOBAL_STATE = "state_global_topics.json"
 
 # -------------------- deps (auto-install) --------------------
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
@@ -81,9 +83,8 @@ VOICE_OPTIONS = {
     "tr": ["tr-TR-EmelNeural","tr-TR-AhmetNeural"]
 }
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
-VOICE_RATE = os.getenv("TTS_RATE", "+12%")
 
-# -------------------- Utils --------------------
+# -------------------- Utils & state --------------------
 def run(cmd, check=True):
     res = subprocess.run(cmd, text=True, capture_output=True)
     if check and res.returncode != 0:
@@ -102,8 +103,7 @@ def font_path():
               "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
               "/System/Library/Fonts/Helvetica.ttc",
               "C:/Windows/Fonts/arial.ttf"]:
-        if pathlib.Path(p).exists():
-            return p
+        if pathlib.Path(p).exists(): return p
     return ""
 
 def _ff_sanitize_font(font_path_str: str) -> str:
@@ -118,66 +118,55 @@ def normalize_sentence(raw: str) -> str:
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
 
-def _hash12(s: str) -> str:
-    return hashlib.sha1(s.encode("utf-8")).hexdigest()[:12]
+def _load(path: str, default):
+    try: return json.load(open(path, "r", encoding="utf-8"))
+    except: return default
 
-# -------------------- State (per-channel + global) --------------------
+def _save(path: str, data):
+    pathlib.Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
 def _state_load() -> dict:
-    try: return json.load(open(STATE_FILE, "r", encoding="utf-8"))
-    except: return {"recent": [], "used_pexels_ids": []}
+    return _load(STATE_FILE, {"recent": [], "used_pexels_ids": []})
 
 def _state_save(st: dict):
-    st["recent"] = st.get("recent", [])[-1200:]
-    st["used_pexels_ids"] = st.get("used_pexels_ids", [])[-5000:]
-    pathlib.Path(STATE_FILE).write_text(json.dumps(st, indent=2), encoding="utf-8")
+    st["recent"] = st.get("recent", [])[-1400:]
+    st["used_pexels_ids"] = st.get("used_pexels_ids", [])[-6000:]
+    _save(STATE_FILE, st)
 
-def _record_recent(h: str, mode: str, topic: str):
-    st = _state_load()
-    st.setdefault("recent", []).append({"h":h,"mode":mode,"topic":topic,"ts":time.time()})
-    _state_save(st)
+def _gstate_load() -> dict:
+    return _load(GLOBAL_STATE, {"recent_topics": []})
+
+def _gstate_save(gs: dict):
+    gs["recent_topics"] = gs.get("recent_topics", [])[-3000:]
+    _save(GLOBAL_STATE, gs)
+
+def _hash12(s: str) -> str:
+    import hashlib
+    return hashlib.sha1(s.encode("utf-8")).hexdigest()[:12]
+
+def _is_recent_topic(topic: str, window_days=180) -> bool:
+    now = time.time()
+    gs = _gstate_load()
+    for r in reversed(gs.get("recent_topics", [])):
+        if r.get("topic") == topic and (now - r.get("ts", 0)) < window_days*86400:
+            return True
+    return False
+
+def _record_topic(topic: str):
+    gs = _gstate_load()
+    gs.setdefault("recent_topics", []).append({"topic": topic, "ts": time.time()})
+    _gstate_save(gs)
 
 def _recent_topics_for_prompt(limit=20) -> List[str]:
-    st = _state_load()
-    topics = [r.get("topic","") for r in reversed(st.get("recent", [])) if r.get("topic")]
+    gs = _gstate_load()
+    topics = [r.get("topic","") for r in reversed(gs.get("recent_topics", [])) if r.get("topic")]
     uniq=[]
     for t in topics:
         if t and t not in uniq: uniq.append(t)
         if len(uniq) >= limit: break
     return uniq
 
-def _blocklist_add_pexels(ids: List[int], days=30):
-    st = _state_load(); now = int(time.time())
-    for vid in ids:
-        st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": now})
-    cutoff = now - days*86400
-    st["used_pexels_ids"] = [x for x in st.get("used_pexels_ids", []) if x.get("ts",0) >= cutoff]
-    _state_save(st)
-
-def _blocklist_get_pexels() -> set:
-    st = _state_load()
-    return {int(x["id"]) for x in st.get("used_pexels_ids", [])}
-
-def _global_state_load():
-    try: return json.load(open(GLOBAL_STATE_FILE, "r", encoding="utf-8"))
-    except: return {"recent": []}
-
-def _global_state_save(st: dict):
-    st["recent"] = st.get("recent", [])[-5000:]
-    pathlib.Path(GLOBAL_STATE_FILE).write_text(json.dumps(st, indent=2), encoding="utf-8")
-
-def _global_is_recent(sig: str, days=14) -> bool:
-    st = _global_state_load(); now = time.time()
-    for r in st.get("recent", []):
-        if r.get("sig")==sig and (now - r.get("ts",0)) < days*86400:
-            return True
-    return False
-
-def _global_record(sig: str):
-    st = _global_state_load()
-    st.setdefault("recent", []).append({"sig": sig, "ts": time.time()})
-    _global_state_save(st)
-
-# -------------------- Caption text & wrap --------------------
+# -------------------- Caption helpers --------------------
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
 def _ff_color(c: str) -> str:
@@ -190,8 +179,7 @@ def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
     t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
-    if t and t[0].islower():
-        t = t[0].upper() + t[1:]
+    if t and t[0].islower(): t = t[0].upper() + t[1:]
     return t
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
@@ -223,7 +211,7 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
     return "\n".join([ln.strip() for ln in lines if ln.strip()])
 
 # -------------------- TTS --------------------
-def _rate_to_atempo(rate_str: str, default: float = 1.08) -> float:
+def _rate_to_atempo(rate_str: str, default: float = 1.12) -> float:
     try:
         if not rate_str: return default
         rate_str = rate_str.strip()
@@ -273,7 +261,6 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
         except Exception as e:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
-    # Fallback: Google TTS endpoint
     try:
         q = requests.utils.quote(text.replace('"','').replace("'",""))
         lang_code = (LANG or "en")
@@ -355,12 +342,9 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     if n_lines >= 7: fs = int(fs * 0.84)
     if n_lines >= 8: fs = int(fs * 0.80)
     fs = max(22, fs)
-    if n_lines >= 6:
-        y_pos = "(h*0.55 - text_h/2)"
-    elif n_lines >= 4:
-        y_pos = "(h*0.58 - text_h/2)"
-    else:
-        y_pos = "h-h/3-text_h/2"
+    if n_lines >= 6: y_pos = "(h*0.55 - text_h/2)"
+    elif n_lines >= 4: y_pos = "(h*0.58 - text_h/2)"
+    else: y_pos = "h-h/3-text_h/2"
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
@@ -383,7 +367,7 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
         ])
         enforce_video_exact_frames(tmp_out, frames, outp)
     except Exception as e:
-        print(f"⚠️ drawtext failed ({e}), falling back to simple overlay")
+        print(f"⚠️ drawtext failed ({e}), fallback overlay")
         vf_simple = f"drawtext={common}{font_arg}:fontcolor=white:borderw=3:bordercolor=black@0.85,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -396,14 +380,12 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             outp
         ])
     finally:
-        pathlib.Path(tf).unlink(missing_ok=True)
-        pathlib.Path(tmp_out).unlink(missing_ok=True)
+        pathlib.Path(tf).unlink(missing_ok=True); pathlib.Path(tmp_out).unlink(missing_ok=True)
 
 def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     vdur = ffprobe_dur(video_in)
     if vdur >= target_sec - 0.02:
-        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
-        return
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes()); return
     extra = max(0.0, target_sec - vdur)
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -434,19 +416,12 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-# -------------------- Audio concat (lossless) --------------------
 def concat_audios(files: List[str], outp: str):
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst, "w", encoding="utf-8") as f:
-        for p in files:
-            f.write(f"file '{p}'\n")
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-f","concat","-safe","0","-i", lst,
-        "-c","copy",
-        outp
-    ])
+        for p in files: f.write(f"file '{p}'\n")
+    run(["ffmpeg","-y","-hide_banner","-loglevel","error","-f","concat","-safe","0","-i", lst,"-c","copy", outp])
     pathlib.Path(lst).unlink(missing_ok=True)
 
 def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
@@ -473,60 +448,29 @@ def mux(video: str, audio: str, outp: str):
         outp
     ])
 
-# -------------------- Gemini (topic-locked + mode-aware) --------------------
-ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """You will write a YouTube Short script (25–40s) with 7 SCENES.
-Return STRICT JSON with keys:
-  country, topic, sentences (array of 7), search_terms (4–8), title, description, tags.
-
-HARD RULES:
-- DO NOT echo the topic text inside the sentences.
-- Each sentence must be 8–14 words, concrete and visual (contain an action/object).
-- No meta phrases like: "plot twist", "fluff", "crisp", "beat", "takeaway".
-- No abstract filler: "thing/things/stuff", "concept/idea" without a filmable noun.
-- Reading order (exactly 7):
-  1) HOOK (visual & specific)
-  2) PROBLEM (what goes wrong)
-  3) STAKES (why it matters)
-  4) STEP 1 (simple fix)
-  5) STEP 2 (reinforcement/detail)
-  6) MISTAKE TO AVOID
-  7) PAYOFF/CTA (result or 1-line call to try today)
-Only JSON. No markdown/prose outside JSON.""",
-
-    "tiny_drama": """Write a Short titled 'Tiny Drama Dept.' with 7 SCENES (soap-opera tone, tiny problems).
-Return STRICT JSON (country, topic, sentences[7], search_terms, title, description, tags).
-RULES:
-- Household/office micro-crises only (spill, printer jam, door slam, microwave splatter).
-- Each line shows a filmable action/object; zero corporate self-help, zero productivity talk.
-- Ban these words: productivity, workflow, optimize, synergy, habit, framework.
-- Ban meta words: plot twist, crisp, beat, takeaway, fluff.
-- 7 lines structure: [Hook micro-crisis] [What goes wrong] [Stakes] [Fix step 1] [Fix step 2] [Common mistake] [Payoff/CTA].
-- No repeating channel/topic words inside sentences.
-Only JSON.""",
-
-    "space_news": """Write a Short for daily space updates (SpaceVista 60) with 7 SCENES.
-Return STRICT JSON (country, topic, sentences[7], search_terms, title, description, tags).
-RULES:
-- Cover ONE concrete item: mission/event/instrument (e.g., 'JWST NIRCam', 'Starship flight 5', 'SOHO CME').
-- Include at least TWO specifics: date window, instrument, target, measurement, magnitude, altitude, km/s.
-- No generic 'space is vast' filler, no lifestyle/office language.
-- Each line must be filmable (rocket, pad, starfield, instrument close-up, mission patch).
-- 7 lines structure: [Hook: what happened] [Where/when] [What instrument] [Key measurement] [Why it matters] [Caveat/limitation] [CTA].
-Only JSON."""
+# -------------------- Gemini (topic-locked, schema + quality) --------------------
+SCHEMA_HINT = """
+Return ONLY valid JSON with this exact schema (no markdown):
+{
+  "title": "string (<= 90 chars, no hashtags, no list markers)",
+  "description": "1-2 short paragraphs (<= 500 chars total). No bullet numbers.",
+  "tags": ["up to 12 topical tags"],
+  "scenes": [
+    {
+      "narration": "one clear, visual sentence (8-16 words)",
+      "broll": "2-4 concrete visual cues (comma separated, e.g., 'stone arch, river valley, bridge deck')"
+    }
+    // total 7-8 scenes
+  ],
+  "seed_terms_used": ["subset of provided seed terms actually used in scenes"]
 }
-
-def _route_mode(mode: str, topic: str, ch_name: str) -> str:
-    m = (mode or "").strip().lower()
-    t = (topic or "").lower()
-    c = (ch_name or "").lower()
-    if m in ENHANCED_GEMINI_TEMPLATES:
-        return m
-    if "space" in t or "space" in c or "galactic" in c or "vista" in c:
-        return "space_news"
-    if "tiny drama" in t or "tiny drama" in c or "soap" in t:
-        return "tiny_drama"
-    return "_default"
+Constraints:
+- MUST stay on TOPIC exactly: __TOPIC__.
+- Avoid meta language like 'seven beats', 'plot twist', 'watch:', 'key takeaways:'.
+- Avoid placeholders (e.g., 'start simple', 'one crisp tip').
+- Prefer specifics the viewer can SEE (objects, places, actions).
+- Language: __LANG__.
+"""
 
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
@@ -540,128 +484,69 @@ def _gemini_call(prompt: str, model: str) -> dict:
     txt = ""
     try: txt = data["candidates"][0]["content"]["parts"][0]["text"]
     except Exception: txt = json.dumps(data)
-    m = re.search(r"\{(?:.|\n)*\}", txt)
+    m = re.search(r"\{(?:.|\n)*\}\s*$", txt)
     if not m: raise RuntimeError("Gemini response parse error (no JSON)")
     raw = re.sub(r"^```json\s*|\s*```$", "", m.group(0).strip(), flags=re.MULTILINE)
     return json.loads(raw)
 
-def build_via_gemini(routed_mode: str, channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,str,List[str],List[str],str,str,List[str]]:
-    template = ENHANCED_GEMINI_TEMPLATES.get(routed_mode, ENHANCED_GEMINI_TEMPLATES["_default"])
-    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
-    terms_hint = ", ".join(user_terms[:8]) if user_terms else "(none)"
-    topic_line = topic_lock or "Interesting Shorts"
-    guardrails = """
-RULES (MANDATORY):
-- STAY ON TOPIC: Keep content aligned to the provided channel TOPIC exactly.
-- DO NOT pivot to unrelated domains.
-- Each sentence must be filmable (action/object), 8–14 words.
-- Return ONLY JSON, no prose, no markdown.
-"""
-    prompt = f"""{template}
+BAD_PHRASES = {
+    "seven crisp beats","plot twist","watch:","instrument notes:","key reading",
+    "one clear tip","start simple","see it. learn it. done.","fluff","beat","meta"
+}
 
+def _score_content(script: dict, topic: str) -> float:
+    # basit kalite skoru: özgünlük, görsellik, meta kaçınma, sahne sayısı
+    if not isinstance(script, dict): return 0.0
+    scenes = script.get("scenes") or []
+    if not (7 <= len(scenes) <= 8): return 0.5
+    score = 5.0
+    # meta dil cezası
+    tcheck = (script.get("title","") + " " + script.get("description","")).lower()
+    if any(bp in tcheck for bp in BAD_PHRASES): score -= 2.0
+    # sahneler görsel mi?
+    vis_hits = 0
+    poor = 0
+    for sc in scenes:
+        nar = (sc.get("narration") or "").lower()
+        broll = (sc.get("broll") or "").lower()
+        if any(bp in nar for bp in BAD_PHRASES): poor += 1
+        if len(re.findall(r"[a-z]{4,}", broll)) >= 4: vis_hits += 1
+    score += min(2.0, vis_hits * 0.3)
+    score -= min(2.0, poor * 0.5)
+    # topic içeriyor mu?
+    if topic.lower().split()[0] not in (script.get("title","")+script.get("description","")).lower():
+        score -= 0.5
+    return max(0.0, min(10.0, score))
+
+def build_script_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> dict:
+    topic_line = topic_lock or "Interesting Visual Explainers"
+    terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
+    avoid = "\n".join(f"- {b}" for b in banlist[:18]) if banlist else "(none)"
+
+    prompt = f"""You are writing a tightly watchable 25–40s YouTube Short.
 Channel: {channel_name}
 Language: {LANG}
 TOPIC (hard lock): {topic_line}
-Seed search terms (use and expand, but do not ignore): {terms_hint}
-Avoid recent/duplicate topics for 180 days:
+Seed search terms (use in scenes where natural; expand carefully): {terms_hint}
+Avoid repeating recent topics (180d memory):
 {avoid}
-{guardrails}
-"""
+
+{SCHEMA_HINT.replace('__TOPIC__', topic_line).replace('__LANG__', LANG)}
+Return ONLY the JSON object (no backticks)."""
+
     data = _gemini_call(prompt, GEMINI_MODEL)
-    country = str(data.get("country") or "World").strip()
-    topic   = topic_line
-    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
-    sentences = [s for s in sentences if s][:7]  # exactly 7
-    terms = data.get("search_terms") or []
-    if isinstance(terms, str): terms=[terms]
-    terms = [t.strip() for t in terms if isinstance(t,str) and t.strip()]
-    if user_terms:
-        pref = [t for t in user_terms if t not in terms]
-        terms = pref + terms
-    title = (data.get("title") or "").strip()
-    desc  = (data.get("description") or "").strip()
-    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-    return country, topic, sentences, terms, title, desc, tags
-
-# -------------------- Quality gates --------------------
-BAD_TOKENS = {
-    "plot twist","fluff","crisp","beat","takeaway","meta","framework",
-    "thing","things","stuff","concept","idea","nice","great","good","bad",
-    "optimize","productivity","workflow","synergy","habit"
-}
-SPACE_REQUIRED_HINTS = {"nasa","esa","jwst","hubble","spacex","rocket","booster",
-                        "launch","orbit","km/s","km","altitude","instrument","telescope","spectrograph","payload"}
-TINY_ALLOWED_OBJS = {"coffee","mug","printer","paper","tray","jam","door","hinge","felt",
-                     "microwave","bowl","splatter","towel","wipe","spill","timer","steam","light","button"}
-
-def _contains_topic_echo(sent: str, topic: str) -> bool:
-    t = re.sub(r"[^a-z0-9 ]+"," ", (topic or "").lower()).strip()
-    s = re.sub(r"[^a-z0-9 ]+"," ", (sent or "").lower()).strip()
-    return len(t) > 0 and t in s
-
-def _is_visual(sent: str) -> bool:
-    return bool(re.search(r"\b(rocket|booster|pad|telescope|camera|sensor|screen|cup|paper|tray|door|hinge|steam|timer|light|desk|spill|wipe|press|fold|open|close|tilt|shake|hold|tap|pour|jam)\b", sent.lower()))
-
-def content_score(sentences: List[str], topic: str, routed_mode: str) -> float:
-    if len(sentences) != 7: return 0.0
-    score = 7.0
-    seen = set()
-    for s in sentences:
-        sl = s.lower()
-        if any(tok in sl for tok in BAD_TOKENS): score -= 1.2
-        if _contains_topic_echo(s, topic): score -= 1.2
-        if not _is_visual(s): score -= 0.8
-        key = re.sub(r"\W+"," ", sl)
-        if key in seen: score -= 0.6
-        seen.add(key)
-        w = len(s.split())
-        if not (8 <= w <= 14): score -= 0.5
-
-        if routed_mode == "space_news":
-            if re.search(r"\b(coffee|office|focus|routine|desk|meeting)\b", sl): score -= 2.0
-            if not any(h in sl for h in SPACE_REQUIRED_HINTS): score -= 0.6
-
-        if routed_mode == "tiny_drama":
-            if not any(o in sl for o in TINY_ALLOWED_OBJS): score -= 0.6
-            if re.search(r"\b(productivity|workflow|optimiz(e|e)|habit)\b", sl): score -= 2.0
-
-    if not re.search(r"\b(look|watch|see|ever|when|if|why)\b", sentences[0].lower()):
-        score -= 0.5
-    if not re.search(r"\b(try|today|now|next time|watch)\b", sentences[-1].lower()):
-        score -= 0.5
-    return max(0.0, score)
-
-def deterministic_local_writer(topic: str, terms: List[str], routed_mode: str) -> List[str]:
-    seed = " ".join([t.lower() for t in (terms or [])])
-    if routed_mode == "space_news":
-        event = "rocket static fire at the pad"
-        if "jwst" in seed or "telescope" in seed: event = "JWST captures sharp NIRCam image of a dusty galaxy"
-        return [
-            f"Watch: {event}, recorded this week with clear telemetry.",
-            "Location and time are confirmed by mission logs and observers.",
-            "Instrument notes: camera points stable; exposure window stayed short.",
-            "Key reading: signal rises above noise by a wide margin.",
-            "Why it matters: sharper data improves distance and dust estimates.",
-            "Caveat: clouds and heat ripples reduce surface detail near horizon.",
-            "Try this: rewatch the shot and spot the instrument movement."
-        ]
-    # tiny_drama (default)
-    obj, fix1, fix2 = "coffee spill", "fold a towel under the mug", "wipe outward in one pass"
-    if "printer" in seed:
-        obj, fix1, fix2 = "printer jam", "open tray and fan pages", "print three clean test lines"
-    elif "door" in seed:
-        obj, fix1, fix2 = "door slam", "add felt bumper", "tighten hinge once"
-    elif "microwave" in seed:
-        obj, fix1, fix2 = "microwave splatter", "cover bowl with paper towel", "reduce power for reheat"
-    return [
-        f"Look closely: {obj} in a normal office moment.",
-        "Small failures steal attention and time before you even notice.",
-        f"First move: {fix1}; do it slowly with steady hands.",
-        f"Second move: {fix2}; keep the shot clear and centered.",
-        "Avoid this common mistake: rushing, which makes the mess worse.",
-        "Now the desk looks calmer and you keep your flow.",
-        "Try it today; replay this while you fix yours.",
-    ]
+    # normalize
+    data["title"] = (data.get("title") or "").strip()[:90]
+    data["description"] = (data.get("description") or "").strip()[:500]
+    if not isinstance(data.get("tags"), list): data["tags"] = []
+    if not isinstance(data.get("scenes"), list): data["scenes"] = []
+    # temizle
+    for sc in data["scenes"]:
+        sc["narration"] = clean_caption_text(sc.get("narration",""))
+        sc["broll"] = re.sub(r"\s+", " ", (sc.get("broll","") or "")).strip().strip(".")
+    # tags kısalt
+    data["tags"] = [t.strip() for t in data["tags"] if isinstance(t,str) and t.strip()][:12]
+    return data
 
 # -------------------- Per-scene queries --------------------
 _STOP = set("""
@@ -669,44 +554,27 @@ a an the and or but if while of to in on at from by with for about into over aft
 this that these those is are was were be been being have has had do does did can could should would may might will shall
 you your we our they their he she it its as than then so such very more most many much just also only even still yet
 """.split())
-_GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff"}
-
-def _proper_phrases(texts: List[str]) -> List[str]:
-    phrases=[]
-    for t in texts:
-        for m in re.finditer(r"(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", t or ""):
-            phrase = re.sub(r"^(The|A|An)\s+", "", m.group(0))
-            ws = [w.lower() for w in phrase.split()]
-            for i in range(len(ws)-1):
-                phrases.append(f"{ws[i]} {ws[i+1]}")
-    seen=set(); out=[]
-    for p in phrases:
-        if p not in seen:
-            seen.add(p); out.append(p)
-    return out
-
-def _domain_synonyms(all_text: str) -> List[str]:
-    t = (all_text or "").lower()
-    s = set()
-    if any(k in t for k in ["bridge","tunnel","arch","span"]):
-        s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
-    if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
-        s.update(["ocean waves","coastal storm","rocky coast","lighthouse coast"])
-    if any(k in t for k in ["rocket","telescope","star","galaxy","orbit"]):
-        s.update(["rocket launch","star field","telescope close up","mission patch"])
-    return list(s)
+_GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff","tip","beat","beats"}
 
 def _tok4(s: str) -> List[str]:
     s = re.sub(r"[^A-Za-z0-9 ]+", " ", (s or "").lower())
     toks = [w for w in s.split() if len(w) >= 4 and w not in _STOP and w not in _GENERIC_BAD]
     return toks
 
-def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], routed_mode: str, topic: Optional[str]=None) -> List[str]:
-    topic = (topic or "").strip()
-    texts_cap = [topic] + sentences
-    texts_all = " ".join([topic] + sentences)
-    phrase_pool = _proper_phrases(texts_cap) + _domain_synonyms(texts_all)
+def _proper_pairs(text: str) -> List[str]:
+    pairs=[]
+    for m in re.finditer(r"(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", text or ""):
+        ws = [w.lower() for w in re.sub(r"^(The|A|An)\s+", "", m.group(0)).split()]
+        for i in range(len(ws)-1):
+            pairs.append(f"{ws[i]} {ws[i+1]}")
+    # uniq
+    out=[]; seen=set()
+    for p in pairs:
+        if p not in seen:
+            seen.add(p); out.append(p)
+    return out
 
+def build_per_scene_queries_from_script(scenes: List[dict], fallback_terms: List[str], topic: str) -> List[str]:
     fb=[]
     for t in (fallback_terms or []):
         t = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
@@ -714,27 +582,38 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], rou
         ws = [w for w in t.split() if w not in _STOP and w not in _GENERIC_BAD]
         if ws: fb.append(" ".join(ws[:2]))
 
-    topic_keys = _tok4(topic)[:2]
-    topic_key_join = " ".join(topic_keys) if topic_keys else ""
-
     queries=[]
-    fb_idx = 0
-    for s in sentences:
-        s_low = " " + (s or "").lower() + " "
+    fb_i=0
+    tp_keys = _tok4(topic)[:2]
+    tp_keys_join = " ".join(tp_keys) if tp_keys else ""
+
+    for sc in scenes:
+        nar = sc.get("narration","")
+        br  = sc.get("broll","")
         picked=None
-        for ph in phrase_pool:
-            if f" {ph} " in s_low:
-                picked = ph; break
+        # broll'dan doğrudan
+        bparts = [x.strip() for x in br.split(",") if x.strip()]
+        for bp in bparts:
+            toks = _tok4(bp)
+            if len(toks)>=2:
+                picked = f"{toks[0]} {toks[1]}"; break
+            if len(toks)==1:
+                picked = toks[0]
+        # narration'dan
         if not picked:
-            toks = _tok4(s)
-            if len(toks) >= 2: picked = f"{toks[0]} {toks[1]}"
-            elif len(toks) == 1: picked = toks[0]
-        if (not picked or len(picked) < 4) and fb:
-            picked = fb[fb_idx % len(fb)]; fb_idx += 1
-        if (not picked or len(picked) < 4) and topic_key_join:
-            picked = topic_key_join
-        if not picked or picked in ("great","nice","good","bad","things","stuff"):
+            toks = _tok4(nar)
+            if len(toks)>=2: picked = f"{toks[0]} {toks[1]}"
+            elif len(toks)==1: picked = toks[0]
+        # fallback terms rotasyonu
+        if (not picked or len(picked)<4) and fb:
+            picked = fb[fb_i % len(fb)]; fb_i+=1
+        # topic anahtarları
+        if (not picked or len(picked)<4) and tp_keys_join:
+            picked = tp_keys_join
+        # emniyet
+        if not picked or picked in _GENERIC_BAD:
             picked = "macro detail"
+        # üç+ kelime → son ikiye indir
         if len(picked.split()) > 2:
             w = picked.split(); picked = f"{w[-2]} {w[-1]}"
         queries.append(picked)
@@ -763,7 +642,7 @@ def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
         if r.status_code != 200: return None, None
         data = r.json() or {}
         cand = []
-        block = _blocklist_get_pexels()
+        block = {int(x["id"]) for x in _state_load().get("used_pexels_ids", [])}
         for v in data.get("videos", []):
             vid = int(v.get("id", 0))
             if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
@@ -787,7 +666,9 @@ def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
         for _, vid, link in cand:
             if vid not in _USED_PEXELS_IDS_RUNTIME:
                 _USED_PEXELS_IDS_RUNTIME.add(vid)
-                _blocklist_add_pexels([vid], days=30)
+                st = _state_load()
+                st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": int(time.time())})
+                _state_save(st)
                 print(f"   → Pexels pick [{query}] -> id={vid} | {link}")
                 return vid, link
         return None, None
@@ -826,78 +707,81 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 # -------------------- Main --------------------
 def main():
-    print(f"==> {CHANNEL_NAME} | MODE={MODE or '(auto)'} | topic-first build")
+    print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
     random.seed(ROTATION_SEED or int(time.time()))
 
-    routed_mode = _route_mode(MODE, TOPIC, CHANNEL_NAME)
-    print(f"🔀 Routed mode: {routed_mode}")
-
-    topic_lock = TOPIC
+    topic_lock = SAFE_TOPIC
     user_terms = SEARCH_TERMS_ENV
-
-    # 1) İçerik üretimi (Gemini + kalite kapısı + global dedup)
-    attempts = 0
-    MAX_ATTEMPTS = 5
-    QUALITY_THRESHOLD = 5.8
-    got = None
     banlist = _recent_topics_for_prompt()
 
+    # 1) İçerik üret (Gemini; kalite denetimli döngü)
     if USE_GEMINI and GEMINI_API_KEY:
-        while attempts < MAX_ATTEMPTS and got is None:
-            attempts += 1
+        best = None; best_score = -1.0
+        for attempt in range(5):
             try:
-                ctry, tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(
-                    routed_mode, CHANNEL_NAME, topic_lock, user_terms, banlist
-                )
-                sc = content_score(sents, tpc, routed_mode)
-                print(f"🧪 Gemini try {attempts}: score={sc:.2f}")
-                if sc >= QUALITY_THRESHOLD:
-                    sig = _hash12(f"{CHANNEL_NAME}|{tpc}|{sents[0] if sents else ''}")
-                    if _global_is_recent(sig):
-                        print("♻️ Global duplicate opening detected; regenerating…")
-                        banlist.insert(0, sents[0] if sents else tpc)
-                        continue
-                    _global_record(sig)
-                    got = (ctry, tpc, sents, search_terms, ttl, desc, tags)
-                    break
-                else:
-                    banlist.insert(0, sents[0] if sents else tpc)
-                    time.sleep(0.5)
+                script = build_script_via_gemini(CHANNEL_NAME, topic_lock, user_terms, banlist)
+                sc = _score_content(script, topic_lock)
+                print(f"📋 Script quality score: {sc:.2f}")
+                if sc > best_score:
+                    best, best_score = script, sc
+                # meta dil veya çok düşük skor → yeniden dene
+                if sc >= 6.2: break
+                time.sleep(0.7)
             except Exception as e:
-                print(f"Gemini error: {str(e)[:200]}")
-                time.sleep(0.6)
-
-    if got is None:
-        print("⚠️ Low content score or no Gemini → deterministic local writer.")
-        # Fallback
-        tpc_final = topic_lock or "Interesting Shorts"
-        sentences = deterministic_local_writer(tpc_final, user_terms or [], routed_mode)
-        search_terms = user_terms or ["b-roll", "macro detail", "timelapse city"]
-        ttl = ""; desc = ""; tags = []
-        ctry = "World"; tpc = tpc_final
+                print(f"Gemini error: {str(e)[:160]}")
+                time.sleep(0.7)
+        script = best if best else {"title":"", "description":"", "tags":[], "scenes":[]}
     else:
-        ctry, tpc, sentences, search_terms, ttl, desc, tags = got
+        # Basit, ama görsel odaklı fallback
+        sts = user_terms or ["macro detail","timelapse city","stone arch","ocean waves"]
+        scenes = []
+        for k in ["Setup", "Why it matters", "Concrete example", "Counterexample", "Tiny trick", "Memory hook", "Call to action"]:
+            scenes.append({
+                "narration": f"{topic_lock}: {k.lower()} in one clear sentence.",
+                "broll": f"{sts[0]}, {sts[min(1, len(sts)-1)]}"
+            })
+        script = {
+            "title": f"{topic_lock} — a visual mini explainer",
+            "description": f"Fast visual explainer on {topic_lock}.",
+            "tags": [t.replace(" ","") for t in ["shorts","visual","learn","explainer"] if t],
+            "scenes": scenes,
+            "seed_terms_used": sts[:2]
+        }
 
-    # Log content
-    print(f"📝 Content: {ctry} | {tpc} | {len(sentences)} lines")
+    # 1.b) Temizle & sınırla
+    scenes = script.get("scenes") or []
+    scenes = scenes[:8]
+    if len(scenes) < 7:
+        raise RuntimeError("Content generation failed: not enough scenes.")
+
+    title = (script.get("title") or "").strip()
+    description = (script.get("description") or "").strip()
+    tags = [t.strip() for t in (script.get("tags") or []) if isinstance(t,str) and t.strip()][:12]
+
+    # Meta dil ve yasaklı kalıplar tekrar kontrol
+    bad_hit = any(bp in (title+" "+description).lower() for bp in BAD_PHRASES)
+    if bad_hit:
+        title = re.sub(r"(?i)beats?|plot twist|watch:|instrument notes:|key reading", "", title).strip(" -:|")
+        description = re.sub(r"(?i)beats?|plot twist|watch:|instrument notes:|key reading", "", description).strip()
+
+    _record_topic(topic_lock)
+    print(f"📝 Content: {topic_lock} | {len(scenes)} scenes")
 
     # 2) TTS
-    tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
+    tmp = tempfile.mkdtemp(prefix="shorts_")
     font = font_path()
-    wavs, metas = [], []
-    processed = []
+    wavs, metas, sentences = [], [], []
     print("🎤 TTS…")
-    for i, s in enumerate(sentences):
-        base = normalize_sentence(s)
-        processed.append(base)
+    for i, sc in enumerate(scenes):
+        sent = normalize_sentence(sc.get("narration","").strip())
+        if not sent: sent = " "
         w = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
-        d = tts_to_wav(base, w)
-        wavs.append(w); metas.append((base, d))
-        print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
-    sentences = processed
+        d = tts_to_wav(sent, w)
+        wavs.append(w); metas.append((sent, d)); sentences.append(sent)
+        print(f"   {i+1}/{len(scenes)}: {d:.2f}s")
 
-    # 3) Pexels — sahne başına sorgular
-    per_scene_queries = build_per_scene_queries(sentences, (search_terms or user_terms or []), routed_mode, topic=tpc)
+    # 3) Pexels — sahne başına sorgu
+    per_scene_queries = build_per_scene_queries_from_script(scenes, (script.get("seed_terms_used") or user_terms or []), topic_lock)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
 
@@ -921,9 +805,8 @@ def main():
                 clips.append(f)
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
-
-    if len(clips) < len(sentences):
-        print("⚠️ Yeterli klip yok; mevcut klipler döndürülerek kullanılacak.")
+    if len(clips) < len(scenes):
+        print("⚠️ Yeterli klip yok; mevcut klipleri döndürerek kullanılacak.")
 
     # 4) Segment + altyazı
     print("🎬 Segments…")
@@ -963,8 +846,8 @@ def main():
 
     # 7) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Short"
-    outp = f"{OUT_DIR}/{ctry}_{safe_topic}_{ts}.mp4"
+    safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', topic_lock)[:60] or "Short"
+    outp = f"{OUT_DIR}/{safe_topic}_{ts}.mp4"
     print("🔄 Mux…")
     mux(vcat, acat, outp)
     final = ffprobe_dur(outp)
@@ -972,35 +855,38 @@ def main():
 
     # 8) Metadata
     def _ok_str(x): return isinstance(x, str) and len(x.strip()) > 0
-    if _ok_str(ttl):
+    if _ok_str(title):
         meta = {
-            "title": ttl[:95],
-            "description": (desc or "")[:4900],
-            "tags": (tags[:15] if isinstance(tags, list) else []),
+            "title": title[:95],
+            "description": description[:4900],
+            "tags": tags[:15],
             "privacy": VISIBILITY,
             "defaultLanguage": LANG,
             "defaultAudioLanguage": LANG
         }
     else:
-        hook = (sentences[0].rstrip(" .!?") if sentences else (tpc or "Shorts"))
-        title = f"{hook} — {tpc}"
-        description = "• " + "\n• ".join(sentences[:6]) + f"\n\n#shorts"
+        hook = (sentences[0].rstrip(" .!?") if sentences else topic_lock)
+        title2 = f"{hook} — {topic_lock}"
+        desc2 = "• " + "\n• ".join(sentences[:6]) + f"\n\n#shorts"
         meta = {
-            "title": title[:95],
-            "description": description[:4900],
-            "tags": ["shorts","education","broll","learn","tips","visual"],
+            "title": title2[:95],
+            "description": desc2[:4900],
+            "tags": ["shorts","visual","explainer", re.sub(r'[^a-z0-9]+','',LANG.lower())],
             "privacy": VISIBILITY,
             "defaultLanguage": LANG,
             "defaultAudioLanguage": LANG
         }
 
-    # 9) Upload (varsa env)
+    # 9) Upload (env guarded)
     try:
-        print("📤 Uploading to YouTube…")
-        vid_id = upload_youtube(outp, meta)
-        print(f"🎉 YouTube Video ID: {vid_id}\n🔗 https://youtube.com/watch?v={vid_id}")
+        if UPLOAD_TO_YT:
+            print("📤 Uploading to YouTube…")
+            vid_id = upload_youtube(outp, meta)
+            print(f"🎉 YouTube Video ID: {vid_id}\n🔗 https://youtube.com/watch?v={vid_id}")
+        else:
+            print("⏭️ Upload disabled by UPLOAD_TO_YT=0")
     except Exception as e:
-        print(f"❌ Upload skipped: {e}")
+        print(f"❌ Upload skipped: {e} — (Check YT_CLIENT_ID / YT_CLIENT_SECRET / YT_REFRESH_TOKEN)")
 
     # 10) Temizlik
     try:
