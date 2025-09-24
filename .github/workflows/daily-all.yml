@@ -2,7 +2,10 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    # 12:30 ET (yaz saati varsayımıyla) -> 16:30 UTC
+    - cron: "30 16 * * *"
+    # 20:30 ET (yaz saati varsayımıyla) -> 00:30 UTC (ertesi gün)
+    - cron: "30 0 * * *"
   workflow_dispatch: {}
 
 permissions:
