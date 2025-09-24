@@ -1,4 +1,4 @@
-# autoshorts_daily.py — Topic-locked script + scene visuals + quality gate + hard A/V lock
+# autoshorts_daily.py — Topic-first & quality-gated Shorts builder
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict
@@ -9,7 +9,7 @@ TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece template seçimi için; içerik TOPIC-locked
+MODE           = os.getenv("MODE", "freeform").strip().lower()
 LANG           = os.getenv("LANG", "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
@@ -20,7 +20,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-# ---- Channel intent (TOPIC + SEARCH_TERMS) ----
+# ---- Channel intent (topic/search_terms via env) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
@@ -29,7 +29,8 @@ def _parse_terms(s: str) -> List[str]:
     if not s: return []
     try:
         data = json.loads(s)
-        if isinstance(data, list): return [str(x).strip() for x in data if str(x).strip()]
+        if isinstance(data, list): 
+            return [str(x).strip() for x in data if str(x).strip()]
     except Exception:
         pass
     s = re.sub(r'^[\[\(]|\s*[\]\)]$', '', s)
@@ -145,7 +146,7 @@ def _blocklist_add_pexels(ids: List[int], days=30):
     for vid in ids:
         st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": now})
     cutoff = now - days*86400
-    st["used_pexels_ids"] = [x for x in st["used_pexels_ids"] if x.get("ts",0) >= cutoff]
+    st["used_pexels_ids"] = [x for x in st.get("used_pexels_ids", []) if x.get("ts",0) >= cutoff]
     _state_save(st)
 
 def _blocklist_get_pexels() -> set:
@@ -180,11 +181,10 @@ def clean_caption_text(s: str) -> str:
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
     text = (text or "").strip()
-    if not text:
-        return text
+    if not text: return text
     words = text.split()
     HARD_CAP = max_lines + 2
-    def distribute_into(k: int) -> list[str]:
+    def distribute_into(k: int) -> list:
         per = math.ceil(len(words) / k)
         chunks = [" ".join(words[i*per:(i+1)*per]) for i in range(k)]
         return [c for c in chunks if c]
@@ -192,9 +192,8 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
         cand = distribute_into(k)
         if cand and all(len(c) <= max_line_length for c in cand):
             return "\n".join(cand)
-    def greedy(width: int, k_cap: int) -> list[str]:
-        lines = []
-        buf, L = [], 0
+    def greedy(width: int, k_cap: int) -> list:
+        lines, buf, L = [], [], 0
         for w in words:
             add = (1 if buf else 0) + len(w)
             if L + add > width and buf:
@@ -255,8 +254,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             return ffprobe_dur(wav_out) or 0.0
         except WSServerHandshakeError as e:
             if getattr(e, "status", None) == 401 or "401" in str(e):
-                print("⚠️ edge-tts 401 → hızlı fallback TTS")
-                break
+                print("⚠️ edge-tts 401 → hızlı fallback TTS"); break
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
         except Exception as e:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
@@ -469,14 +467,14 @@ HARD RULES:
 - DO NOT echo the topic text inside the sentences.
 - Each sentence must be 8–14 words, concrete and visual (contain an action/object).
 - No meta phrases like: "plot twist", "fluff", "crisp", "takeaway", "beat".
-- No abstract filler: "thing/things/stuff", "nice/great/good/bad", "concept/idea" without a noun you can film.
+- No abstract filler: "thing/things/stuff", "nice/great/good/bad", "concept/idea" without a filmable noun.
 - Reading order (exactly 7):
   1) HOOK (visual & specific)
   2) PROBLEM (what goes wrong)
-  3) STAKES (why it matters in daily life)
+  3) STAKES (why it matters)
   4) STEP 1 (simple fix)
   5) STEP 2 (reinforcement/detail)
-  6) MISTAKE TO AVOID (one trap)
+  6) MISTAKE TO AVOID
   7) PAYOFF/CTA (result or 1-line call to try today)
 Only JSON. No markdown/prose outside JSON.""",
 
@@ -514,7 +512,6 @@ def build_via_gemini(mode: str, channel_name: str, topic_lock: str,
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:8]) if user_terms else "(none)"
     topic_line = topic_lock or "Interesting Shorts"
-
     prompt = f"""{template}
 
 Channel: {channel_name}
@@ -552,7 +549,6 @@ def _contains_topic_echo(sent: str, topic: str) -> bool:
     return len(t) > 0 and t in s
 
 def _is_visual(sent: str) -> bool:
-    # Heuristik: en az bir somut isim ya da eylem
     return bool(re.search(r"\b(coffee|printer|door|paper|screen|cup|button|steam|timer|light|desk|spill|wipe|press|fold|open|close|tilt|shake|hold|tap|pour|jam)\b", sent.lower()))
 
 def content_score(sentences: List[str], topic: str) -> float:
@@ -569,7 +565,6 @@ def content_score(sentences: List[str], topic: str) -> float:
         seen.add(key)
         w = len(s.split())
         if not (8 <= w <= 14): score -= 0.5
-    # Basit sıralama kontrolü: hook ve payoff ipucu
     if not re.search(r"\b(look|watch|see|ever|when|if|why)\b", sentences[0].lower()):
         score -= 0.5
     if not re.search(r"\b(try|today|now|next time)\b", sentences[-1].lower()):
@@ -577,41 +572,23 @@ def content_score(sentences: List[str], topic: str) -> float:
     return max(0.0, score)
 
 def deterministic_local_writer(topic: str, terms: List[str]) -> List[str]:
-    # SEARCH_TERMS içinden bir mikro-problem seç ve net, tekrar izlenir 7 sahne üret
-    seed = (terms[0] if terms else "coffee spill")
-    obj, fix1, fix2 = "coffee", "fold a towel under the mug", "wipe outward in one pass"
-    if "printer" in " ".join(terms).lower():
-        obj, fix1, fix2 = "printer jam", "open tray and fan pages", "print 3 clean test lines"
-    if "door" in " ".join(terms).lower():
+    seed = " ".join([t.lower() for t in terms]) if terms else ""
+    obj, fix1, fix2 = "coffee spill", "fold a towel under the mug", "wipe outward in one pass"
+    if "printer" in seed:
+        obj, fix1, fix2 = "printer jam", "open tray and fan pages", "print three clean test lines"
+    elif "door" in seed:
         obj, fix1, fix2 = "door slam", "add felt bumper", "tighten hinge once"
-
+    elif "microwave" in seed:
+        obj, fix1, fix2 = "microwave splatter", "cover bowl with paper towel", "reduce power for reheat"
     return [
-        f"Watch what goes wrong: {obj} in a normal office moment.",
-        f"The small failure wastes time and attention more than you think.",
-        f"First move: {fix1}; do it slowly and keep shot steady.",
-        f"Second move: {fix2}; show hands clearly, no fast cuts.",
-        "Avoid this mistake: overcorrecting fast, which makes the mess worse.",
-        "Result: cleaner desk and calmer pace within thirty seconds.",
-        "Try it today and replay if needed while you do it.",
+        f"Look closely: {obj} in a normal office moment.",
+        "Small failures steal attention and time before you even notice.",
+        f"First move: {fix1}; do it slowly with steady hands.",
+        f"Second move: {fix2}; keep the shot clear and centered.",
+        "Avoid this common mistake: rushing, which makes the mess worse.",
+        "Now the desk looks calmer and you keep your flow.",
+        "Try it today; replay this while you fix yours.",
     ]
-
-def _fallback_from_terms(topic: str, terms: List[str]) -> dict:
-    # deterministik, görsel -> anlatı eşleme
-    terms = [t for t in terms if t]
-    if not terms:
-        terms = ["macro detail", "timelapse city at dusk", "hands typing close-up", "printer error light", "coffee spill close-up", "door closing"]
-    scenes=[]
-    for t in terms[:7]:
-        vis = t
-        nar = f"{topic}: {t.split()[0].capitalize()} focus in one clear tip."
-        scenes.append({"visual": vis, "narration": nar})
-    return {
-        "title": f"{topic} — quick hits",
-        "hook":  f"{topic}: seven crisp beats you can see.",
-        "scenes": scenes,
-        "payoff":"Replay to remember the beats; try one today.",
-        "tags": ["shorts","visual","tips","learn","broll"]
-    }
 
 # -------------------- Per-scene queries --------------------
 _STOP = set("""
@@ -621,30 +598,92 @@ you your we our they their he she it its as than then so such very more most man
 """.split())
 _GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff"}
 
-def _sanitize_query(q: str) -> str:
-    q = re.sub(r"[^A-Za-z0-9 ,\-_/]", " ", q).strip()
-    q = re.sub(r"\s{2,}"," ",q)
-    return q or "macro detail"
+def _lower_tokens(s: str) -> List[str]:
+    s = re.sub(r"[^A-Za-z0-9 ]+", " ", s.lower())
+    return [w for w in s.split() if w and len(w)>2 and w not in _STOP and w not in _GENERIC_BAD]
 
-def build_per_scene_queries_from_visuals(scenes: List[dict], fallbacks: List[str], topic: str) -> List[str]:
+def _proper_phrases(texts: List[str]) -> List[str]:
+    phrases=[]
+    for t in texts:
+        for m in re.finditer(r"(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", t or ""):
+            phrase = re.sub(r"^(The|A|An)\s+", "", m.group(0))
+            ws = [w.lower() for w in phrase.split()]
+            for i in range(len(ws)-1):
+                phrases.append(f"{ws[i]} {ws[i+1]}")
+    seen=set(); out=[]
+    for p in phrases:
+        if p not in seen:
+            seen.add(p); out.append(p)
+    return out
+
+def _domain_synonyms(all_text: str) -> List[str]:
+    t = (all_text or "").lower()
+    s = set()
+    if any(k in t for k in ["bridge","tunnel","arch","span"]):
+        s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
+    if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
+        s.update(["ocean waves","coastal storm","rocky coast","lighthouse coast"])
+    return list(s)
+
+def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], mode: str, topic: Optional[str]=None) -> List[str]:
+    topic = (topic or "").strip()
+    texts_cap = [topic] + sentences
+    texts_all = " ".join([topic] + sentences)
+
+    phrase_pool = _proper_phrases(texts_cap) + _domain_synonyms(texts_all)
+
+    def _tok4(s: str) -> List[str]:
+        s = re.sub(r"[^A-Za-z0-9 ]+", " ", (s or "").lower())
+        toks = [w for w in s.split() if len(w) >= 4 and w not in _STOP and w not in _GENERIC_BAD]
+        return toks
+
+    fb=[]
+    for t in (fallback_terms or []):
+        t = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
+        if not t: continue
+        ws = [w for w in t.split() if w not in _STOP and w not in _GENERIC_BAD]
+        if ws:
+            fb.append(" ".join(ws[:2]))
+
+    topic_keys = _tok4(topic)[:2]
+    topic_key_join = " ".join(topic_keys) if topic_keys else ""
+
     queries=[]
-    fb = [re.sub(r"[^A-Za-z0-9 ]+"," ", t).strip() for t in (fallbacks or []) if t.strip()]
-    i_fb=0
-    for sc in scenes:
-        vis = (sc.get("visual") or "").strip()
-        q = _sanitize_query(vis)
-        if len(q) < 4 and fb:
-            q = fb[i_fb % len(fb)]; i_fb+=1
-        if len(q.split()) > 6:
-            q = " ".join(q.split()[:6])
-        queries.append(q)
-    if not queries and fb:
-        queries = fb[:6]
-    if not queries:
-        queries = ["macro detail"]
+    fb_idx = 0
+    for s in sentences:
+        s_low = " " + (s or "").lower() + " "
+        picked=None
+
+        for ph in phrase_pool:
+            if f" {ph} " in s_low:
+                picked = ph; break
+
+        if not picked:
+            toks = _tok4(s)
+            if len(toks) >= 2:
+                picked = f"{toks[0]} {toks[1]}"
+            elif len(toks) == 1:
+                picked = toks[0]
+
+        if (not picked or len(picked) < 4) and fb:
+            picked = fb[fb_idx % len(fb)]
+            fb_idx += 1
+
+        if (not picked or len(picked) < 4) and topic_key_join:
+            picked = topic_key_join
+
+        if not picked or picked in ("great","nice","good","bad","things","stuff"):
+            picked = "macro detail"
+
+        if len(picked.split()) > 2:
+            w = picked.split()
+            picked = f"{w[-2]} {w[-1]}"
+
+        queries.append(picked)
+
     return queries
 
-# -------------------- Pexels (tek odak + tekrar önleme) --------------------
+# -------------------- Pexels --------------------
 _USED_PEXELS_IDS_RUNTIME = set()
 
 def _pexels_headers():
@@ -678,7 +717,7 @@ def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
             if not pf: continue
             pf.sort(key=lambda x: (abs(int(x.get("height",0))-1440), int(x.get("height",0))*int(x.get("width",0))))
             best = pf[0]
-            h = int(best.get("height",0))
+            w = int(best.get("width",0)); h = int(best.get("height",0))
             dur = float(v.get("duration",0))
             dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
             tokens = set(re.findall(r"[a-z0-9]+", (v.get("url") or "").lower()))
@@ -733,9 +772,6 @@ def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
     random.seed(ROTATION_SEED or int(time.time()))
 
-    topic_lock = TOPIC
-    user_terms = SEARCH_TERMS_ENV
-
     # 1) İçerik (TOPIC lock + SEARCH_TERMS seed)
     topic_lock = TOPIC
     user_terms = SEARCH_TERMS_ENV
@@ -744,25 +780,26 @@ def main():
     search_terms = None
     ttl = desc = ""
     tags = []
+    ctry_final, tpc_final = "World", (topic_lock or "Interesting Shorts")
 
     if USE_GEMINI and GEMINI_API_KEY:
         banlist = _recent_topics_for_prompt()
         last_pack = None
         for attempt in range(3):
             try:
-                ctry, tpc, sents, terms, ttl, desc, tags = build_via_gemini(
+                ctry, tpc, sents, terms, ttl_, desc_, tags_ = build_via_gemini(
                     MODE, CHANNEL_NAME, topic_lock, user_terms, banlist
                 )
-                last_pack = (ctry, tpc, sents, terms, ttl, desc, tags)
+                last_pack = (ctry, tpc, sents, terms, ttl_, desc_, tags_)
                 sc = content_score(sents, tpc)
                 print(f"🧪 Content score: {sc:.2f} (attempt {attempt+1})")
                 if sc >= 5.8:
                     _record_recent(_hash12(f"{MODE}|{tpc}|{sents[0]}"), MODE, tpc)
                     sentences, search_terms = sents, terms
                     ctry_final, tpc_final = ctry, tpc
+                    ttl, desc, tags = ttl_, desc_, tags_
                     break
                 else:
-                    # kötü içerik → tekrar denerken, mevcut konuyu “avoid” listesine ekle
                     banlist.insert(0, tpc)
                     time.sleep(0.5)
             except Exception as e:
@@ -770,41 +807,17 @@ def main():
                 time.sleep(0.5)
 
         if sentences is None:
-            # Son çare: deterministik yerel yazar
-            ctry_final, tpc_final = "World", (topic_lock or "Interesting Shorts")
             sentences = deterministic_local_writer(tpc_final, user_terms or [])
             search_terms = user_terms or ["macro detail","close up","hands action","office desk"]
-            ttl = ""
-            desc = ""
-            tags = []
 
     else:
-        # Gemini yoksa direkt deterministik iskelet
-        ctry_final, tpc_final = "World", (topic_lock or "Interesting Shorts")
         sentences = deterministic_local_writer(tpc_final, user_terms or [])
         search_terms = user_terms or ["macro detail","close up","hands action","office desk"]
-        ttl = ""
-        desc = ""
-        tags = []
 
-    # Son bir temizlik
     sentences = [normalize_sentence(s) for s in sentences][:7]
     print(f"📝 Content: {ctry_final} | {tpc_final} | {len(sentences)} lines")
 
-    # 2) İçerik özet
-    scenes = script.get("scenes") or []
-    sentences = [normalize_sentence(sc.get("narration","")) for sc in scenes]
-    sentences = [s for s in sentences if s][:MAX_NUM_SCENES]
-    if len(sentences) < 3:
-        # emniyet
-        sentences = [
-            f"{topic_lock or 'This topic'} in one minute.",
-            "Clear, visual beats you can follow.",
-            "Simple payoff you can apply today."
-        ]
-    print(f"📝 Content: {(topic_lock or 'World')} | {script.get('title','')[:60]} | {len(sentences)} lines")
-
-    # 3) TTS
+    # 2) TTS
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
     wavs, metas = [], []
@@ -816,8 +829,8 @@ def main():
         wavs.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 4) Pexels — sahne görsellerinden net sorgular
-    per_scene_queries = build_per_scene_queries_from_visuals(scenes, user_terms, topic_lock or "")
+    # 3) Pexels — sahne başına net sorgular
+    per_scene_queries = build_per_scene_queries(sentences, (search_terms or user_terms or []), MODE, topic=tpc_final)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
 
@@ -829,7 +842,7 @@ def main():
         raise RuntimeError("Pexels: hiçbir sonuç bulunamadı (per-scene).")
 
     clips = []
-    for idx, (vid, link) in enumerate(picked[:len(sentences)]):
+    for idx, (vid, link) in enumerate(picked):
         try:
             f = str(pathlib.Path(tmp) / f"clip_{idx:02d}_{vid}.mp4")
             with requests.get(link, stream=True, timeout=120) as rr:
@@ -843,9 +856,9 @@ def main():
             print(f"⚠️ download fail ({vid}): {e}")
 
     if len(clips) < len(sentences):
-        print("⚠️ Yeterli klip yok; mevcut klipler döndürülecek.")
+        print("⚠️ Yeterli klip yok; mevcut klipleri döndürerek kullanılacak.")
 
-    # 5) Segment + altyazı
+    # 4) Segment + altyazı
     print("🎬 Segments…")
     segs = []
     for i, (base_text, d) in enumerate(metas):
@@ -862,18 +875,17 @@ def main():
         )
         segs.append(colored)
 
-    # 6) Birleştir ve süre/kare kilidi
+    # 5) Birleştir
     print("🎞️ Assemble…")
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
+    # 6) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
     if vdur + 0.02 < adur:
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
         pad_video_to_duration(vcat, adur, vcat_padded)
-        vcat = vcat_padded
-        vdur = ffprobe_dur(vcat)
-
+        vcat = vcat_padded; vdur = ffprobe_dur(vcat)
     a_frames = max(2, int(round(adur * TARGET_FPS)))
     vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4")
     enforce_video_exact_frames(vcat, a_frames, vcat_exact); vcat = vcat_exact
@@ -884,23 +896,22 @@ def main():
 
     # 7) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', (topic_lock or script.get('title','Short')))[:60] or "Short"
-    outp = f"{OUT_DIR}/{safe_topic}_{ts}.mp4"
+    safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc_final)[:60] or "Short"
+    outp = f"{OUT_DIR}/{ctry_final}_{safe_topic}_{ts}.mp4"
     print("🔄 Mux…")
     mux(vcat, acat, outp)
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8) Metadata (izlenebilirlik odaklı başlık/açıklama)
+    # 8) Metadata (izlenebilirlik odaklı)
     def _ok_str(x): return isinstance(x, str) and len(x.strip()) > 0
-
     if _ok_str(ttl):
         title = ttl[:95]
         description = (desc or "")[:4900]
     else:
-        hook = sentences[0].rstrip(". ")
+        hook = metas[0][0].rstrip(". ")
         title = (hook[:80] + " — " + tpc_final)[:95]
-        bullets = "• " + "\n• ".join(sentences[:6])
+        bullets = "• " + "\n• ".join([m[0] for m in metas[:6]])
         cta = "\n\nWatch again while you try it. #shorts"
         description = (bullets + cta)[:4900]
 
@@ -929,4 +940,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
