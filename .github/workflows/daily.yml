@@ -22,32 +22,43 @@ jobs:
   build-upload:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    timeout-minutes: 30
+    timeout-minutes: 40
 
+    # ---- ENV (repo secrets -> runtime env) ----
     env:
-      TZ:                ${{ vars.TZ || 'UTC' }}
-      CHANNEL_NAME:      ${{ inputs.environment }}
-      MODE:              ${{ vars.MODE || 'freeform' }}
-      LANG:              ${{ vars.LANG || 'en' }}
-      VISIBILITY:        ${{ vars.VISIBILITY || 'public' }}
-      TTS_VOICE:         ${{ vars.TTS_VOICE || '' }}
-      TARGET_MIN_SEC:    ${{ vars.TARGET_MIN_SEC || '22' }}
-      TARGET_MAX_SEC:    ${{ vars.TARGET_MAX_SEC || '40' }}
-      TOPIC:             ${{ vars.TOPIC || '' }}
-      SEARCH_TERMS:      ${{ vars.SEARCH_TERMS || '[]' }}
-      USE_GEMINI:        ${{ vars.USE_GEMINI || '1' }}
-      GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-      CAPTION_MAX_LINE:  ${{ vars.CAPTION_MAX_LINE || '28' }}
-      CAPTION_MAX_LINES: ${{ vars.CAPTION_MAX_LINES || '6' }}
-      PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
-        # --- YouTube upload secrets (GEREKLİ) ---
-      YT_CLIENT_ID:      ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET:  ${{ secrets.YT_CLIENT_SECRET }}
-      YT_REFRESH_TOKEN:  ${{ secrets.YT_REFRESH_TOKEN }}
+      TZ:                 ${{ vars.TZ || 'UTC' }}
+      CHANNEL_NAME:       ${{ inputs.environment }}
+      MODE:               ${{ vars.MODE || '' }}           # Boş bırak; kod auto-route ediyor
+      LANG:               ${{ vars.LANG || 'en' }}
+      VISIBILITY:         ${{ vars.VISIBILITY || 'public' }}
+      TTS_VOICE:          ${{ vars.TTS_VOICE || '' }}
+      TARGET_MIN_SEC:     ${{ vars.TARGET_MIN_SEC || '22' }}
+      TARGET_MAX_SEC:     ${{ vars.TARGET_MAX_SEC || '42' }}
+      ROTATION_SEED:      ${{ vars.ROTATION_SEED || github.run_number }}
+      USE_GEMINI:         '1'
+      GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+      PEXELS_API_KEY:     ${{ secrets.PEXELS_API_KEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ---- Restore content/state caches (global + channel) ----
+      - name: Restore global content cache
+        id: cache-global-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            state_global_topics.json
+          key: global-state-v1
+
+      - name: Restore channel state cache
+        id: cache-channel-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            state_${{ github.event.inputs.environment }}.json
+          key: chstate-${{ github.event.inputs.environment }}-v1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -76,7 +87,14 @@ jobs:
       - name: Prepare output dir
         run: mkdir -p out
 
-      - name: Run generator & upload
+      # Küçük jitter: API rate spikes'ı azaltır
+      - name: Jitter
+        run: |
+          S=$(( ( RANDOM % 10 ) + 3 ))
+          echo "Sleeping $S sec to spread load..."
+          sleep $S
+
+      - name: Run generator & upload (Gemini on)
         run: python autoshorts_daily.py
 
       - name: Save video artifact
@@ -87,3 +105,20 @@ jobs:
           path: out/*.mp4
           retention-days: 2
           if-no-files-found: ignore
+
+      # ---- Save caches back (so next runs remember topics/pexels) ----
+      - name: Save global content cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            state_global_topics.json
+          key: global-state-v1
+
+      - name: Save channel state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            state_${{ github.event.inputs.environment }}.json
+          key: chstate-${{ github.event.inputs.environment }}-v1
