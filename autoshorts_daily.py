@@ -98,10 +98,12 @@ def ffprobe_dur(p):
         return 0.0
 
 def font_path():
-    for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-              "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-              "/System/Library/Fonts/Helvetica.ttc",
-              "C:/Windows/Fonts/arial.ttf"]]:
+    for p in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "C:/Windows/Fonts/arial.ttf"
+    ]:
         if pathlib.Path(p).exists():
             return p
     return ""
@@ -1028,3 +1030,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
