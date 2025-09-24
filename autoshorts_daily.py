@@ -492,6 +492,46 @@ Return ONLY JSON, no markdown/prose.""",
     "country_facts": """Make surprising but true micro-facts about places/culture, same JSON contract."""
 }
 
+def _extract_json_block(txt: str) -> dict:
+    """
+    Gemini bazen JSON dışına metin/işaret koyabiliyor.
+    Bu yardımcı, ilk düzgün { ... } bloğunu denge sayacıyla ayıklar.
+    """
+    # Kod çitlerini temizle
+    t = txt.strip()
+    t = re.sub(r"^```json\s*", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"^```\s*", "", t)
+    t = re.sub(r"\s*```$", "", t)
+
+    # Eğer doğrudan JSON ise
+    try:
+        return json.loads(t)
+    except Exception:
+        pass
+
+    # İlk dengeli { ... } bloğunu yakala
+    start = t.find("{")
+    if start == -1:
+        raise RuntimeError("Gemini response parse error (no opening brace)")
+
+    depth = 0
+    for i in range(start, len(t)):
+        ch = t[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                block = t[start:i+1]
+                try:
+                    return json.loads(block)
+                except Exception as e:
+                    # trailing virgüller vb. min temizlik
+                    block2 = re.sub(r",\s*}", "}", block)
+                    block2 = re.sub(r",\s*\]", "]", block2)
+                    return json.loads(block2)
+    raise RuntimeError("Gemini response parse error (unbalanced braces)")
+
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
@@ -501,13 +541,11 @@ def _gemini_call(prompt: str, model: str) -> dict:
     if r.status_code != 200:
         raise RuntimeError(f"Gemini HTTP {r.status_code}: {r.text[:300]}")
     data = r.json()
-    txt = ""
-    try: txt = data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception: txt = json.dumps(data)
-    m = re.search(r"\{(?:.|\n)*\}", txt)
-    if not m: raise RuntimeError("Gemini response parse error (no JSON)")
-    raw = re.sub(r"^```json\s*|\s*```$", "", m.group(0).strip(), flags=re.MULTILINE)
-    return json.loads(raw)
+    try:
+        txt = data["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        txt = json.dumps(data)
+    return _extract_json_block(txt)
 
 def build_via_gemini(topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],List[str],str,str,List[str]]:
     template = ENHANCED_GEMINI_TEMPLATES["_base"]
@@ -534,23 +572,57 @@ Avoid recently used topics (180 days):
     data = _gemini_call(prompt, GEMINI_MODEL)
 
     hook      = str(data.get("hook_line") or "").strip()
-    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
-    sentences = [s for s in sentences if s][:8]
-    hints     = data.get("visual_hints") or []
-    hints     = [str(x).strip() for x in hints if str(x).strip()]
-    if len(hints) < len(sentences):
-        # doldur
-        hints += ["macro detail"]*(len(sentences)-len(hints))
+    sentences = [clean_caption_text(s) for s in (data.get("sentences") or []) if str(s).strip()]
+    hints     = [str(x).strip() for x in (data.get("visual_hints") or []) if str(x).strip()]
+
+    # En az 7 satır garanti et
+    if len(sentences) < 7:
+        base = topic_lock or "Quick visual insight"
+        fillers = [
+            f"{base}: one clean example you can see.",
+            "Anchor it to a visual trigger.",
+            "Name the pattern in seven words.",
+            "Show one counterexample for contrast.",
+            "Repeat once in a new context.",
+            "Compress to a memorable cue.",
+            "Close by calling back to the start."
+        ]
+        # hook’u da ekleyelim (videonun 1. satırı olacak)
+        sentences = [hook or "Two ways you can spot this fast."] + fillers[:7]
+    else:
+        # Hook'u başa ekle (zaten üstte de böyle kullanıyoruz)
+        sentences = [hook or "Two ways you can spot this fast."] + sentences[:7]
+
+    # Hints boş veya kısa ise topic’e göre güvenli varsayılanlar
+    default_hints = []
+    tl = (topic_lock or "").lower()
+    if any(k in tl for k in ["nature","eco","micro","macro"]):
+        default_hints = ["leaf macro","dew drops macro","mushroom gills","insect macro","forest moss","stream pebbles","leaf veins"]
+    elif any(k in tl for k in ["space","cosmic","planet","astronomy"]):
+        default_hints = ["rocket launch","planet surface","star field","telescope","nebula drift","iss window","milky way"]
+    elif any(k in tl for k in ["bridge","tunnel","urban","city"]):
+        default_hints = ["city bridge drone","stone arch","metro station","aerial skyline","river pier","traffic timelapse","spiral stairs"]
+    else:
+        default_hints = ["macro gears","timelapse city","close-up hands","notebook topdown","river ripples","window light","walking feet"]
+
+    if len(hints) < 7:
+        need = 7 - len(hints)
+        hints = hints + default_hints[:need]
+    # Hook + 7 sahne → 8 ipucu lazımsa sonuncuyu tekrar et
+    while len(hints) < len(sentences):
+        hints.append(hints[-1] if hints else default_hints[0])
+
     terms     = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
     terms = [t.strip() for t in terms if isinstance(t,str) and t.strip()]
     if user_terms:
         pref = [t for t in user_terms if t not in terms]
         terms = (pref + terms)[:12]
+
     ttl      = (data.get("title") or "").strip()
     desc     = (data.get("description") or "").strip()
     tags     = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-    return hook, sentences, hints, terms, ttl, desc, tags
+    return hook, sentences[1:], hints, terms, ttl, desc, tags  # sentences[1:] = hook dışındaki 7 satır
 
 # -------------------- Per-scene queries --------------------
 _STOP = set("""
@@ -818,7 +890,17 @@ def main():
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
     # 3) Pexels — sahne başına net sorgular
-    per_scene_queries = build_per_scene_queries(sentences, hints+[hints[-1]], (search_terms or user_terms or []), topic_lock or "Interesting Shorts")
+    # hints güvenli doldurma (en az len(sentences))
+hints_for_queries = list(hints) if hints else []
+while len(hints_for_queries) < len(sentences):
+    hints_for_queries.append(hints_for_queries[-1] if hints_for_queries else "macro detail")
+
+per_scene_queries = build_per_scene_queries(
+    sentences,
+    hints_for_queries,
+    (search_terms or user_terms or []),
+    topic_lock or "Interesting Shorts"
+)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
 
@@ -952,3 +1034,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
