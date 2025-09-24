@@ -315,43 +315,41 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
-def make_segment(src: str, dur_s: float, outp: str, start_at: float = 0.0):
-    """start_at ile ofsetli segment üret; CFR/PTS/trim sabit."""
+def make_segment(src: str, dur_s: float, outp: str, start_at: float = 0.0, fade_in=True, fade_out=True):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
-    fade = max(0.05, min(0.12, qdur/8.0))
-    fade_out_st = max(0.0, qdur - fade)
+    fin = max(0.05, min(0.12, qdur/8.0)) if fade_in else 0.0
+    fout = max(0.05, min(0.12, qdur/8.0)) if fade_out else 0.0
+    fade_out_st = max(0.0, qdur - fout)
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
-        f"fps={TARGET_FPS},"
-        f"setpts=N/{TARGET_FPS}/TB,"
-        f"trim=start_frame=0:end_frame={frames},"
-        f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
+        f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
     )
+    if fin > 0:  vf += f",fade=t=in:st=0:d={fin:.2f}"
+    if fout > 0: vf += f",fade=t=out:st={fade_out_st:.2f}:d={fout:.2f}"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-ss", f"{max(0.0, start_at):.3f}", "-t", f"{qdur:.3f}",
         "-i", src,
-        "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-an",
-        "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
+        "-vf", vf, "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-an","-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart",
         outp
     ])
 
-def ensure_segment_duration(seg_path: str, target_sec: float):
-    """Segment ffmpeg -t ile kısa kesildiyse, tpad ile hedef süreye kadar doldur."""
-    cur = ffprobe_dur(seg_path)
+def ensure_segment_duration(video_in: str, target_sec: float) -> None:
+    """
+    Segment süresi TTS süresinden kısa ise, videoyu clone tpad ile hedefe kadar uzatır (in-place).
+    """
+    cur = ffprobe_dur(video_in)
     if cur + 0.01 >= target_sec:
         return
     extra = max(0.0, target_sec - cur)
-    tmp = str(pathlib.Path(seg_path).with_suffix(".pad.mp4"))
+    tmp = str(pathlib.Path(video_in).with_suffix(".pad.mp4"))
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", seg_path,
+        "-i", video_in,
         "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
         "-map","[v]",
         "-r", str(TARGET_FPS), "-vsync","cfr",
@@ -359,7 +357,7 @@ def ensure_segment_duration(seg_path: str, target_sec: float):
         "-pix_fmt","yuv420p","-movflags","+faststart",
         tmp
     ])
-    pathlib.Path(seg_path).write_bytes(pathlib.Path(tmp).read_bytes())
+    pathlib.Path(video_in).write_bytes(pathlib.Path(tmp).read_bytes())
     pathlib.Path(tmp).unlink(missing_ok=True)
 
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
@@ -559,11 +557,9 @@ def _gemini_call(prompt: str, model: str) -> dict:
 
 # --- Meta-line filter & fillers (NEW) ---
 META_BAD = {
-    "anchor it to a visual trigger",
-    "name the pattern", "counterexample for contrast",
-    "repeat once", "compress it", "close by calling back",
-    "one clear tip", "see it", "learn it", "in 60 seconds",
-    "plot twist", "watch:", "instrument notes:", "key reading"
+    "anchor it to a visual trigger","name the pattern","counterexample for contrast",
+    "repeat once","compress the idea","compress it","close by echoing","close by calling back",
+    "one clear tip","see it","learn it","in 60 seconds","plot twist","watch:","instrument notes:","key reading"
 }
 
 def _is_meta_line(s: str) -> bool:
@@ -571,55 +567,66 @@ def _is_meta_line(s: str) -> bool:
     return any(k in t for k in META_BAD)
 
 def _topic_fillers(topic: str) -> list[str]:
-    t = (topic or "").lower()
-    if any(k in t for k in ["urban","city","skyline","bridge","tunnel"]):
-        return [
-            "Spot the spiral ramp from an overhead angle.",
-            "Notice how traffic flows smoother through the spiral.",
-            "Compare a straight ramp footprint to this spiral.",
-            "Find the tight radius where speed must drop.",
-            "Switch to a second bridge and check lane merges.",
-            "Look for signage that primes drivers ahead.",
-            "End by circling back to that helix from above."
-        ]
-    if any(k in t for k in ["space","cosmic","planet","astronomy"]):
-        return [
-            "Start with a wide shot of a moving star field.",
-            "Zoom to a single bright object crossing frame.",
-            "Compare two orbits with different eccentricity.",
-            "Show a transit dip line on a simple graph.",
-            "Cut to a rocket stage separation close-up.",
-            "Return to the sky to spot the same pattern.",
-            "Close by syncing motion back to the opening."
-        ]
-    if any(k in t for k in ["nature","eco","wild","macro","micro"]):
-        return [
-            "Begin on dew drops forming perfect beads.",
-            "Shift to leaf veins branching like rivers.",
-            "Contrast a smooth petal with rough bark.",
-            "Show a second leaf with tighter spacing.",
-            "Zoom on a tiny insect crossing the vein.",
-            "Repeat the curve motif in a new plant.",
-            "Loop back to the first frame’s texture."
-        ]
-    # genel güvenli
+    t = (topic or "Quick visual insight")
     return [
-        "Open with a wide shot that shows the idea.",
-        "Push into a close-up where the cue appears.",
-        "Compare with a second angle to confirm it.",
-        "Show one case where the cue breaks down.",
-        "Repeat the pattern in a new quick example.",
-        "Compress the idea into a short takeaway.",
-        "Close by echoing the opening shot."
+        f"{t}: show a concrete example on screen.",
+        f"{t}: push into a close-up where the cue appears.",
+        f"{t}: confirm with a second angle or setting.",
+        f"{t}: one counterexample to sharpen the edges.",
+        f"{t}: repeat the same cue in a new context.",
+        f"{t}: compress it into a 7-word takeaway.",
+        f"{t}: echo the opening shot to close the loop."
     ]
 
 def sanitize_script(topic: str, hook: str, sentences: list[str]) -> tuple[str, list[str]]:
     lines = [clean_caption_text(s) for s in (sentences or []) if s and not _is_meta_line(s)]
+    # Hook garanti ve somut olsun
+    h = clean_caption_text(hook)
+    if not h or len(h.split()) < 4:
+        # TOPIC tabanlı güvenli hook
+        h = f"{(topic or 'This pattern')} in two quick visuals."
+    # 7 satıra tamamla (TOPIC içeren doldurucular)
     if len(lines) < 7:
-        fillers = _topic_fillers(topic)
+        fills = _topic_fillers(topic)
         need = 7 - len(lines)
-        lines += fillers[:need]
-    return hook, lines[:7]
+        lines += fills[:need]
+    return h, lines[:7]
+
+META_BAD = {
+    "anchor it to a visual trigger","name the pattern","counterexample for contrast",
+    "repeat once","compress the idea","compress it","close by echoing","close by calling back",
+    "one clear tip","see it","learn it","in 60 seconds","plot twist","watch:","instrument notes:","key reading"
+}
+
+def _is_meta_line(s: str) -> bool:
+    t = (s or "").lower().strip()
+    return any(k in t for k in META_BAD)
+
+def _topic_fillers(topic: str) -> list[str]:
+    t = (topic or "Quick visual insight")
+    return [
+        f"{t}: show a concrete example on screen.",
+        f"{t}: push into a close-up where the cue appears.",
+        f"{t}: confirm with a second angle or setting.",
+        f"{t}: one counterexample to sharpen the edges.",
+        f"{t}: repeat the same cue in a new context.",
+        f"{t}: compress it into a 7-word takeaway.",
+        f"{t}: echo the opening shot to close the loop."
+    ]
+
+def sanitize_script(topic: str, hook: str, sentences: list[str]) -> tuple[str, list[str]]:
+    lines = [clean_caption_text(s) for s in (sentences or []) if s and not _is_meta_line(s)]
+    # Hook garanti ve somut olsun
+    h = clean_caption_text(hook)
+    if not h or len(h.split()) < 4:
+        # TOPIC tabanlı güvenli hook
+        h = f"{(topic or 'This pattern')} in two quick visuals."
+    # 7 satıra tamamla (TOPIC içeren doldurucular)
+    if len(lines) < 7:
+        fills = _topic_fillers(topic)
+        need = 7 - len(lines)
+        lines += fills[:need]
+    return h, lines[:7]
 
 def build_via_gemini(topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],List[str],str,str,List[str]]:
     template = ENHANCED_GEMINI_TEMPLATES["_base"]
@@ -940,6 +947,8 @@ def main():
         base = normalize_sentence(s)
         w = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
         d = tts_to_wav(base, w)
+        if i == 0 and d < 2.6:  # hook çok kısaysa pad et
+            d = ensure_min_audio(w, 2.6)
         wavs.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
@@ -989,39 +998,37 @@ def main():
     # 4) Segment + altyazı + LOOP HİLESİ (güvenli)
     print("🎬 Segments…")
     segs = []
-    first_clip_src = clips[0 % len(clips)]
-    first_clip_total = ffprobe_dur(first_clip_src)
-    half = max(0.0, first_clip_total/2.0 - 0.25)
+# Segments…
+first_clip_src = clips[0 % len(clips)]
+first_clip_total = ffprobe_dur(first_clip_src)
+half = max(0.0, first_clip_total/2.0 - 0.25)
 
-    for i, (base_text, d) in enumerate(metas):
-        if i == 0:
-            src = first_clip_src
-            src_dur = ffprobe_dur(src)
-            # videonun sonundan d saniye bırakacak şekilde güvenli ofset
-            start_at = max(0.0, min(src_dur - d, half))
-        elif i == len(metas)-1:
-            src = first_clip_src
-            src_dur = ffprobe_dur(src)
-            start_at = 0.0
-        else:
-            src = clips[i % len(clips)]
-            src_dur = ffprobe_dur(src)
-            start_at = 0.0
+for i, (base_text, d) in enumerate(metas):
+    if i == 0:
+        src = first_clip_src
+        src_dur = ffprobe_dur(src)
+        start_at = max(0.0, min(src_dur - d, half))
+        fin, fout = False, True   # açılışta fade-in yok
+    elif i == len(metas)-1:
+        src = first_clip_src
+        start_at = 0.0
+        fin, fout = True, False   # kapanışta fade-out yok
+    else:
+        src = clips[i % len(clips)]
+        start_at = 0.0
+        fin, fout = True, True
 
-        base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        make_segment(src, d, base, start_at=start_at)
-        ensure_segment_duration(base, d)  # video süresi < TTS ise tpad ile tamamla
+    base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
+    make_segment(src, d, base, start_at=start_at, fade_in=fin, fade_out=fout)
+    ensure_segment_duration(base, d)  # video süresi < TTS ise tpad ile tamamla
 
-        colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
-        draw_capcut_text(
-            base,
-            base_text,
-            CAPTION_COLORS[i % len(CAPTION_COLORS)],
-            font,
-            colored,
-            is_hook=(i == 0)
-        )
-        segs.append(colored)
+    colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
+    draw_capcut_text(
+        base, base_text,
+        CAPTION_COLORS[i % len(CAPTION_COLORS)], font,
+        colored, is_hook=(i == 0)
+    )
+    segs.append(colored)
 
     # 5) Birleştir
     print("🎞️ Assemble…")
@@ -1054,9 +1061,16 @@ def main():
 
     # 8) Metadata (title/desc strong)
     def _ok(x): return isinstance(x, str) and x.strip()
-    title = (hook if _ok(hook) else sentences[0])[:95]
+
+    # title
+    title = (hook if _ok(hook) else (sentences[1] if len(sentences)>1 else TOPIC or CHANNEL_NAME))[:95]
+    if title.lower() in {"unknown","untitled",""}:
+        title = f"{(TOPIC or CHANNEL_NAME)[:70]} — quick visual breakdown"
+
+    # description (>=2000)
     description = (desc[:4900] if 'desc' in locals() and _ok(desc) and len(desc) >= 1000
                    else _desc_boost(TOPIC or "Shorts", sentences, search_terms))
+
     meta = {
         "title": title,
         "description": description,
@@ -1084,3 +1098,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
