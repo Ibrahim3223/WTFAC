@@ -1,4 +1,4 @@
-# autoshorts_daily.py — Topic-first script, visual hints, looped first clip, stronger SEO
+# autoshorts_daily.py — Topic-first script, visual hints, looped first clip, stronger SEO (patched)
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple
@@ -102,7 +102,7 @@ def font_path():
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
-        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/arial.ttf"
     ]:
         if pathlib.Path(p).exists():
             return p
@@ -167,7 +167,7 @@ def _blocklist_add_pexels(ids: List[int], days=30):
     for vid in ids:
         st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": now})
     cutoff = now - days*86400
-    st["used_pexels_ids"] = [x for x in st["used_pexels_ids"] if x.get("ts",0) >= cutoff]
+    st["used_pexels_ids"] = [x for x in st.get("used_pexels_ids", []) if x.get("ts",0) >= cutoff]
     _state_save(st)
 
 def _blocklist_get_pexels() -> set:
@@ -181,6 +181,7 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
     for t in topics:
         if t and t not in uniq: uniq.append(t)
         if len(uniq) >= limit: break
+    # global pool'u da karıştır
     g = _global_topics_load().get("topics", [])
     for t in reversed(g):
         if t and t not in uniq:
@@ -188,7 +189,7 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
             if len(uniq) >= limit: break
     return uniq
 
-# -------------------- Caption helpers (defined BEFORE draw_capcut_text) --------------------
+# -------------------- Caption text & wrap --------------------
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
 def _ff_color(c: str) -> str:
@@ -201,12 +202,12 @@ def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
     t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
+    # yasaklı boş cümleler (meta-speech) → temizle
     BAD = {"one clear tip","see it","learn it","in 60 seconds","plot twist","watch:","instrument notes:","key reading"}
     low = t.lower()
     for b in BAD:
         low = low.replace(b, "")
-    t = re.sub(r"\s+", " ", low).strip()
-    if t: t = t[0].upper() + t[1:]
+    t = re.sub(r"\s+", " ", low).strip().capitalize()
     return t
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
@@ -340,6 +341,26 @@ def make_segment(src: str, dur_s: float, outp: str, start_at: float = 0.0):
         "-pix_fmt","yuv420p","-movflags","+faststart",
         outp
     ])
+
+def ensure_segment_duration(seg_path: str, target_sec: float):
+    """Segment ffmpeg -t ile kısa kesildiyse, tpad ile hedef süreye kadar doldur."""
+    cur = ffprobe_dur(seg_path)
+    if cur + 0.01 >= target_sec:
+        return
+    extra = max(0.0, target_sec - cur)
+    tmp = str(pathlib.Path(seg_path).with_suffix(".pad.mp4"))
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", seg_path,
+        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
+        "-map","[v]",
+        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart",
+        tmp
+    ])
+    pathlib.Path(seg_path).write_bytes(pathlib.Path(tmp).read_bytes())
+    pathlib.Path(tmp).unlink(missing_ok=True)
 
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     target_frames = max(2, int(target_frames))
@@ -492,31 +513,18 @@ Return ONLY JSON, no markdown/prose.""",
     "country_facts": """Make surprising but true micro-facts about places/culture, same JSON contract."""
 }
 
-def _extract_json_block(txt: str):
-    """Gemini bazen JSON dışına metin koyar; ilk dengeli { ... } bloğunu döndür.
-       Dönüş hem dict hem list olabilir; normalize edeceğiz."""
+def _extract_json_block(txt: str) -> dict:
     t = txt.strip()
     t = re.sub(r"^```json\s*", "", t, flags=re.IGNORECASE)
     t = re.sub(r"^```\s*", "", t)
     t = re.sub(r"\s*```$", "", t)
-
-    # Doğrudan JSON deneyelim
     try:
-        obj = json.loads(t)
-        return obj
+        return json.loads(t)
     except Exception:
         pass
-
-    # İlk dengeli { ... } bloğu
     start = t.find("{")
     if start == -1:
-        # Bazen liste gibi dönebilir: [ { ... } ]
-        try:
-            obj = json.loads(t)
-            return obj
-        except Exception:
-            raise RuntimeError("Gemini response parse error (no opening brace)")
-
+        raise RuntimeError("Gemini response parse error (no opening brace)")
     depth = 0
     for i in range(start, len(t)):
         ch = t[i]
@@ -534,20 +542,7 @@ def _extract_json_block(txt: str):
                     return json.loads(block2)
     raise RuntimeError("Gemini response parse error (unbalanced braces)")
 
-def _normalize_json_root(obj):
-    """dict bekleriz; eğer list ise ilk dict öğeyi al."""
-    if isinstance(obj, dict):
-        return obj
-    if isinstance(obj, list):
-        for x in obj:
-            if isinstance(x, dict):
-                return x
-        # list ama içinde dict yoksa boş dict dön
-        return {}
-    # başka bir tip ise yine boş dict
-    return {}
-
-def _gemini_call(prompt: str, model: str):
+def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
     payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.7}}
@@ -560,11 +555,76 @@ def _gemini_call(prompt: str, model: str):
         txt = data["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:
         txt = json.dumps(data)
-    obj = _extract_json_block(txt)
-    return _normalize_json_root(obj)
+    return _extract_json_block(txt)
+
+# --- Meta-line filter & fillers (NEW) ---
+META_BAD = {
+    "anchor it to a visual trigger",
+    "name the pattern", "counterexample for contrast",
+    "repeat once", "compress it", "close by calling back",
+    "one clear tip", "see it", "learn it", "in 60 seconds",
+    "plot twist", "watch:", "instrument notes:", "key reading"
+}
+
+def _is_meta_line(s: str) -> bool:
+    t = (s or "").lower().strip()
+    return any(k in t for k in META_BAD)
+
+def _topic_fillers(topic: str) -> list[str]:
+    t = (topic or "").lower()
+    if any(k in t for k in ["urban","city","skyline","bridge","tunnel"]):
+        return [
+            "Spot the spiral ramp from an overhead angle.",
+            "Notice how traffic flows smoother through the spiral.",
+            "Compare a straight ramp footprint to this spiral.",
+            "Find the tight radius where speed must drop.",
+            "Switch to a second bridge and check lane merges.",
+            "Look for signage that primes drivers ahead.",
+            "End by circling back to that helix from above."
+        ]
+    if any(k in t for k in ["space","cosmic","planet","astronomy"]):
+        return [
+            "Start with a wide shot of a moving star field.",
+            "Zoom to a single bright object crossing frame.",
+            "Compare two orbits with different eccentricity.",
+            "Show a transit dip line on a simple graph.",
+            "Cut to a rocket stage separation close-up.",
+            "Return to the sky to spot the same pattern.",
+            "Close by syncing motion back to the opening."
+        ]
+    if any(k in t for k in ["nature","eco","wild","macro","micro"]):
+        return [
+            "Begin on dew drops forming perfect beads.",
+            "Shift to leaf veins branching like rivers.",
+            "Contrast a smooth petal with rough bark.",
+            "Show a second leaf with tighter spacing.",
+            "Zoom on a tiny insect crossing the vein.",
+            "Repeat the curve motif in a new plant.",
+            "Loop back to the first frame’s texture."
+        ]
+    # genel güvenli
+    return [
+        "Open with a wide shot that shows the idea.",
+        "Push into a close-up where the cue appears.",
+        "Compare with a second angle to confirm it.",
+        "Show one case where the cue breaks down.",
+        "Repeat the pattern in a new quick example.",
+        "Compress the idea into a short takeaway.",
+        "Close by echoing the opening shot."
+    ]
+
+def sanitize_script(topic: str, hook: str, sentences: list[str]) -> tuple[str, list[str]]:
+    lines = [clean_caption_text(s) for s in (sentences or []) if s and not _is_meta_line(s)]
+    if len(lines) < 7:
+        fillers = _topic_fillers(topic)
+        need = 7 - len(lines)
+        lines += fillers[:need]
+    return hook, lines[:7]
 
 def build_via_gemini(topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],List[str],str,str,List[str]]:
-    template = ENHANCED_GEMINI_TEMPLATES["country_facts"] if MODE == "country_facts" else ENHANCED_GEMINI_TEMPLATES["_base"]
+    template = ENHANCED_GEMINI_TEMPLATES["_base"]
+    if MODE == "country_facts":
+        template = ENHANCED_GEMINI_TEMPLATES["country_facts"]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:8]) if user_terms else "(none)"
     guard = """
@@ -589,23 +649,10 @@ Avoid recently used topics (180 days):
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or []) if str(s).strip()]
     hints     = [str(x).strip() for x in (data.get("visual_hints") or []) if str(x).strip()]
 
-    # En az 7 sahne + 1 hook garanti
-    if len(sentences) < 7:
-        base = topic_lock or "Quick visual insight"
-        fillers = [
-            f"{base}: one clear, concrete beat.",
-            "Anchor it to a visual trigger.",
-            "Name the pattern in seven words.",
-            "Show one counterexample for contrast.",
-            "Repeat once in a new context.",
-            "Compress it to a short cue.",
-            "Close by calling back to the start."
-        ]
-        sentences = fillers[:7]
-        if not hook:
-            hook = "Two ways you can spot this fast."
+    # sanitize (meta cümleleri at + doldur)
+    hook, core7 = sanitize_script(topic_lock or TOPIC or "Shorts", hook, sentences)
 
-    # Hints azsa doldur
+    # Hints boş veya kısa ise topic’e göre güvenli varsayılanlar
     default_hints = []
     tl = (topic_lock or "").lower()
     if any(k in tl for k in ["nature","eco","micro","macro"]):
@@ -617,8 +664,11 @@ Avoid recently used topics (180 days):
     else:
         default_hints = ["macro gears","timelapse city","close-up hands","notebook topdown","river ripples","window light","walking feet"]
 
-    while len(hints) < 7:
-        hints.append(default_hints[len(hints) % len(default_hints)])
+    if len(hints) < 7:
+        need = 7 - len(hints)
+        hints = hints + default_hints[:need]
+    while len(hints) < len(core7):
+        hints.append(hints[-1] if hints else default_hints[0])
 
     terms     = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
@@ -630,7 +680,7 @@ Avoid recently used topics (180 days):
     ttl      = (data.get("title") or "").strip()
     desc     = (data.get("description") or "").strip()
     tags     = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-    return hook, sentences[:7], hints[:7], terms, ttl, desc, tags
+    return hook, core7, hints, terms, ttl, desc, tags
 
 # -------------------- Per-scene queries --------------------
 _STOP = set("""
@@ -658,20 +708,25 @@ def build_per_scene_queries(sentences: List[str], hints: List[str], fallback_ter
 
     for i, s in enumerate(sentences):
         picked=None
+        # 1) visual hint öncelikli
         if i < len(hints):
             cand = hints[i].lower().strip()
             cand = re.sub(r"[^a-z0-9 ]+"," ", cand)
             if len(cand) >= 4: picked = " ".join(cand.split()[:3])
+        # 2) cümleden 2-gram
         if not picked:
             toks = _tok4(s)
             if len(toks) >= 2:
                 picked = f"{toks[0]} {toks[1]}"
             elif len(toks) == 1:
                 picked = toks[0]
+        # 3) SEARCH_TERMS rotasyonu
         if (not picked or len(picked) < 4) and fb:
             picked = fb[i % len(fb)]
+        # 4) topic fallback
         if (not picked or len(picked) < 4) and topic_key_join:
             picked = topic_key_join
+        # 5) son emniyet
         if not picked:
             picked = "macro detail"
         queries.append(picked)
@@ -699,6 +754,7 @@ def _pexels_search(query: str, portrait_only=True, page=1, per_page=30):
 
 def pexels_pick_one(query: str) -> Tuple[Optional[int], Optional[str]]:
     try:
+        # 1. geçiş: portrait, 2. geçiş: esnek
         for portrait in (True, False):
             data = _pexels_search(query, portrait_only=portrait, page=1, per_page=30)
             cand = []
@@ -842,11 +898,9 @@ def main():
             except Exception as e:
                 print(f"Gemini error: {str(e)[:160]}"); time.sleep(0.6)
         if chosen is None:
-            if last:
-                hook, sents, hints, search_terms, ttl, desc, tags = last
-            else:
-                hook = "Two ways to spot balance fast."
-                sents = [
+            hook, sents, hints, search_terms, ttl, desc, tags = last if last else (
+                "Two ways to spot balance fast.",
+                [
                     "Start with a simple contrast you can see.",
                     "Pick one crisp example you meet today.",
                     "Name the trigger so it sticks later.",
@@ -854,10 +908,11 @@ def main():
                     "Repeat the pattern once in a new context.",
                     "Compress it to seven words you can recall.",
                     "Close by hinting back to the opening beat."
-                ]
-                hints = ["macro gears","stone arch","city bridge drone","office top down","river pier","spiral stairs","close-up hands"]
-                search_terms = user_terms or ["macro detail","timelapse city","drone bridge"]
-                ttl, desc, tags = "", "", []
+                ],
+                ["macro gears","stone arch","city bridge drone","office top down","river pier","spiral stairs","close-up hands"],
+                user_terms or ["macro detail","timelapse city","drone bridge"],
+                "", "", []
+            )
     else:
         hook = "Two ways to spot balance fast."
         sents = [
@@ -873,7 +928,7 @@ def main():
         search_terms = user_terms or ["macro detail","timelapse city","drone bridge"]
         ttl, desc, tags = "", "", []
 
-    sentences = [hook] + sents  # hook 0. satır
+    sentences = [hook] + sents  # hook'u 0. sahneye koyuyoruz
     print(f"📝 Content: {topic_lock or 'Topic'} | {len(sentences)} lines (hook+{len(sents)})")
 
     # 2) TTS
@@ -889,7 +944,7 @@ def main():
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
     # 3) Pexels — sahne başına net sorgular
-    hints_for_queries = list(hints) if hints else []
+    hints_for_queries = list(hints) if 'hints' in locals() and hints else []
     while len(hints_for_queries) < len(sentences):
         hints_for_queries.append(hints_for_queries[-1] if hints_for_queries else "macro detail")
 
@@ -931,7 +986,7 @@ def main():
     if len(clips) < len(sentences):
         print("⚠️ Not enough unique clips; rotating existing ones.")
 
-    # 4) Segment + altyazı + LOOP
+    # 4) Segment + altyazı + LOOP HİLESİ (güvenli)
     print("🎬 Segments…")
     segs = []
     first_clip_src = clips[0 % len(clips)]
@@ -940,14 +995,22 @@ def main():
 
     for i, (base_text, d) in enumerate(metas):
         if i == 0:
-            src = first_clip_src; start_at = half
+            src = first_clip_src
+            src_dur = ffprobe_dur(src)
+            # videonun sonundan d saniye bırakacak şekilde güvenli ofset
+            start_at = max(0.0, min(src_dur - d, half))
         elif i == len(metas)-1:
-            src = first_clip_src; start_at = 0.0
+            src = first_clip_src
+            src_dur = ffprobe_dur(src)
+            start_at = 0.0
         else:
-            src = clips[i % len(clips)]; start_at = 0.0
+            src = clips[i % len(clips)]
+            src_dur = ffprobe_dur(src)
+            start_at = 0.0
 
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(src, d, base, start_at=start_at)
+        ensure_segment_duration(base, d)  # video süresi < TTS ise tpad ile tamamla
 
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
@@ -989,14 +1052,15 @@ def main():
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8) Metadata
+    # 8) Metadata (title/desc strong)
     def _ok(x): return isinstance(x, str) and x.strip()
     title = (hook if _ok(hook) else sentences[0])[:95]
-    description = (desc[:4900] if _ok(desc) and len(desc) >= 1000 else _desc_boost(TOPIC or "Shorts", sentences, search_terms))
+    description = (desc[:4900] if 'desc' in locals() and _ok(desc) and len(desc) >= 1000
+                   else _desc_boost(TOPIC or "Shorts", sentences, search_terms))
     meta = {
         "title": title,
         "description": description,
-        "tags": (tags[:15] if tags else _mk_hashtags(TOPIC or "Shorts", search_terms)),
+        "tags": (tags[:15] if 'tags' in locals() and tags else _mk_hashtags(TOPIC or "Shorts", search_terms)),
         "privacy": VISIBILITY,
         "defaultLanguage": LANG,
         "defaultAudioLanguage": LANG
