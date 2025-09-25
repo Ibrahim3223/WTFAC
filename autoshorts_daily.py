@@ -1,4 +1,5 @@
-# autoshorts_daily.py — Topic-locked Gemini • Per-video search_terms • Robust Pexels • Guaranteed captions
+# autoshorts_daily.py — Topic-locked Gemini • Per-video search_terms • Robust Pexels
+# Captions: ALL CAPS + karaoke (word highlight) with drawtext/subtitles fallbacks
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
@@ -13,8 +14,7 @@ MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece log iç
 
 def _sanitize_lang(val: Optional[str]) -> str:
     val = (val or "").strip()
-    if not val:
-        return "en"
+    if not val: return "en"
     m = re.match(r"([A-Za-z]{2})", val)
     return (m.group(1).lower() if m else "en")
 
@@ -22,6 +22,12 @@ LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or 
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
+KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
+
+# Karaoke renkleri (ASS stili)
+KARAOKE_ACTIVE  = os.getenv("KARAOKE_ACTIVE",  "00FFD700")  # &H00RRGGBB (BGR değil, ASS RGBA'nın BGR'siz hali)
+KARAOKE_INACTIVE= os.getenv("KARAOKE_INACTIVE","00FFFFFF")
+KARAOKE_OUTLINE = os.getenv("KARAOKE_OUTLINE", "00000000")  # siyah
 
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
@@ -30,6 +36,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 GEMINI_PROMPT  = (os.getenv("GEMINI_PROMPT") or "").strip()
+GEMINI_TEMP    = float(os.getenv("GEMINI_TEMP", "0.85"))
 
 # ---- Topic & user seed terms ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
@@ -206,7 +213,7 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
         if len(uniq) >= limit: break
     return uniq
 
-# ==================== Caption text & wrap ====================
+# ==================== Caption helpers ====================
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
 def _ff_color(c: str) -> str:
@@ -225,8 +232,7 @@ def clean_caption_text(s: str) -> str:
 
 def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_lines: int = CAPTION_MAX_LINES) -> str:
     text = (text or "").strip()
-    if not text:
-        return text
+    if not text: return text
     words = text.split()
     HARD_CAP = max_lines + 2
     def distribute_into(k: int) -> list[str]:
@@ -238,17 +244,15 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
         if cand and all(len(c) <= max_line_length for c in cand):
             return "\n".join(cand)
     def greedy(width: int, k_cap: int) -> list[str]:
-        lines = []
-        buf, L = [], 0
+        lines=[]; buf=[]; L=0
         for w in words:
-            add = (1 if buf else 0) + len(w)
-            if L + add > width and buf:
-                lines.append(" ".join(buf)); buf = [w]; L = len(w)
+            add=(1 if buf else 0)+len(w)
+            if L+add>width and buf:
+                lines.append(" ".join(buf)); buf=[w]; L=len(w)
             else:
-                buf.append(w); L += add
+                buf.append(w); L+=add
         if buf: lines.append(" ".join(buf))
-        if len(lines) > k_cap and k_cap < HARD_CAP:
-            return greedy(width, HARD_CAP)
+        if len(lines)>k_cap and k_cap<HARD_CAP: return greedy(width, HARD_CAP)
         return lines
     lines = greedy(max_line_length, max_lines)
     return "\n".join([ln.strip() for ln in lines if ln.strip()])
@@ -266,44 +270,127 @@ def _rate_to_atempo(rate_str: str, default: float = 1.10) -> float:
     except Exception:
         return default
 
-def tts_to_wav(text: str, wav_out: str) -> float:
+def _edge_stream_tts(text: str, voice: str, rate_env: str, mp3_out: str) -> List[Dict[str,Any]]:
+    """Edge-TTS stream → mp3 bytes + word boundaries. Returns marks list [{t0, t1, text}] in seconds."""
+    import asyncio
+    marks: List[Dict[str,Any]] = []
+    async def _run():
+        audio = bytearray()
+        comm = edge_tts.Communicate(text, voice=voice, rate=rate_env)
+        async for chunk in comm.stream():
+            t = chunk.get("type")
+            if t == "audio":
+                audio.extend(chunk.get("data", b""))
+            elif t == "WordBoundary":
+                # Edge returns offset/duration in 100-ns; convert to seconds
+                off = float(chunk.get("offset", 0))/10_000_000.0
+                dur = float(chunk.get("duration",0))/10_000_000.0
+                marks.append({"t0": off, "t1": off+dur, "text": str(chunk.get("text",""))})
+        open(mp3_out, "wb").write(bytes(audio))
+    try:
+        asyncio.run(_run())
+    except RuntimeError:
+        nest_asyncio.apply()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(_run())
+    return marks
+
+def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float) -> List[Tuple[str,float]]:
+    """Return [(WORD, seconds)] covering total duration. Fallback to equal-split if mismatch/empty."""
+    words = [w for w in re.split(r"\s+", (text or "").strip()) if w]
+    if not words:
+        return []
+    out=[]
+    if marks:
+        # group marks by whitespace tokens (ignore punctuation drift)
+        # naive: just take consecutive marks and map to words by order
+        ms = [m for m in marks if (m.get("t1",0) > m.get("t0",0))]
+        if len(ms) >= len(words)*0.6:
+            # take min(len))
+            N = min(len(words), len(ms))
+            for i in range(N):
+                dur = max(0.05, float(ms[i]["t1"]-ms[i]["t0"]))
+                out.append((words[i], dur))
+            # if leftover words, distribute remaining time
+            remain = max(0.0, total - sum(d for _,d in out))
+            if len(words) > N and remain>0:
+                extra = (len(words)-N)
+                each = remain/extra
+                for i in range(N, len(words)):
+                    out.append((words[i], max(0.05, each)))
+        else:
+            out=[]
+    if not out:
+        # equal split
+        each = max(0.05, total/max(1,len(words)))
+        out = [(w, each) for w in words]
+        # adjust rounding so sum≈total
+        s = sum(d for _,d in out)
+        if s>0 and abs(s-total)>0.02:
+            out[-1] = (out[-1][0], max(0.05, out[-1][1] + (total-s)))
+    return out
+
+def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
+    """Returns (duration_seconds, word_durations_list) where list = [(WORD, seconds), ...]"""
     import asyncio
     from aiohttp.client_exceptions import WSServerHandshakeError
     text = (text or "").strip()
     if not text:
         run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
-        return 1.0
+        return 1.0, []
+
     mp3 = wav_out.replace(".wav", ".mp3")
     rate_env = os.getenv("TTS_RATE", "+12%")
     atempo = _rate_to_atempo(rate_env, default=1.12)
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
-    async def _edge_save_simple():
-        comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
-        await comm.save(mp3)
-    for attempt in range(2):
+    marks: List[Dict[str,Any]] = []
+    try:
+        # Stream to capture WordBoundary
+        marks = _edge_stream_tts(text, selected_voice, rate_env, mp3)
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+            wav_out
+        ])
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        dur = ffprobe_dur(wav_out) or 0.0
+        words = _merge_marks_to_words(text, marks, dur)
+        return dur, words
+    except WSServerHandshakeError as e:
+        if getattr(e, "status", None) != 401 and "401" not in str(e):
+            print(f"⚠️ edge-tts stream fail: {e}")
+    except Exception as e:
+        print(f"⚠️ edge-tts stream fail: {e}")
+
+    # Fallback 1: edge save (no marks)
+    try:
+        async def _edge_save_simple():
+            comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
+            await comm.save(mp3)
         try:
-            try:
-                asyncio.run(_edge_save_simple())
-            except RuntimeError:
-                nest_asyncio.apply()
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(_edge_save_simple())
-            run([
-                "ffmpeg","-y","-hide_banner","-loglevel","error",
-                "-i", mp3,
-                "-ar","48000","-ac","1","-acodec","pcm_s16le",
-                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
-                wav_out
-            ])
-            pathlib.Path(mp3).unlink(missing_ok=True)
-            return ffprobe_dur(wav_out) or 0.0
-        except WSServerHandshakeError as e:
-            if getattr(e, "status", None) == 401 or "401" in str(e):
-                print("⚠️ edge-tts 401 → hızlı fallback TTS"); break
-            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
-        except Exception as e:
-            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
+            asyncio.run(_edge_save_simple())
+        except RuntimeError:
+            nest_asyncio.apply()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(_edge_save_simple())
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+            wav_out
+        ])
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        dur = ffprobe_dur(wav_out) or 0.0
+        words = _merge_marks_to_words(text, [], dur)
+        return dur, words
+    except Exception as e:
+        print(f"⚠️ edge-tts 401 → hızlı fallback TTS")
+
+    # Fallback 2: Google TTS (no marks)
     try:
         q = requests.utils.quote(text.replace('"','').replace("'",""))
         lang_code = LANG or "en"
@@ -319,11 +406,13 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
-        return ffprobe_dur(wav_out) or 0.0
+        dur = ffprobe_dur(wav_out) or 0.0
+        words = _merge_marks_to_words(text, [], dur)
+        return dur, words
     except Exception as e2:
         print(f"❌ TTS tüm yollar başarısız, sessizlik üretilecek: {e2}")
         run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
-        return 4.0
+        return 4.0, []
 
 # ==================== Video helpers ====================
 def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, float]:
@@ -368,13 +457,98 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
         outp
     ])
 
-def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
+def _ass_time(s: float) -> str:
+    h = int(s//3600); s -= h*3600
+    m = int(s//60); s -= m*60
+    return f"{h:d}:{m:02d}:{s:05.2f}"
+
+def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
+    # ASS renk notasyonu: &HAABBGGRR; burada A yok (00), biz &H00RRGGBB verdik → yer değiştir.
+    def _to_ass(c:str)->str:
+        c=c.strip()
+        if c.startswith("0x"): c=c[2:]
+        if c.startswith("#"): c=c[1:]
+        if len(c)==6: c="00"+c
+        # ASS BGR ister: RRGGBB -> BBGGRR
+        rr=c[-6:-4]; gg=c[-4:-2]; bb=c[-2:]
+        return f"&H00{bb}{gg}{rr}"
+
+    fontname = "DejaVu Sans"
+    fontsize = 58 if is_hook else 52
+    margin_v = 270 if is_hook else 330
+    outline  = 4 if is_hook else 3
+
+    # kelimeleri UPPERCASE
+    words_upper = [(re.sub(r"\s+"," ", w.upper()), d) for w,d in words if w.strip()]
+    if not words_upper:
+        words_upper = [(w.upper(), 0.5) for w in (text or "…").split()]
+
+    # \k (centisecond) dizisi toplam süre ile uyuşsun
+    total_cs = int(round(seg_dur*100))
+    ds = [max(5, int(round(d*100))) for _,d in words_upper]
+    diff = total_cs - sum(ds)
+    if abs(diff) >= len(ds):
+        ds[-1] = max(5, ds[-1]+diff)
+    else:
+        # küçük farkı yay
+        i=0; step=1 if diff>0 else -1
+        while diff != 0 and ds:
+            ds[i%len(ds)] = max(5, ds[i%len(ds)]+step)
+            diff -= step; i+=1
+
+    # tek satırlı karaoke; istersen satır kır: çok uzun ise \N
+    cap = " ".join([w for w,_ in words_upper])
+    # kaba sarma (mobil)
+    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n","\\N")
+
+    # ama \k tokenleri için orijinal sıra lazım:
+    kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(len(words_upper))]).strip()
+
+    ass = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},{_to_ass(KARAOKE_ACTIVE)},{_to_ass(KARAOKE_OUTLINE)},&H7F000000,1,0,0,0,100,100,0,0,1,{outline},0,2,50,50,{margin_v},0
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad0}}{kline}
+"""
+    return ass
+
+def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
+    """KARAOKE öncelikli. subtitles yoksa drawtext; ikisi de yoksa opsiyonel fail."""
+    # segment süresi
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
-    # ---- Yol 1: drawtext varsa (tercih)
+    if KARAOKE_CAPTIONS and _HAS_SUBTITLES:
+        # karaoke (ALL CAPS + kelime highlight)
+        words = words or []
+        ass_txt = _build_karaoke_ass(text, seg_dur, words, is_hook)
+        ass_path = str(pathlib.Path(seg).with_suffix(".ass"))
+        pathlib.Path(ass_path).write_text(ass_txt, encoding="utf-8")
+        tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
+        try:
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", seg, "-vf", f"subtitles='{ass_path}'",
+                "-r", str(TARGET_FPS), "-vsync","cfr",
+                "-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+                "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
+            ])
+            enforce_video_exact_frames(tmp_out, frames, outp)
+        finally:
+            pathlib.Path(ass_path).unlink(missing_ok=True)
+            pathlib.Path(tmp_out).unlink(missing_ok=True)
+        return
+
+    # ---- drawtext fallback (ALL CAPS)
     if _HAS_DRAWTEXT:
+        wrapped = wrap_mobile_lines(clean_caption_text(text).upper(), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
         tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
         pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
@@ -409,13 +583,11 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
         try:
             run([
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
-                "-i", seg,
-                "-vf", vf,
+                "-i", seg, "-vf", vf,
                 "-r", str(TARGET_FPS), "-vsync","cfr",
                 "-an",
                 "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
-                "-pix_fmt","yuv420p","-movflags","+faststart",
-                tmp_out
+                "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
             ])
             enforce_video_exact_frames(tmp_out, frames, outp)
         finally:
@@ -423,44 +595,6 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             pathlib.Path(tmp_out).unlink(missing_ok=True)
         return
 
-    # ---- Yol 2: subtitles (libass) varsa
-    if _HAS_SUBTITLES:
-        fontname = "DejaVu Sans"
-        fontsize = 54 if is_hook else 48
-        margin_v = 260 if is_hook else 320  # alt kenardan boşluk
-        esc = (wrapped or "").replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n","\\N")
-        ass = f"""[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{fontname},{fontsize},&H00FFFFFF,&H000000FF,&H00000000,&H7F000000,0,0,0,0,100,100,0,0,1,4,0,2,50,50,{margin_v},0
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,9:59:59.99,Default,,0,0,{margin_v},,{{\\bord4\\shad0}}{esc}
-"""
-        ass_path = str(pathlib.Path(seg).with_suffix(".ass"))
-        pathlib.Path(ass_path).write_text(ass, encoding="utf-8")
-        tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
-        try:
-            run([
-                "ffmpeg","-y","-hide_banner","-loglevel","error",
-                "-i", seg,
-                "-vf", f"subtitles='{ass_path}'",
-                "-r", str(TARGET_FPS), "-vsync","cfr",
-                "-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
-                "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
-            ])
-            enforce_video_exact_frames(tmp_out, frames, outp)
-        finally:
-            pathlib.Path(ass_path).unlink(missing_ok=True)
-            pathlib.Path(tmp_out).unlink(missing_ok=True)
-        return
-
-    # ---- Yol 3: filtre yok → politika
     if REQUIRE_CAPTIONS:
         raise RuntimeError("Captions required but neither 'drawtext' nor 'subtitles' filter is available in ffmpeg.")
     print("⚠️ FFmpeg 'drawtext' ve 'subtitles' filtreleri yok — caption atlanıyor.")
@@ -584,10 +718,11 @@ def _content_score(sentences: List[str]) -> float:
         if len(low.split()) < 5: bad += 0.5
     return max(0.0, 10.0 - (bad * 1.4))
 
-def _gemini_call(prompt: str, model: str) -> dict:
+def _gemini_call(prompt: str, model: str, temp: float) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
     headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
-    payload = {"contents":[{"parts":[{"text": prompt}]}], "generationConfig":{"temperature":0.75}}
+    payload = {"contents":[{"parts":[{"text": prompt}]}],
+               "generationConfig":{"temperature":temp}}
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     r = requests.post(url, headers=headers, json=payload, timeout=60)
     if r.status_code != 200:
@@ -602,8 +737,7 @@ def _gemini_call(prompt: str, model: str) -> dict:
     return json.loads(raw)
 
 def _terms_normalize(terms: List[str]) -> List[str]:
-    out=[]
-    seen=set()
+    out=[]; seen=set()
     BAD={"great","nice","good","bad","things","stuff","concept","concepts","idea","ideas"}
     for t in terms or []:
         tt = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
@@ -622,8 +756,7 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
         ws=tok(s or "")
         for i in range(len(ws)-1):
             pool.add(ws[i]+" "+ws[i+1])
-    base=list(pool)
-    random.shuffle(base)
+    base=list(pool); random.shuffle(base)
     return _terms_normalize(base)[:8]
 
 def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
@@ -637,6 +770,10 @@ def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], 
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
 - Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
+    # hafif jitter: aynı TOPIC ile bile çeşitlilik
+    jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
+    temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
+
     prompt = f"""{template}
 
 Channel: {channel_name}
@@ -647,18 +784,15 @@ Avoid overlap for 180 days:
 {avoid}{extra}
 {guardrails}
 """
-    data = _gemini_call(prompt, GEMINI_MODEL)
+    data = _gemini_call(prompt, GEMINI_MODEL, temp)
 
     topic   = topic_lock
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
     sentences = [s for s in sentences if s][:8]
-    # --- per-video search_terms ---
     terms = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
     terms = _terms_normalize(terms)
-    if not terms:
-        terms = _derive_terms_from_text(topic, sentences)
-    # tohumları öne alıp birleştir
+    if not terms: terms = _derive_terms_from_text(topic, sentences)
     if user_terms:
         seed = _terms_normalize(user_terms)
         terms = _terms_normalize(seed + terms)
@@ -774,8 +908,7 @@ def _gen_topic_query_candidates(topic: str, terms: List[str]) -> List[str]:
         if tt and tt not in out: out.append(tt)
     if base:
         for w in base.split():
-            if w not in out:
-                out.append(w)
+            if w not in out: out.append(w)
     for g in ["city timelapse","ocean waves","forest path","night skyline","macro detail","street crowd","mountain landscape"]:
         if g not in out: out.append(g)
     return out[:20]
@@ -796,16 +929,9 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
     per_page = per_page or max(10, min(80, PEXELS_PER_PAGE))
     url = "https://api.pexels.com/videos/search"
     r = requests.get(
-        url,
-        headers=_pexels_headers(),
-        params={
-            "query": query,
-            "per_page": per_page,
-            "page": page,
-            "orientation": "portrait",
-            "size": "large",
-            "locale": locale
-        },
+        url, headers=_pexels_headers(),
+        params={"query": query, "per_page": per_page, "page": page,
+                "orientation":"portrait","size":"large","locale": locale},
         timeout=30
     )
     if r.status_code != 200:
@@ -817,15 +943,11 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
         dur = float(v.get("duration",0.0))
         if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
             continue
-        files = v.get("video_files", []) or []
-        if not files: continue
-        pf = []
-        for x in files:
+        pf=[]
+        for x in (v.get("video_files", []) or []):
             w = int(x.get("width",0)); h = int(x.get("height",0))
-            if _is_vertical_ok(w, h):
-                pf.append((w,h,x.get("link")))
-        if not pf: 
-            continue
+            if _is_vertical_ok(w, h): pf.append((w,h,x.get("link")))
+        if not pf: continue
         pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
         w,h,link = pf[0]
         out.append((vid, link, w, h, dur))
@@ -833,12 +955,7 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
 
 def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tuple[int, str, int, int, float]]:
     url = "https://api.pexels.com/videos/popular"
-    r = requests.get(
-        url,
-        headers=_pexels_headers(),
-        params={"per_page": per_page, "page": page},
-        timeout=30
-    )
+    r = requests.get(url, headers=_pexels_headers(), params={"per_page": per_page, "page": page}, timeout=30)
     if r.status_code != 200:
         return []
     data = r.json() or {}
@@ -848,13 +965,10 @@ def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tupl
         dur = float(v.get("duration",0.0))
         if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
             continue
-        files = v.get("video_files", []) or []
-        if not files: continue
-        pf = []
-        for x in files:
+        pf=[]
+        for x in (v.get("video_files", []) or []):
             w = int(x.get("width",0)); h = int(x.get("height",0))
-            if _is_vertical_ok(w, h):
-                pf.append((w,h,x.get("link")))
+            if _is_vertical_ok(w, h): pf.append((w,h,x.get("link")))
         if not pf: continue
         pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
         w,h,link = pf[0]
@@ -865,14 +979,8 @@ def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
     if not (ALLOW_PIXABAY_FALLBACK and PIXABAY_API_KEY):
         return []
     try:
-        params = {
-            "key": PIXABAY_API_KEY,
-            "q": q,
-            "safesearch": "true",
-            "per_page": min(50, max(10, need*4)),
-            "video_type": "film",
-            "order": "popular"
-        }
+        params = {"key": PIXABAY_API_KEY, "q": q, "safesearch":"true",
+                  "per_page": min(50, max(10, need*4)), "video_type":"film", "order":"popular"}
         r = requests.get("https://pixabay.com/api/videos/", params=params, timeout=30)
         if r.status_code != 200:
             return []
@@ -880,8 +988,7 @@ def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
         outs=[]
         for h in data.get("hits", []):
             dur = float(h.get("duration",0.0))
-            if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
-                continue
+            if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION: continue
             vids = h.get("videos", {})
             chosen=None
             for qual in ("large","medium","small","tiny"):
@@ -906,11 +1013,9 @@ def _rank_and_dedup(items: List[Tuple[int, str, int, int, float]], qtokens: Set[
         score = overlap*2.0 + (1.0 if 2.0 <= dur <= 12.0 else 0.0) + (1.0 if h >= 1440 else 0.0)
         cand.append((score, vid, link))
     cand.sort(key=lambda x: x[0], reverse=True)
-    out=[]
-    seen=set()
+    out=[]; seen=set()
     for _, vid, link in cand:
-        if vid in seen: 
-            continue
+        if vid in seen: continue
         seen.add(vid); out.append((vid, link))
     return out
 
@@ -930,25 +1035,21 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
 
     pool: List[Tuple[int,str]] = []
     qtokens_cache: Dict[str, Set[str]] = {}
-
     for q in queries:
         qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
         merged: List[Tuple[int, str, int, int, float]] = []
         for page in (1, 2, 3):
             merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
-            if len(merged) >= need*3:
-                break
+            if len(merged) >= need*3: break
         ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
         pool += ranked[:max(3, need//2)]
-        if len(pool) >= need*2:
-            break
+        if len(pool) >= need*2: break
 
     if len(pool) < need:
         merged=[]
         for page in (1,2,3):
             merged += _pexels_popular(locale, page=page, per_page=40)
-            if len(merged) >= need*3:
-                break
+            if len(merged) >= need*3: break
         pop_rank = _rank_and_dedup(merged, set(), block)
         pool += pop_rank[:need*2 - len(pool)]
 
@@ -1001,46 +1102,34 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
     title = (hook[:1].upper() + hook[1:])[:95]
-
     para = " ".join(sentences)
     explainer = (
         f"{para} "
         f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
         f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
     )
-
     tagset = []
     base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
-    for t in base_terms:
-        tagset.append("#" + t.lower())
+    for t in base_terms: tagset.append("#" + t.lower())
     tagset += ["#shorts", "#learn", "#visual", "#broll", "#education"]
     if tags:
         for t in tags[:10]:
             tclean = re.sub(r"[^A-Za-z0-9]+","", t).lower()
-            if tclean and ("#"+tclean) not in tagset:
-                tagset.append("#"+tclean)
-
+            if tclean and ("#"+tclean) not in tagset: tagset.append("#"+tclean)
     body = (
-        f"{explainer}\n\n"
-        f"— Key takeaways —\n"
+        f"{explainer}\n\n— Key takeaways —\n"
         + "\n".join([f"• {s}" for s in sentences[:8]]) +
-        "\n\n— Why it matters —\n"
-        f"This topic sticks because it ties a vivid visual to a single idea per scene. "
-        f"That’s how your brain remembers faster and better.\n\n"
-        f"— Watch next —\n"
+        "\n\n— Why it matters —\nThis topic sticks because it ties a vivid visual to a single idea per scene. "
+        f"That’s how your brain remembers faster and better.\n\n— Watch next —\n"
         f"Subscribe for more {topic.lower()} in clear, repeatable visuals.\n\n"
         + " ".join(tagset)
     )
-    if len(body) > 4900:
-        body = body[:4900]
-
+    if len(body) > 4900: body = body[:4900]
     yt_tags = []
     for h in tagset:
         k = h[1:]
-        if k and k not in yt_tags:
-            yt_tags.append(k)
+        if k and k not in yt_tags: yt_tags.append(k)
         if len(yt_tags) >= 15: break
-
     return title, body, yt_tags
 
 # ==================== Debug meta ====================
@@ -1055,10 +1144,8 @@ def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
     if not (_HAS_DRAWTEXT or _HAS_SUBTITLES):
         msg = "⚠️ UYARI: ffmpeg'te ne 'drawtext' ne 'subtitles' var. Altyazılar üretilemez."
-        if REQUIRE_CAPTIONS:
-            raise RuntimeError(msg + " REQUIRE_CAPTIONS=1 olduğu için durduruldu.")
-        else:
-            print(msg + " (devam edilecek)")
+        if REQUIRE_CAPTIONS: raise RuntimeError(msg + " REQUIRE_CAPTIONS=1 olduğu için durduruldu.")
+        else: print(msg + " (devam edilecek)")
 
     random.seed(ROTATION_SEED or int(time.time()))
     topic_lock = TOPIC or "Interesting Visual Explainers"
@@ -1096,8 +1183,7 @@ def main():
         if score > best_score:
             best = (tpc, sents, search_terms, ttl, desc, tags)
             best_score = score
-        if score >= 7.2:
-            break
+        if score >= 7.2: break
         else:
             print("⚠️ Low content score → rebuilding…")
             banlist = [tpc] + banlist
@@ -1115,7 +1201,7 @@ def main():
 
     print(f"📊 Sentences: {len(sentences)}")
 
-    # 2) TTS
+    # 2) TTS (kelime zamanları ile)
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
     wavs, metas = [], []
@@ -1123,8 +1209,8 @@ def main():
     for i, s in enumerate(sentences):
         base = normalize_sentence(s)
         w = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
-        d = tts_to_wav(base, w)
-        wavs.append(w); metas.append((base, d))
+        d, words = tts_to_wav(base, w)
+        wavs.append(w); metas.append((base, d, words))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
     # 3) Pexels — per-video terms
@@ -1140,9 +1226,7 @@ def main():
         need=need_clips,
         rotation_seed=ROTATION_SEED
     )
-
-    if not pool:
-        raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
+    if not pool: raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
 
     # 4) İndir ve dağıt
     downloads: Dict[int,str] = {}
@@ -1153,37 +1237,28 @@ def main():
             with requests.get(link, stream=True, timeout=120) as rr:
                 rr.raise_for_status()
                 with open(f, "wb") as w:
-                    for ch in rr.iter_content(8192):
-                        w.write(ch)
+                    for ch in rr.iter_content(8192): w.write(ch)
             if pathlib.Path(f).stat().st_size > 300_000:
                 downloads[vid] = f
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
-
-    if not downloads:
-        raise RuntimeError("Pexels pool empty after downloads.")
+    if not downloads: raise RuntimeError("Pexels pool empty after downloads.")
 
     usage = {vid:0 for vid in downloads.keys()}
-    chosen_files: List[str] = []
-    chosen_ids: List[int] = []
+    chosen_files: List[str] = []; chosen_ids: List[int] = []
     for i in range(len(metas)):
         picked_vid = None
         for vid in list(usage.keys()):
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
-                picked_vid = vid
-                usage[vid] += 1
-                break
+                picked_vid = vid; usage[vid] += 1; break
         if picked_vid is None:
-            picked_vid = min(usage.keys(), key=lambda k: usage[k])
-            usage[picked_vid] += 1
-        chosen_files.append(downloads[picked_vid])
-        chosen_ids.append(picked_vid)
-        _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
+            picked_vid = min(usage.keys(), key=lambda k: usage[k]); usage[picked_vid] += 1
+        chosen_files.append(downloads[picked_vid]); chosen_ids.append(picked_vid); _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
 
-    # 5) Segment + altyazı
+    # 5) Segment + altyazı (KARAOKE)
     print("🎬 Segments…")
     segs = []
-    for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
+    for i, ((base_text, d, words), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(src, d, base)
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
@@ -1193,7 +1268,8 @@ def main():
             CAPTION_COLORS[i % len(CAPTION_COLORS)],
             font,
             colored,
-            is_hook=(i == 0)
+            is_hook=(i == 0),
+            words=words
         )
         segs.append(colored)
 
@@ -1206,8 +1282,7 @@ def main():
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
     if vdur + 0.02 < adur:
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
-        pad_video_to_duration(vcat, adur, vcat_padded)
-        vcat = vcat_padded
+        pad_video_to_duration(vcat, adur, vcat_padded); vcat = vcat_padded
     a_frames = max(2, int(round(adur * TARGET_FPS)))
     vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4"); enforce_video_exact_frames(vcat, a_frames, vcat_exact); vcat = vcat_exact
     acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav"); lock_audio_duration(acat, a_frames, acat_exact); acat = acat_exact
@@ -1218,22 +1293,13 @@ def main():
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Short"
     outp = f"{OUT_DIR}/{CHANNEL_NAME}_{safe_topic}_{ts}.mp4"
-    print("🔄 Mux…")
-    mux(vcat, acat, outp)
-    final = ffprobe_dur(outp)
-    print(f"✅ Saved: {outp} ({final:.2f}s)")
+    print("🔄 Mux…"); mux(vcat, acat, outp)
+    final = ffprobe_dur(outp); print(f"✅ Saved: {outp} ({final:.2f}s)")
 
     # 9) Metadata (long SEO)
     title, description, yt_tags = build_long_description(CHANNEL_NAME, tpc, [m[0] for m in metas], tags)
-
-    meta = {
-        "title": title,
-        "description": description,
-        "tags": yt_tags,
-        "privacy": VISIBILITY,
-        "defaultLanguage": LANG,
-        "defaultAudioLanguage": LANG
-    }
+    meta = {"title": title,"description": description,"tags": yt_tags,"privacy": VISIBILITY,
+            "defaultLanguage": LANG,"defaultAudioLanguage": LANG}
 
     # 10) Upload (varsa env)
     try:
@@ -1253,8 +1319,7 @@ def main():
         print(f"⚠️ Blocklist save warn: {e}")
 
     # 12) Temizlik
-    try:
-        shutil.rmtree(tmp); print("🧹 Cleaned temp files")
+    try: shutil.rmtree(tmp); print("🧹 Cleaned temp files")
     except: pass
 
 if __name__ == "__main__":
