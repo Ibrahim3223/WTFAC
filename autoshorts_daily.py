@@ -20,7 +20,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-# Geçiş (transition) ayarları (yeni)
+# Geçiş (transition) ayarları
 TRANSITION_SEC  = float(os.getenv("TRANSITION_SEC", "0.28"))
 TRANSITION_LIST = [t.strip() for t in os.getenv(
     "TRANSITION_LIST",
@@ -166,7 +166,7 @@ def _is_recent(h: str, window_days=365) -> bool:
 def _record_recent(h: str, mode: str, topic: str):
     st = _state_load()
     st.setdefault("recent", []).append({"h":h,"mode":mode,"topic":topic,"ts":time.time()})
-    _state_save(st)
+    _save_json(st)
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
         gst["recent_topics"].append(topic)
@@ -179,7 +179,7 @@ def _blocklist_add_pexels(ids: List[int], days=30):
         st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": now})
     cutoff = now - days*86400
     st["used_pexels_ids"] = [x for x in st.get("used_pexels_ids", []) if x.get("ts",0) >= cutoff]
-    _state_save(st)
+    _save_json(STATE_FILE, st)
 
 def _blocklist_get_pexels() -> set:
     st = _state_load()
@@ -318,8 +318,8 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
-# no_end_fade=True olduğunda sahnenin sonunda fade-out uygulanmaz (finalde "efektsiz bitiş" için)
-def make_segment(src: str, dur_s: float, outp: str, no_end_fade: bool = False):
+# no_start_fade / no_end_fade ile giriş/çıkış efektlerini kontrol et
+def make_segment(src: str, dur_s: float, outp: str, no_start_fade: bool = False, no_end_fade: bool = False):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
@@ -330,8 +330,9 @@ def make_segment(src: str, dur_s: float, outp: str, no_end_fade: bool = False):
         f"fps={TARGET_FPS}",
         f"setpts=N/{TARGET_FPS}/TB",
         f"trim=start_frame=0:end_frame={frames}",
-        f"fade=t=in:st=0:d={fade:.2f}",
     ]
+    if not no_start_fade:
+        vf_parts.append(f"fade=t=in:st=0:d={fade:.2f}")
     if not no_end_fade:
         vf_parts.append(f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}")
     vf = ",".join(vf_parts)
@@ -445,29 +446,24 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-# --- Yeni: xfade ile çeşitli geçişler ---
+# --- xfade ile çeşitli geçişler ---
 def concat_videos_with_transitions(files: List[str], outp: str, trans_sec: float = TRANSITION_SEC):
     if not files: raise RuntimeError("concat_videos_with_transitions: empty")
-    if len(files) == 1:
-        # tek sahnede geçiş yok; eski concat yoluna gerek yok, doğrudan re-encode et
+    if len(files) == 1 or trans_sec <= 0.01:
         return concat_videos_filter(files, outp)
 
-    # Girişler ve sahne süreleri
     inputs = []
     for p in files:
         inputs += ["-i", p]
     durs = [max(0.02, ffprobe_dur(p)) for p in files]
 
-    # Normalize her giriş akışını
     pre = [f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]" for i in range(len(files))]
 
-    # xfade zinciri
     chain = []
     cur_label = "[v0]"
     cur_dur = durs[0]
     for i in range(1, len(files)):
         trans = TRANSITION_LIST[(i-1) % max(1, len(TRANSITION_LIST))]
-        # offset = bir önceki akışın (o ana kadarki birleşik akış) süresi - trans_sec
         offset = max(0.0, cur_dur - trans_sec)
         next_label = f"[x{i}]"
         chain.append(f"{cur_label}[v{i}]xfade=transition={trans}:duration={trans_sec:.3f}:offset={offset:.3f}{next_label}")
@@ -486,7 +482,7 @@ def concat_videos_with_transitions(files: List[str], outp: str, trans_sec: float
         outp
     ])
 
-# -------------------- Audio concat (lossless) --------------------
+# -------------------- Audio concat --------------------
 def concat_audios(files: List[str], outp: str):
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -500,6 +496,36 @@ def concat_audios(files: List[str], outp: str):
         outp
     ])
     pathlib.Path(lst).unlink(missing_ok=True)
+
+# --- YENİ: Ses tarafında acrossfade; video xfade ile hizalı ---
+def concat_audios_with_transitions(files: List[str], outp: str, trans_sec: float = TRANSITION_SEC):
+    if not files: raise RuntimeError("concat_audios_with_transitions: empty")
+    if len(files) == 1 or trans_sec <= 0.01:
+        return concat_audios(files, outp)
+
+    inputs = []
+    for p in files:
+        inputs += ["-i", p]
+
+    pre = [f"[{i}:a]aformat=sample_fmts=s16:channel_layouts=mono,aresample=48000,asetpts=N/SR/TB[a{i}]" for i in range(len(files))]
+
+    chain = []
+    cur_label = "[a0]"
+    for i in range(1, len(files)):
+        next_label = f"[ax{i}]"
+        chain.append(f"{cur_label}[a{i}]acrossfade=d={trans_sec:.3f}:c1=tri:c2=tri{next_label}")
+        cur_label = next_label
+
+    filtergraph = ";".join(pre + chain)
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        *inputs,
+        "-filter_complex", filtergraph,
+        "-map", cur_label,
+        "-ar","48000","-ac","1",
+        "-c:a","pcm_s16le",
+        outp
+    ])
 
 def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
     dur = target_frames / float(TARGET_FPS)
@@ -528,11 +554,9 @@ def mux(video: str, audio: str, outp: str):
 # -------------------- Template selection (by TOPIC) --------------------
 def _select_template_key(topic: str) -> str:
     t = (topic or "").lower()
-    # Eğer 'country', 'geography', 'nation', 'city facts' gibi alanlar geçiyorsa country_facts şablonu
     geo_kw = ("country", "geograph", "city", "capital", "border", "population", "continent", "flag")
     if any(k in t for k in geo_kw):
         return "country_facts"
-    # Aksi halde genel şablon
     return "_default"
 
 # -------------------- Gemini (topic-locked) --------------------
@@ -564,13 +588,12 @@ BANNED_PHRASES = [
 
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
-    tot = len(sentences)
     bad = 0
     for s in sentences:
         low = (s or "").lower()
         if any(bp in low for bp in BANNED_PHRASES): bad += 1
         if len(low.split()) < 5: bad += 0.5
-    return max(0.0, 10.0 - (bad * 1.4))  # 10 iyi, 0 kötü
+    return max(0.0, 10.0 - (bad * 1.4))
 
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
@@ -594,7 +617,6 @@ def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], 
     template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
-
     guardrails = """
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
@@ -744,14 +766,12 @@ def _pexels_search(query: str, locale: str) -> List[Tuple[int, str, int, int, fl
         dur = float(v.get("duration",0.0))
         files = v.get("video_files", []) or []
         if not files: continue
-        # portrait tercih; yoksa landscape kabul (crop edeceğiz)
         pf = []
         for x in files:
             w = int(x.get("width",0)); h = int(x.get("height",0))
             if h >= 1080 and (h >= w or PEXELS_ALLOW_LANDSCAPE):
                 pf.append((w,h,x.get("link")))
         if not pf: continue
-        # 1440 hedefe yakın olanları öne al
         pf.sort(key=lambda t: (abs(t[1]-1440), t[0]*t[1]))
         w,h,link = pf[0]
         out.append((vid, link, w, h, dur))
@@ -780,7 +800,7 @@ def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     for _, vid, link in cand:
         if vid not in _USED_PEXELS_IDS_RUNTIME:
             out.append((vid, link))
-    return out[:5]  # soru başına en fazla 5 aday
+    return out[:5]
 
 # -------------------- YouTube --------------------
 def yt_service():
@@ -814,20 +834,14 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 # -------------------- Long SEO Description --------------------
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
-    # Başlık
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
     title = (hook[:1].upper() + hook[1:])[:95]
-
-    # Kısa pasajları akıcı paragrafa çevir
     para = " ".join(sentences)
-    # Hafif genişletme
     explainer = (
         f"{para} "
         f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
         f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
     )
-
-    # Hashtag seti
     tagset = []
     base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
     for t in base_terms:
@@ -838,8 +852,6 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
             tclean = re.sub(r"[^A-Za-z0-9]+","", t).lower()
             if tclean and ("#"+tclean) not in tagset:
                 tagset.append("#"+tclean)
-
-    # 2000 karaktere yakınlama
     body = (
         f"{explainer}\n\n"
         f"— Key takeaways —\n"
@@ -853,34 +865,23 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
     )
     if len(body) > 4900:
         body = body[:4900]
-
-    # YouTube tag list (max ~15)
     yt_tags = []
     for h in tagset:
         k = h[1:]
         if k and k not in yt_tags:
             yt_tags.append(k)
         if len(yt_tags) >= 15: break
-
     return title, body, yt_tags
 
-# --------- Yardımcı: İlk Pexels kaynağını ikiye böl (loop efekti) ----------
+# --------- İlk Pexels kaynağını ikiye böl (loop efekti) ----------
 def split_video_in_half(src: str, out_first_half: str, out_second_half: str) -> bool:
     try:
         dur = ffprobe_dur(src)
         if dur <= 0.6:
             return False
         half = max(0.3, dur / 2.0)
-        # İlk yarı
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", src, "-t", f"{half:.3f}", "-c","copy", out_first_half
-        ])
-        # İkinci yarı
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-ss", f"{half:.3f}", "-i", src, "-t", f"{max(0.3, dur-half):.3f}", "-c","copy", out_second_half
-        ])
+        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", src, "-t", f"{half:.3f}", "-c","copy", out_first_half])
+        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-ss", f"{half:.3f}", "-i", src, "-t", f"{max(0.3, dur-half):.3f}", "-c","copy", out_second_half])
         return pathlib.Path(out_first_half).exists() and pathlib.Path(out_second_half).exists()
     except Exception as e:
         print(f"⚠️ split_video_in_half failed: {e}")
@@ -1000,21 +1001,19 @@ def main():
     chosen_files=[]
     for i in range(len(metas)):
         picked_path=None
-        # öncelik: hiç kullanılmamış
         for vid, p in downloads.items():
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
                 picked_path = p
                 usage[vid] += 1
                 break
         if not picked_path:
-            # mecburen en az kullanılanı seç
             if not usage: raise RuntimeError("Pexels pool empty after filtering.")
             vid = min(usage.keys(), key=lambda k: usage[k])
             usage[vid] += 1
             picked_path = downloads[vid]
         chosen_files.append(picked_path)
 
-    # --- LOOP ETKİSİ: İlk seçilen kaynağı ikiye böl, 2. yarı -> ilk sahne, 1. yarı -> son sahne
+    # LOOP: İlk kaynağı ikiye böl → 2. yarı ilk sahne, 1. yarı son sahne
     if chosen_files:
         src0 = chosen_files[0]
         first_half = str(pathlib.Path(tmp)/"loop_first_half.mp4")
@@ -1022,7 +1021,7 @@ def main():
         if split_video_in_half(src0, first_half, second_half):
             chosen_files[0] = second_half
             chosen_files[-1] = first_half
-            print("🔁 Loop mode: first clip split → second half used at scene #1, first half used at LAST scene.")
+            print("🔁 Loop mode: first clip split → second half at scene #1, first half at LAST scene.")
         else:
             print("ℹ️ Loop split skipped (source too short or split failed).")
 
@@ -1032,8 +1031,8 @@ def main():
     total_scenes = len(metas)
     for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        # son sahne için bitiş fade-out yok (video efektsiz bitsin)
-        make_segment(src, d, base, no_end_fade=(i == total_scenes - 1))
+        # İlk sahnede giriş fade-in yok; son sahnede çıkış fade-out yok
+        make_segment(src, d, base, no_start_fade=(i == 0), no_end_fade=(i == total_scenes - 1))
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
             base,
@@ -1045,10 +1044,10 @@ def main():
         )
         segs.append(colored)
 
-    # 5) Birleştir (çeşitli geçişler)
+    # 5) Birleştir — video & ses geçişleri hizalı
     print("🎞️ Assemble with transitions…")
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_with_transitions(segs, vcat)
-    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios_with_transitions(wavs, acat)
 
     # 6) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
