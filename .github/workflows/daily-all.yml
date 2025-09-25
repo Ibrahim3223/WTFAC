@@ -30,22 +30,22 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-import yaml, json, sys, io
-with open("channels.yml","r",encoding="utf-8") as f:
-    data = yaml.safe_load(f) or {}
-chs = []
-for ch in data.get("channels", []):
-    chs.append({
-        "name": ch.get("name"),
-        "env": ch.get("env", ch.get("name")),
-        "mode": ch.get("mode","freeform"),
-        "lang": ch.get("lang","en"),
-        "visibility": ch.get("visibility","public"),
-        "seed": ch.get("seed","0"),
-    })
-mx = {"include": chs}
-open("mx.json","w",encoding="utf-8").write(json.dumps(mx))
-PY
+          import yaml, json, sys, io
+          with open("channels.yml","r",encoding="utf-8") as f:
+              data = yaml.safe_load(f) or {}
+          chs = []
+          for ch in data.get("channels", []):
+              chs.append({
+                  "name": ch.get("name"),
+                  "env": ch.get("env", ch.get("name")),
+                  "mode": ch.get("mode","freeform"),
+                  "lang": ch.get("lang","en"),
+                  "visibility": ch.get("visibility","public"),
+                  "seed": ch.get("seed","0"),
+              })
+          mx = {"include": chs}
+          open("mx.json","w",encoding="utf-8").write(json.dumps(mx))
+          PY
           echo "matrix=$(cat mx.json)" >> "$GITHUB_OUTPUT"
 
   build-upload:
