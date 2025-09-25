@@ -48,7 +48,7 @@ CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
 MODE           = os.getenv("MODE", "freeform").strip().lower()
 
 LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or "en")
-VISIBILITY     = = _sanitize_privacy(os.getenv("VISIBILITY"))
+VISIBILITY     = _sanitize_privacy(os.getenv("VISIBILITY"))
 ROTATION_SEED  = _env_int("ROTATION_SEED", 0)
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
@@ -1541,6 +1541,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
