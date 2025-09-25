@@ -610,9 +610,10 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
             picked=fb[fb_idx % len(fb)]; fb_idx+=1
         if (not picked or len(picked)<4) and topic_key_join: picked=topic_key_join
         if not picked or picked in ("great","nice","good","bad","things","stuff"): picked="macro detail"
-                if len(picked.split()) > 2:
+        if len(picked.split()) > 2:
             w = picked.split(); picked = f"{w[-2]} {w[-1]}"
-
+        queries.append(picked)
+    
         # zayıf/fiil ağırlıklı sorguları at ve domain/fallback kullan
         if _looks_bad_query(picked):
             if topic_key_join:
@@ -988,4 +989,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
