@@ -108,6 +108,8 @@ jobs:
           VARS_GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
           VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
+          KARAOKE_OFFSET_MS: "-180"
+          KARAOKE_SPEED: "1.03"
         run: |
           set -euo pipefail
 
