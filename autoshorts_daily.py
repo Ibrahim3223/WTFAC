@@ -165,8 +165,9 @@ def _is_recent(h: str, window_days=365) -> bool:
 
 def _record_recent(h: str, mode: str, topic: str):
     st = _state_load()
-    st.setdefault("recent", []).append({"h":h,"mode":mode,"topic":topic,"ts":time.time()})
-    _save_json(st)
+    st.setdefault("recent", []).append({"h": h, "mode": mode, "topic": topic, "ts": time.time()})
+    _state_save(st)  # <-- DÜZELTİLDİ: _save_json(st) yerine _state_save(st)
+
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
         gst["recent_topics"].append(topic)
@@ -1100,3 +1101,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
