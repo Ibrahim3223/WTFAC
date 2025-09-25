@@ -358,8 +358,18 @@ def make_segment(src: str, dur_s: float, outp: str, no_start_fade: bool = False,
     ])
 
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
+    """
+    FIX: Eğer kaynak video hedeften kısa ise tpad ile son kareyi klonlayıp pad ediyor,
+    ardından kesin olarak end_frame=target_frames'e trimliyor.
+    """
     target_frames = max(2, int(target_frames))
-    vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
+    target_sec = frames_to_seconds(target_frames)
+    vdur = ffprobe_dur(video_in)
+    extra = max(0.0, target_sec - vdur)
+    if extra > (1.0 / TARGET_FPS) * 0.5:
+        vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,tpad=stop_mode=clone:stop_duration={extra:.6f},trim=start_frame=0:end_frame={target_frames}"
+    else:
+        vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", video_in,
@@ -471,7 +481,7 @@ def concat_videos_with_transitions_frames(files: List[str], outp: str,
     for i in range(1, n):
         # Güvenli tfr (sahnelerin sınırını aşma)
         tfr_req = trans_frames[i-1] if i-1 < len(trans_frames) else 0
-        tfr = max(0, min(tfr_req, cur_frames-2, seg_frames[i]-2))
+        tfr = max(2, min(tfr_req, cur_frames-2, seg_frames[i]-2))  # ≥2 frame güvenlik
         dur = frames_to_seconds(tfr)
         offset = frames_to_seconds(cur_frames - tfr)
         trans = TRANSITION_LIST[(i-1) % max(1, len(TRANSITION_LIST))]
@@ -529,9 +539,9 @@ def concat_audios_with_transitions(files: List[str], outp: str, trans_frames: Li
     cur_label = "[a0]"
     for i in range(1, n):
         tfr = trans_frames[i-1] if i-1 < len(trans_frames) else 0
+        tfr = max(2, tfr)  # ≥2 frame güvenlik
         d = frames_to_seconds(max(0, tfr))
         next_label = f"[ax{i}]"
-        # Üçgen pencere yumuşak geçiş
         chain.append(f"{cur_label}[a{i}]acrossfade=d={d:.6f}:c1=tri:c2=tri{next_label}")
         cur_label = next_label
 
@@ -547,11 +557,21 @@ def concat_audios_with_transitions(files: List[str], outp: str, trans_frames: Li
     ])
 
 def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
+    """
+    FIX: Hedef süreden kısaysa 'apad' ile sessiz pad; uzunsa trim.
+    Böylece mux sırasında -shortest yüzünden erken kesilme olmaz.
+    """
     dur = frames_to_seconds(target_frames)
+    adur = ffprobe_dur(audio_in)
+    extra = max(0.0, dur - adur)
+    if extra > (1.0 / TARGET_FPS) * 0.5:
+        af = f"apad=pad_dur={extra:.6f},atrim=end={dur:.6f},asetpts=N/SR/TB"
+    else:
+        af = f"atrim=end={dur:.6f},asetpts=N/SR/TB"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", audio_in,
-        "-af", f"atrim=end={dur:.6f},asetpts=N/SR/TB",
+        "-af", af,
         "-ar","48000","-ac","1",
         "-c:a","pcm_s16le",
         outp
@@ -574,7 +594,7 @@ def mux(video: str, audio: str, outp: str):
         "-c:v","copy",
         "-c:a","aac","-b:a","256k",
         "-movflags","+faststart",
-        "-shortest",  # emniyet: en kısa akışa kilitle
+        # "-shortest",  # ❌ kaldırıldı: A/V zaten aynı uzunlukta kilitleniyor
         "-muxpreload","0","-muxdelay","0",
         "-avoid_negative_ts","make_zero",
         outp
@@ -954,11 +974,18 @@ def main():
         apply_final_loudness_normalization(acat, acat_norm)
         acat = acat_norm
 
-    # 6) Toplam hedef kareyi deterministik hesapla ve HER İKİSİNİ de o kareye zorla
+    # 6) Hedef kare hesabı ve KESİN eşitleme
     target_frames_total = max(2, sum(scene_frames) - sum(trans_frames))
-    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4"); enforce_video_exact_frames(vcat, target_frames_total, vcat_exact); vcat = vcat_exact
-    acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav"); lock_audio_duration(acat, target_frames_total, acat_exact); acat = acat_exact
-    print(f"🔒 Locked A/V to exact frames: {target_frames_total} @ {TARGET_FPS}fps (~{frames_to_seconds(target_frames_total):.3f}s)")
+    # Üretimden çıkan gerçek süreleri ölç (güvenlik)
+    vdur_real = ffprobe_dur(vcat)
+    adur_real = ffprobe_dur(acat)
+    vframes_real = int(round(vdur_real * TARGET_FPS))
+    aframes_real = int(round(adur_real * TARGET_FPS))
+    final_target_frames = max(target_frames_total, vframes_real, aframes_real)  # kısa olanı pad'le
+
+    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4"); enforce_video_exact_frames(vcat, final_target_frames, vcat_exact); vcat = vcat_exact
+    acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav"); lock_audio_duration(acat, final_target_frames, acat_exact); acat = acat_exact
+    print(f"🔒 Locked A/V to exact frames: {final_target_frames} @ {TARGET_FPS}fps (~{frames_to_seconds(final_target_frames):.3f}s)")
 
     # 7) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
