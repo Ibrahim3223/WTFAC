@@ -28,6 +28,7 @@ TRANSITION_LIST = [t.strip() for t in os.getenv(
     "wipeleft,wiperight,wipeup,wipedown,smoothleft,smoothright,"
     "circleopen,circleclose,radial,zoom,pixelize,distance,squeezeh,squeezew"
 ).split(",") if t.strip()]
+AUDIO_CROSSFADE = os.getenv("AUDIO_CROSSFADE", "0") == "1"  # varsayılan kapalı
 
 # ---- Channel intent (Topic & Terms) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
@@ -165,9 +166,8 @@ def _is_recent(h: str, window_days=365) -> bool:
 
 def _record_recent(h: str, mode: str, topic: str):
     st = _state_load()
-    st.setdefault("recent", []).append({"h": h, "mode": mode, "topic": topic, "ts": time.time()})
-    _state_save(st)  # <-- DÜZELTİLDİ: _save_json(st) yerine _state_save(st)
-
+    st.setdefault("recent", []).append({"h":h,"mode":mode,"topic":topic,"ts":time.time()})
+    _state_save(st)  # <-- DÜZELTİLDİ (önceki hatalı _save_json(st) yerine)
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
         gst["recent_topics"].append(topic)
@@ -180,7 +180,7 @@ def _blocklist_add_pexels(ids: List[int], days=30):
         st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": now})
     cutoff = now - days*86400
     st["used_pexels_ids"] = [x for x in st.get("used_pexels_ids", []) if x.get("ts",0) >= cutoff]
-    _save_json(STATE_FILE, st)
+    _state_save(st)
 
 def _blocklist_get_pexels() -> set:
     st = _state_load()
@@ -319,6 +319,17 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
+# Geçişleri sahne çiftlerine göre güvenli ve frame’e kuantize hesapla
+def _compute_pairwise_transitions(durs: List[float]) -> List[float]:
+    if not durs or len(durs) < 2:
+        return []
+    per = []
+    for i in range(len(durs)-1):
+        raw = min(TRANSITION_SEC, 0.45 * min(durs[i], durs[i+1]))
+        frames, qdur = quantize_to_frames(max(0.0, raw), TARGET_FPS)
+        per.append(qdur)
+    return per
+
 # no_start_fade / no_end_fade ile giriş/çıkış efektlerini kontrol et
 def make_segment(src: str, dur_s: float, outp: str, no_start_fade: bool = False, no_end_fade: bool = False):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
@@ -361,12 +372,19 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
         outp
     ])
 
-def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
+def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str,
+                     is_hook: bool=False, start_delay: float=0.0, end_cut: float=0.0):
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
+
+    # yazıyı sahne içi pencereye kısıtla (crossfade sırasında görünmesin)
+    s0 = max(0.0, min(start_delay, max(0.0, seg_dur - 0.01)))
+    e0 = max(0.0, seg_dur - max(0.0, end_cut))
+    if e0 - s0 < 0.08:
+        s0 = 0.0; e0 = seg_dur
 
     lines = wrapped.split("\n")
     n_lines = max(1, len(lines))
@@ -387,8 +405,9 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
 
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
-    common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+    enable = f"between(t\\,{s0:.3f}\\,{e0:.3f})"
 
+    common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10:enable='{enable}'"
     shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
     main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
@@ -447,16 +466,21 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-# --- xfade ile çeşitli geçişler ---
-def concat_videos_with_transitions(files: List[str], outp: str, trans_sec: float = TRANSITION_SEC):
+# --- xfade ile çeşitli geçişler (çift bazlı süre) ---
+def concat_videos_with_transitions(files: List[str], outp: str,
+                                   trans_sec: float = TRANSITION_SEC,
+                                   per_trans: Optional[List[float]] = None):
     if not files: raise RuntimeError("concat_videos_with_transitions: empty")
-    if len(files) == 1 or trans_sec <= 0.01:
+    if len(files) == 1:
         return concat_videos_filter(files, outp)
 
     inputs = []
     for p in files:
         inputs += ["-i", p]
     durs = [max(0.02, ffprobe_dur(p)) for p in files]
+
+    if per_trans is None or len(per_trans) != len(files)-1:
+        per_trans = _compute_pairwise_transitions(durs)
 
     pre = [f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]" for i in range(len(files))]
 
@@ -465,11 +489,12 @@ def concat_videos_with_transitions(files: List[str], outp: str, trans_sec: float
     cur_dur = durs[0]
     for i in range(1, len(files)):
         trans = TRANSITION_LIST[(i-1) % max(1, len(TRANSITION_LIST))]
-        offset = max(0.0, cur_dur - trans_sec)
+        tsec = max(0.04, min(per_trans[i-1], cur_dur-0.01, durs[i]-0.01))
+        offset = max(0.0, cur_dur - tsec)
         next_label = f"[x{i}]"
-        chain.append(f"{cur_label}[v{i}]xfade=transition={trans}:duration={trans_sec:.3f}:offset={offset:.3f}{next_label}")
+        chain.append(f"{cur_label}[v{i}]xfade=transition={trans}:duration={tsec:.3f}:offset={offset:.3f}{next_label}")
         cur_label = next_label
-        cur_dur = cur_dur + durs[i] - trans_sec
+        cur_dur = cur_dur + durs[i] - tsec
 
     filtergraph = ";".join(pre + chain)
     run([
@@ -483,7 +508,7 @@ def concat_videos_with_transitions(files: List[str], outp: str, trans_sec: float
         outp
     ])
 
-# -------------------- Audio concat --------------------
+# -------------------- Audio concat (lossless) --------------------
 def concat_audios(files: List[str], outp: str):
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -498,7 +523,7 @@ def concat_audios(files: List[str], outp: str):
     ])
     pathlib.Path(lst).unlink(missing_ok=True)
 
-# --- YENİ: Ses tarafında acrossfade; video xfade ile hizalı ---
+# --- İsteğe bağlı: Ses tarafında acrossfade; varsayılan KAPALI ---
 def concat_audios_with_transitions(files: List[str], outp: str, trans_sec: float = TRANSITION_SEC):
     if not files: raise RuntimeError("concat_audios_with_transitions: empty")
     if len(files) == 1 or trans_sec <= 0.01:
@@ -801,7 +826,7 @@ def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     for _, vid, link in cand:
         if vid not in _USED_PEXELS_IDS_RUNTIME:
             out.append((vid, link))
-    return out[:5]
+    return out[:5]  # soru başına en fazla 5 aday
 
 # -------------------- YouTube --------------------
 def yt_service():
@@ -1002,12 +1027,14 @@ def main():
     chosen_files=[]
     for i in range(len(metas)):
         picked_path=None
+        # öncelik: hiç kullanılmamış
         for vid, p in downloads.items():
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
                 picked_path = p
                 usage[vid] += 1
                 break
         if not picked_path:
+            # mecburen en az kullanılanı seç
             if not usage: raise RuntimeError("Pexels pool empty after filtering.")
             vid = min(usage.keys(), key=lambda k: usage[k])
             usage[vid] += 1
@@ -1030,25 +1057,42 @@ def main():
     print("🎬 Segments…")
     segs = []
     total_scenes = len(metas)
+
+    # TTS süreleri baz alınarak geçiş süreleri (çift bazlı) hesapla
+    durs = [m[1] for m in metas]
+    per_trans = _compute_pairwise_transitions(durs)
+
     for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        # İlk sahnede giriş fade-in yok; son sahnede çıkış fade-out yok
+        # İlk sahnede giriş fade yok; son sahnede bitiş fade yok
         make_segment(src, d, base, no_start_fade=(i == 0), no_end_fade=(i == total_scenes - 1))
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
+
+        # altyazıyı crossfade dışında tut
+        start_delay = per_trans[i-1] if i > 0 else 0.0
+        end_cut     = per_trans[i]   if i < total_scenes-1 else 0.0
+
         draw_capcut_text(
             base,
             base_text,
             CAPTION_COLORS[i % len(CAPTION_COLORS)],
             font,
             colored,
-            is_hook=(i == 0)
+            is_hook=(i == 0),
+            start_delay=start_delay,
+            end_cut=end_cut
         )
         segs.append(colored)
 
-    # 5) Birleştir — video & ses geçişleri hizalı
-    print("🎞️ Assemble with transitions…")
-    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_with_transitions(segs, vcat)
-    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios_with_transitions(wavs, acat)
+    # 5) Birleştir — video & ses (ses fadesiz varsayılan)
+    print("🎞️ Assemble…")
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_with_transitions(segs, vcat, per_trans=per_trans)
+
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav")
+    if AUDIO_CROSSFADE:
+        concat_audios_with_transitions(wavs, acat)
+    else:
+        concat_audios(wavs, acat)
 
     # 6) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
@@ -1101,4 +1145,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
