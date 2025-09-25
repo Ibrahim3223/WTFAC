@@ -1,4 +1,3 @@
-# autoshorts_daily.py — Topic-locked Gemini • Multi-clip Pexels • Hard A/V lock • Long SEO desc
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict
@@ -116,7 +115,7 @@ def normalize_sentence(raw: str) -> str:
     s = (raw or "").strip()
     s = s.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
     s = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in s.split("\n"))
-    s = s.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'")
+    s = s.replace("—", "-").replace("–", "-").replace(""", '"').replace(""", '"').replace("'", "'")
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
 
@@ -196,7 +195,7 @@ def _ff_color(c: str) -> str:
 
 def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
-    t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
+    t = (t.replace("—", "-").replace("–", "-").replace(""", '"').replace(""", '"').replace("'", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
@@ -309,20 +308,65 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
-def make_segment(src: str, dur_s: float, outp: str):
+def split_video_in_half(src: str, first_half_out: str, second_half_out: str):
+    """Split a video into two equal parts"""
+    total_dur = ffprobe_dur(src)
+    if total_dur <= 0:
+        raise RuntimeError(f"Cannot get duration of {src}")
+    
+    half_dur = total_dur / 2.0
+    
+    # First half (0 to middle)
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", src,
+        "-ss", "0",
+        "-t", str(half_dur),
+        "-c", "copy",
+        first_half_out
+    ])
+    
+    # Second half (middle to end)
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", src,
+        "-ss", str(half_dur),
+        "-c", "copy",
+        second_half_out
+    ])
+
+def make_segment(src: str, dur_s: float, outp: str, is_first: bool = False, is_last: bool = False):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
-    vf = (
+    
+    # Base video filters
+    base_vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
         f"fps={TARGET_FPS},"
         f"setpts=N/{TARGET_FPS}/TB,"
-        f"trim=start_frame=0:end_frame={frames},"
-        f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
+        f"trim=start_frame=0:end_frame={frames}"
     )
+    
+    # Fade effects - no fade out for last segment to avoid ending effect
+    if is_first:
+        # First segment gets fade in
+        fade_filters = f"fade=t=in:st=0:d={fade:.2f}"
+    elif is_last:
+        # Last segment gets NO fade out (clean ending)
+        fade_filters = ""
+    else:
+        # Middle segments get fade in only
+        fade_filters = f"fade=t=in:st=0:d={fade:.2f}"
+    
+    # Combine filters
+    if fade_filters:
+        vf = f"{base_vf},{fade_filters}"
+    else:
+        vf = base_vf
+    
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", src,
@@ -415,7 +459,99 @@ def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
         outp
     ])
 
+def get_transition_effect(index: int) -> str:
+    """Get various transition effects for scene transitions"""
+    transitions = [
+        "",  # No transition for first segment
+        "fade",
+        "wipeleft", 
+        "wiperight",
+        "slideup",
+        "slidedown",
+        "circleopen",
+        "circlecrop",
+        "radial",
+        "smoothleft",
+        "smoothright",
+        "pixelize"
+    ]
+    
+    if index == 0:
+        return ""
+    return transitions[(index - 1) % (len(transitions) - 1) + 1]
+
+def concat_videos_with_transitions(files: List[str], outp: str):
+    """Concatenate videos with various transition effects"""
+    if not files: 
+        raise RuntimeError("concat_videos_with_transitions: empty file list")
+    
+    if len(files) == 1:
+        # Single file, just copy
+        pathlib.Path(outp).write_bytes(pathlib.Path(files[0]).read_bytes())
+        return
+    
+    inputs = []
+    filters = []
+    
+    # Prepare inputs
+    for i, p in enumerate(files):
+        inputs += ["-i", p]
+        filters.append(f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
+    
+    # Build transition chain
+    current_input = "[v0]"
+    
+    for i in range(1, len(files)):
+        transition = get_transition_effect(i)
+        
+        if transition and transition != "fade":  # fade is handled differently
+            # Use xfade filter with various transitions
+            transition_duration = 0.3  # 0.3 second transition
+            next_input = f"[v{i}]"
+            output_name = f"[t{i}]" if i < len(files) - 1 else "[v]"
+            
+            # Get offset - this should be the total duration of previous clips minus transition duration
+            offset = f"offset={transition_duration * (i-1)}"
+            
+            filters.append(f"{current_input}{next_input}xfade=transition={transition}:duration={transition_duration}:{offset}{output_name}")
+            current_input = output_name
+        else:
+            # Simple concatenation for fade or first segment
+            if i == len(files) - 1:
+                # Last concatenation
+                next_input = f"[v{i}]"
+                filters.append(f"{current_input}{next_input}concat=n=2:v=1:a=0[v]")
+            else:
+                next_input = f"[v{i}]"
+                output_name = f"[c{i}]"
+                filters.append(f"{current_input}{next_input}concat=n=2:v=1:a=0{output_name}")
+                current_input = output_name
+    
+    # If we only have basic concatenation
+    if len([f for f in filters if "xfade" in f or "concat" in f]) == 0:
+        # Fallback to simple concat
+        filtergraph = ";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(len(files))) + f"concat=n={len(files)}:v=1:a=0[v]"
+    else:
+        filtergraph = ";".join(filters)
+    
+    try:
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            *inputs,
+            "-filter_complex", filtergraph,
+            "-map","[v]",
+            "-r", str(TARGET_FPS), "-vsync","cfr",
+            "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+            "-pix_fmt","yuv420p","-movflags","+faststart",
+            outp
+        ])
+    except Exception as e:
+        # Fallback to simple concatenation if transitions fail
+        print(f"⚠️ Transition effects failed, using simple concat: {e}")
+        concat_videos_filter(files, outp)
+
 def concat_videos_filter(files: List[str], outp: str):
+    """Simple video concatenation without transitions (fallback)"""
     if not files: raise RuntimeError("concat_videos_filter: empty")
     inputs = []; filters = []
     for i, p in enumerate(files):
@@ -770,8 +906,8 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
     # Hafif genişletme
     explainer = (
         f"{para} "
-        f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
-        f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
+        f"This short explores "{topic}" with clear, visual steps so you can grasp it at a glance. "
+        f"Rewatch to catch tiny details, save for later, and share with someone who'll enjoy it."
     )
 
     # Hashtag seti
@@ -793,7 +929,7 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
         + "\n".join([f"• {s}" for s in sentences[:8]]) +
         "\n\n— Why it matters —\n"
         f"This topic sticks because it ties a vivid visual to a single idea per scene. "
-        f"That’s how your brain remembers faster and better.\n\n"
+        f"That's how your brain remembers faster and better.\n\n"
         f"— Watch next —\n"
         f"Subscribe for more {topic.lower()} in clear, repeatable visuals.\n\n"
         + " ".join(tagset)
@@ -920,31 +1056,54 @@ def main():
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
 
-    # Dağıtım
+    # Dağıtım - özel durum: ilk sahne için loop efekti
     usage = {vid:0 for vid in downloads.keys()}
     chosen_files=[]
+    loop_ending_video = None  # İlk sahnenin ikinci yarısı sonunda kullanılacak
+    
     for i in range(len(metas)):
         picked_path=None
+        picked_vid=None
+        
         # öncelik: hiç kullanılmamış
         for vid, p in downloads.items():
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
                 picked_path = p
+                picked_vid = vid
                 usage[vid] += 1
                 break
         if not picked_path:
             # mecburen en az kullanılanı seç
             if not usage: raise RuntimeError("Pexels pool empty after filtering.")
-            vid = min(usage.keys(), key=lambda k: usage[k])
-            usage[vid] += 1
-            picked_path = downloads[vid]
-        chosen_files.append(picked_path)
+            picked_vid = min(usage.keys(), key=lambda k: usage[k])
+            usage[picked_vid] += 1
+            picked_path = downloads[picked_vid]
+            
+        # İlk sahne için özel işlem - videoyu böl
+        if i == 0:
+            first_half = str(pathlib.Path(tmp) / f"first_scene_first_half.mp4")
+            second_half = str(pathlib.Path(tmp) / f"first_scene_second_half.mp4")
+            
+            try:
+                split_video_in_half(picked_path, first_half, second_half)
+                chosen_files.append(second_half)  # İkinci yarıyı ilk sahne olarak kullan
+                loop_ending_video = first_half      # İlk yarıyı sonda kullanmak için sakla
+                print(f"🔄 Split first scene video: using second half for opening, first half for ending")
+            except Exception as e:
+                print(f"⚠️ Failed to split first scene video, using original: {e}")
+                chosen_files.append(picked_path)
+                loop_ending_video = None
+        else:
+            chosen_files.append(picked_path)
 
     # 4) Segment + altyazı
     print("🎬 Segments…")
     segs = []
     for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        make_segment(src, d, base)
+        is_first = (i == 0)
+        is_last = (i == len(metas) - 1)
+        make_segment(src, d, base, is_first=is_first, is_last=is_last)
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
             base,
@@ -956,10 +1115,28 @@ def main():
         )
         segs.append(colored)
 
-    # 5) Birleştir
-    print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
-    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
+    # Loop ending segment ekleme (eğer varsa)
+    if loop_ending_video:
+        print("🔄 Adding loop ending segment...")
+        # Son sahnenin süresini al
+        last_duration = metas[-1][1] if metas else 2.0
+        ending_base = str(pathlib.Path(tmp) / "ending_seg.mp4")
+        make_segment(loop_ending_video, last_duration, ending_base, is_first=False, is_last=True)
+        
+        # Altyazı eklemeyelim, sadece video olarak ekle
+        segs.append(ending_base)
+        
+        # Audio için de extra wav ekleyelim (sessiz)
+        ending_wav = str(pathlib.Path(tmp) / "ending_silence.wav")
+        run(["ffmpeg","-y","-f","lavfi","-t",str(last_duration),"-i","anullsrc=r=48000:cl=mono", ending_wav])
+        wavs.append(ending_wav)
+
+    # 5) Birleştir (geçiş efektleri ile)
+    print("🎞️ Assemble with transitions…")
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
+    concat_videos_with_transitions(segs, vcat)
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav")
+    concat_audios(wavs, acat)
 
     # 6) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
