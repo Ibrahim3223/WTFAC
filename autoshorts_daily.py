@@ -478,85 +478,113 @@ def _ass_time(s: float) -> str:
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
-    # ASS renk notasyonu: &HAABBGGRR
-    def _to_ass(c:str)->str:
-        c=c.strip()
-        if c.startswith("0x"): c=c[2:]
-        if c.startswith("#"): c=c[1:]
-        if len(c)==6: c="00"+c
-        rr=c[-6:-4]; gg=c[-4:-2]; bb=c[-2:]
+    # ASS renk notasyonu: &HAABBGGRR (A=alpha, BGR sırası)
+    def _to_ass(c: str) -> str:
+        c = c.strip()
+        if c.startswith("0x"): c = c[2:]
+        if c.startswith("#"):  c = c[1:]
+        if len(c) == 6:        c = "00" + c
+        rr, gg, bb = c[-6:-4], c[-4:-2], c[-2:]
         return f"&H00{bb}{gg}{rr}"
 
     fontname = "DejaVu Sans"
     fontsize = 58 if is_hook else 52
     margin_v = 270 if is_hook else 330
-    outline  = 4 if is_hook else 3
+    outline  = 4  if is_hook else 3
 
-    # kelimeleri UPPERCASE
-    words_upper = [(re.sub(r"\s+"," ", w.upper()), d) for w,d in words if w.strip()]
+    # Kelimeleri UPPERCASE + süreleri al
+    words_upper = [(re.sub(r"\s+", " ", w.upper()), d) for w, d in words if str(w).strip()]
     if not words_upper:
         words_upper = [(w.upper(), 0.5) for w in (text or "…").split()]
 
-    # hedef süre (centisecond)
+    n = len(words_upper)
+
+    # Hedef toplam süre (centisecond)
     total_cs = int(round(seg_dur * 100))
 
-    # ham süreler (centisecond)
+    # Ham süreler (centisecond)
     ds = [max(5, int(round(d * 100))) for _, d in words_upper]
     if sum(ds) == 0:
-        ds = [50] * len(words_upper)
+        ds = [50] * n
 
-    # === YENİ: global hız düzeltmeleri ===
-    # 1) hızlı akış (yüzde): 1.5 → ~%1.5 daha hızlı highlight
+    # --- G L O B A L  H I Z  D Ü Z E L T M E L E R ---
+    # 1) Genel hızlandırma (yüzde)
     try:
         speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "2.2"))
     except Exception:
         speedup_pct = 1.5
     speedup_pct = max(-5.0, min(5.0, speedup_pct))  # güvenli aralık
 
-    # 2) satırı biraz erken bitir (ms)
+    # 2) Sonda biraz erken bitir (ms -> cs)
     try:
         early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "80"))
     except Exception:
         early_end_ms = 80
     early_end_cs = max(0, int(round(early_end_ms / 10.0)))
 
-    # hedef toplam cs: total_cs'i hem hızlandırma hem de erken bitiş ile küçült
-    target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
-    target_cs = max(5 * len(ds), target_cs)
+    # 3) Sona doğru kademeli hızlanma (yüzde)
+    try:
+        ramp_pct = float(os.getenv("KARAOKE_RAMP_PCT", "1.0"))
+    except Exception:
+        ramp_pct = 1.0
+    ramp_pct = max(0.0, min(5.0, ramp_pct))  # 0–5 arası makul
 
-    # ham toplamı hedefe eşitle (orantılı ölçek → sonra yuvarlama düzelt)
-    sum_ds = sum(ds)
-    if sum_ds > 0:
-        scale = target_cs / sum_ds
+    # Hedef toplam cs: hızlandırma + erken bitiş
+    target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
+    target_cs = max(5 * n, target_cs)
+
+    # Kademeli hızlanmayı uygula (son kelimeler biraz daha kısa)
+    if n > 1 and ramp_pct > 0:
+        ramp = (ramp_pct / 100.0)
+        for i in range(n):
+            k = i / (n - 1)                  # 0 → baş, 1 → son
+            ds[i] = max(5, int(round(ds[i] * (1.0 - ramp * k))))
+
+    # Orantılı ölçekle hedefe oturt
+    s = sum(ds)
+    if s > 0:
+        scale = target_cs / s
         ds = [max(5, int(round(x * scale))) for x in ds]
 
-    # olası yuvarlama taşmasını indir
+    # Yuvarlama düzeltmeleri (taşma/eksik)
     while sum(ds) > target_cs:
-        for i in range(len(ds)):
+        for i in range(n):
             if sum(ds) <= target_cs: break
             if ds[i] > 5: ds[i] -= 1
-    # gerekirse eksikleri dağıt
     i = 0
     while sum(ds) < target_cs:
-        if ds[i % len(ds)] < 9999: ds[i % len(ds)] += 1
+        ds[i % n] += 1
         i += 1
 
-    # Global erken başlatma: ilk kelimelerden al, sona ekle (toplam değişmez)
-    lead_cs_target = max(0, int(round(CAPTION_LEAD_MS / 10.0)))
-    removed = 0
-    if lead_cs_target > 0 and sum(ds) > 5 * len(ds):
-        for i in range(len(ds)):
+    # Başlangıcı öne çek (lead) — ilk kelimelerden alıp sona ekle
+    try:
+        lead_ms = int(os.getenv("CAPTION_LEAD_MS", os.getenv("KARAOKE_LEAD_MS", "0")))
+    except Exception:
+        lead_ms = 0
+    lead_cs_target = max(0, int(round(lead_ms / 10.0)))
+
+    if lead_cs_target > 0 and sum(ds) > 5 * n:
+        removed = 0
+        for i in range(n):
             if removed >= lead_cs_target: break
             can_take = max(0, ds[i] - 5)
             take = min(can_take, lead_cs_target - removed)
-            ds[i] -= take
-            removed += take
-        ds[-1] += removed  # toplam aynı kalsın
+            if take > 0:
+                ds[i] -= take
+                removed += take
+        # Ekleme: son iki kelimeye yarı yarıya dağıt (tek kelime varsa sona)
+        if n >= 2:
+            add_a = removed // 2
+            add_b = removed - add_a
+            ds[-2] += add_a
+            ds[-1] += add_b
+        else:
+            ds[-1] += removed
 
-    # ekranda görünen metin
-    cap = " ".join([w for w,_ in words_upper])
-    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n","\\N")
-    kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(len(words_upper))]).strip()
+    # Ekranda görünecek metin + \k satırı
+    cap = " ".join([w for w, _ in words_upper])
+    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
+    kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(n)]).strip()
 
     ass = f"""[Script Info]
 ScriptType: v4.00+
@@ -1458,6 +1486,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
