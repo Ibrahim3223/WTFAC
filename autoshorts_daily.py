@@ -905,8 +905,8 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
     para = " ".join(sentences)
     # Hafif genişletme
     explainer = (
-        f"{para} "
-        f"This short explores "{topic}" with clear, visual steps so you can grasp it at a glance. "
+        f"{para}"
+        f"This short explores '{topic}' with clear, visual steps so you can grasp it at a glance. "
         f"Rewatch to catch tiny details, save for later, and share with someone who'll enjoy it."
     )
 
@@ -1189,3 +1189,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
