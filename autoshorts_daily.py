@@ -1,4 +1,4 @@
-# autoshorts_daily.py — Topic-locked Gemini • Multi-clip Pexels • Hard A/V lock • Long SEO desc
+# autoshorts_daily.py — Topic-locked Gemini • Hard A/V lock (frame-quantized) • Single-pass loudness
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict
@@ -9,7 +9,7 @@ TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece LOG için
+MODE           = os.getenv("MODE", "freeform").strip().lower()
 LANG           = os.getenv("LANG", "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
@@ -28,9 +28,10 @@ TRANSITION_LIST = [t.strip() for t in os.getenv(
     "wipeleft,wiperight,wipeup,wipedown,smoothleft,smoothright,"
     "circleopen,circleclose,radial,zoom,pixelize,distance,squeezeh,squeezew"
 ).split(",") if t.strip()]
-AUDIO_CROSSFADE = os.getenv("AUDIO_CROSSFADE", "0") == "1"  # varsayılan kapalı
+AUDIO_CROSSFADE = os.getenv("AUDIO_CROSSFADE", "0") == "1"     # varsayılan KAPALI
+FINAL_LOUDNORM  = os.getenv("FINAL_LOUDNORM",  "1") == "1"     # varsayılan AÇIK (tek geçiş)
 
-# ---- Channel intent (Topic & Terms) ----
+# ---- Topic/Terms ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
@@ -56,7 +57,7 @@ CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
 
 # Pexels esnetmeler
 PEXELS_PER_PAGE          = int(os.getenv("PEXELS_PER_PAGE", "30"))
-PEXELS_MAX_USES_PER_CLIP = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))  # bir klibi kaç sahnede kullanabiliriz
+PEXELS_MAX_USES_PER_CLIP = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))
 PEXELS_ALLOW_LANDSCAPE   = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
@@ -139,8 +140,7 @@ def _save_json(path, data):
     pathlib.Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 def _state_load() -> dict:
-    st = _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
-    return st
+    return _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
 
 def _state_save(st: dict):
     st["recent"] = st.get("recent", [])[-1200:]
@@ -157,17 +157,10 @@ def _global_topics_save(gst: dict):
 def _hash12(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()[:12]
 
-def _is_recent(h: str, window_days=365) -> bool:
-    now = time.time()
-    for r in _state_load().get("recent", []):
-        if r.get("h")==h and (now - r.get("ts",0)) < window_days*86400:
-            return True
-    return False
-
 def _record_recent(h: str, mode: str, topic: str):
     st = _state_load()
     st.setdefault("recent", []).append({"h":h,"mode":mode,"topic":topic,"ts":time.time()})
-    _state_save(st)  # <-- DÜZELTİLDİ (önceki hatalı _save_json(st) yerine)
+    _state_save(st)  # (önceki hatalı _save_json(st) yerine DOĞRUSU)
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
         gst["recent_topics"].append(topic)
@@ -256,6 +249,10 @@ def _rate_to_atempo(rate_str: str, default: float = 1.10) -> float:
         return default
 
 def tts_to_wav(text: str, wav_out: str) -> float:
+    """
+    Per-cümle: SADECE hız/temiz dönüşüm. DİNAMİK NORMALİZASYON YOK!
+    Final mix’te tek sefer loudnorm/limiter uygulanacak.
+    """
     import asyncio
     from aiohttp.client_exceptions import WSServerHandshakeError
     text = (text or "").strip()
@@ -282,7 +279,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
                 "-i", mp3,
                 "-ar","48000","-ac","1","-acodec","pcm_s16le",
-                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+                "-af", f"atempo={atempo}",
                 wav_out
             ])
             pathlib.Path(mp3).unlink(missing_ok=True)
@@ -304,7 +301,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
             "-ar","48000","-ac","1","-acodec","pcm_s16le",
-            "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
+            "-af", f"atempo={atempo}",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
@@ -319,18 +316,16 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
-# Geçişleri sahne çiftlerine göre güvenli ve frame’e kuantize hesapla
-def _compute_pairwise_transitions(durs: List[float]) -> List[float]:
-    if not durs or len(durs) < 2:
+def _compute_pairwise_transitions(quantized_durs: List[float]) -> List[float]:
+    if not quantized_durs or len(quantized_durs) < 2:
         return []
     per = []
-    for i in range(len(durs)-1):
-        raw = min(TRANSITION_SEC, 0.45 * min(durs[i], durs[i+1]))
+    for i in range(len(quantized_durs)-1):
+        raw = min(TRANSITION_SEC, 0.45 * min(quantized_durs[i], quantized_durs[i+1]))
         frames, qdur = quantize_to_frames(max(0.0, raw), TARGET_FPS)
         per.append(qdur)
     return per
 
-# no_start_fade / no_end_fade ile giriş/çıkış efektlerini kontrol et
 def make_segment(src: str, dur_s: float, outp: str, no_start_fade: bool = False, no_end_fade: bool = False):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
@@ -380,7 +375,6 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str,
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
-    # yazıyı sahne içi pencereye kısıtla (crossfade sırasında görünmesin)
     s0 = max(0.0, min(start_delay, max(0.0, seg_dur - 0.01)))
     e0 = max(0.0, seg_dur - max(0.0, end_cut))
     if e0 - s0 < 0.08:
@@ -466,10 +460,10 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-# --- xfade ile çeşitli geçişler (çift bazlı süre) ---
 def concat_videos_with_transitions(files: List[str], outp: str,
                                    trans_sec: float = TRANSITION_SEC,
-                                   per_trans: Optional[List[float]] = None):
+                                   per_trans: Optional[List[float]] = None,
+                                   quant_durs: Optional[List[float]] = None):
     if not files: raise RuntimeError("concat_videos_with_transitions: empty")
     if len(files) == 1:
         return concat_videos_filter(files, outp)
@@ -477,7 +471,11 @@ def concat_videos_with_transitions(files: List[str], outp: str,
     inputs = []
     for p in files:
         inputs += ["-i", p]
-    durs = [max(0.02, ffprobe_dur(p)) for p in files]
+
+    if quant_durs is None:
+        durs = [max(0.02, ffprobe_dur(p)) for p in files]
+    else:
+        durs = [max(0.02, x) for x in quant_durs]
 
     if per_trans is None or len(per_trans) != len(files)-1:
         per_trans = _compute_pairwise_transitions(durs)
@@ -508,7 +506,7 @@ def concat_videos_with_transitions(files: List[str], outp: str,
         outp
     ])
 
-# -------------------- Audio concat (lossless) --------------------
+# -------------------- Audio helpers --------------------
 def concat_audios(files: List[str], outp: str):
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -523,7 +521,6 @@ def concat_audios(files: List[str], outp: str):
     ])
     pathlib.Path(lst).unlink(missing_ok=True)
 
-# --- İsteğe bağlı: Ses tarafında acrossfade; varsayılan KAPALI ---
 def concat_audios_with_transitions(files: List[str], outp: str, trans_sec: float = TRANSITION_SEC):
     if not files: raise RuntimeError("concat_audios_with_transitions: empty")
     if len(files) == 1 or trans_sec <= 0.01:
@@ -564,6 +561,18 @@ def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
         outp
     ])
 
+def apply_final_loudness_normalization(audio_in: str, audio_out: str):
+    """
+    Tek geçiş: EBU R128 hedefi çevresinde normalize + güvenli limiter.
+    """
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", audio_in,
+        "-af", "loudnorm=I=-16:LRA=11:TP=-1.5:dual_mono=true,alimiter=limit=0.95",
+        "-ar","48000","-ac","1","-c:a","pcm_s16le",
+        audio_out
+    ])
+
 def mux(video: str, audio: str, outp: str):
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -577,7 +586,7 @@ def mux(video: str, audio: str, outp: str):
         outp
     ])
 
-# -------------------- Template selection (by TOPIC) --------------------
+# -------------------- Template selection --------------------
 def _select_template_key(topic: str) -> str:
     t = (topic or "").lower()
     geo_kw = ("country", "geograph", "city", "capital", "border", "population", "continent", "flag")
@@ -585,7 +594,7 @@ def _select_template_key(topic: str) -> str:
         return "country_facts"
     return "_default"
 
-# -------------------- Gemini (topic-locked) --------------------
+# -------------------- Gemini --------------------
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a 25–40s YouTube Short.
 Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
@@ -639,8 +648,7 @@ def _gemini_call(prompt: str, model: str) -> dict:
     return json.loads(raw)
 
 def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
-    tpl_key = _select_template_key(topic_lock)
-    template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
+    template = ENHANCED_GEMINI_TEMPLATES[_select_template_key(topic_lock)]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
     guardrails = """
@@ -674,7 +682,7 @@ Avoid overlap for 180 days:
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return topic, sentences, terms, title, desc, tags
 
-# -------------------- Per-scene queries --------------------
+# -------------------- Query helpers --------------------
 _STOP = set("""
 a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
 this that these those is are was were be been being have has had do does did can could should would may might will shall
@@ -740,41 +748,31 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
     for s in sentences:
         s_low = " " + (s or "").lower() + " "
         picked=None
-
         for ph in phrase_pool:
             if f" {ph} " in s_low:
                 picked = ph; break
-
         if not picked:
             toks = _tok4(s)
             if len(toks) >= 2:
                 picked = f"{toks[0]} {toks[1]}"
             elif len(toks) == 1:
                 picked = toks[0]
-
         if (not picked or len(picked) < 4) and fb:
             picked = fb[fb_idx % len(fb)]; fb_idx += 1
-
         if (not picked or len(picked) < 4) and topic_key_join:
             picked = topic_key_join
-
         if not picked or picked in ("great","nice","good","bad","things","stuff"):
             picked = "macro detail"
-
         if len(picked.split()) > 2:
             w = picked.split(); picked = f"{w[-2]} {w[-1]}"
-
         queries.append(picked)
-
     return queries
 
-# -------------------- Pexels (multi-pick + variety) --------------------
+# -------------------- Pexels --------------------
 _USED_PEXELS_IDS_RUNTIME = set()
-
 def _pexels_headers():
     if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
     return {"Authorization": PEXELS_API_KEY}
-
 def _pexels_search(query: str, locale: str) -> List[Tuple[int, str, int, int, float]]:
     url = "https://api.pexels.com/videos/search"
     r = requests.get(
@@ -802,7 +800,6 @@ def _pexels_search(query: str, locale: str) -> List[Tuple[int, str, int, int, fl
         w,h,link = pf[0]
         out.append((vid, link, w, h, dur))
     return out
-
 def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     locale = "tr-TR" if LANG.startswith("tr") else "en-US"
     items = _pexels_search(query, locale)
@@ -826,7 +823,7 @@ def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     for _, vid, link in cand:
         if vid not in _USED_PEXELS_IDS_RUNTIME:
             out.append((vid, link))
-    return out[:5]  # soru başına en fazla 5 aday
+    return out[:5]
 
 # -------------------- YouTube --------------------
 def yt_service():
@@ -921,7 +918,7 @@ def main():
     topic_lock = TOPIC or "Interesting Visual Explainers"
     user_terms = SEARCH_TERMS_ENV
 
-    # 1) İçerik üretim (topic-locked) + kalite kontrol
+    # 1) İçerik üretim
     attempts = 0
     best = None; best_score = -1.0
     banlist = _recent_topics_for_prompt()
@@ -947,18 +944,12 @@ def main():
             ]
             search_terms = user_terms or ["macro detail","timelapse","clean b-roll"]
             ttl = ""; desc=""; tags=[]
-
         score = _content_score(sents)
         print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
         if score > best_score:
-            best = (tpc, sents, search_terms, ttl, desc, tags)
-            best_score = score
-        if score >= 7.2:
-            break
-        else:
-            print("⚠️ Low content score → rebuilding…")
-            banlist = [tpc] + banlist
-            time.sleep(0.5)
+            best = (tpc, sents, search_terms, ttl, desc, tags); best_score = score
+        if score >= 7.2: break
+        print("⚠️ Low content score → rebuilding…"); banlist = [tpc] + banlist; time.sleep(0.5)
 
     tpc, sentences, search_terms, ttl, desc, tags = best
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
@@ -966,22 +957,36 @@ def main():
 
     print(f"📊 Sentences: {len(sentences)}")
 
-    # 2) TTS
+    # 2) TTS (per-cümle: sadece atempo)
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
-    wavs, metas = [], []
+    wavs_raw, metas = [], []
     print("🎤 TTS…")
     for i, s in enumerate(sentences):
         base = normalize_sentence(s)
-        w = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
+        w = str(pathlib.Path(tmp) / f"sent_raw_{i:02d}.wav")
         d = tts_to_wav(base, w)
-        wavs.append(w); metas.append((base, d))
+        wavs_raw.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 3) Pexels — çoklu aday + havuz + tekrar limiti
+    # 2.5) Süreleri kareye kuantize et → hem video hem ses aynı listeyi kullanacak
+    scene_frames = []
+    scene_qdurs  = []
+    for _, d in metas:
+        fr, qd = quantize_to_frames(d, TARGET_FPS)
+        scene_frames.append(fr); scene_qdurs.append(qd)
+
+    # 2.6) Her sahne sesini ÖNCE kuantize süreye kilitle (per-sahne senkron garantisi)
+    print("🔒 Trimming per-scene audio to quantized durations…")
+    wavs = []
+    for i, w in enumerate(wavs_raw):
+        w_exact = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
+        lock_audio_duration(w, scene_frames[i], w_exact)
+        wavs.append(w_exact)
+
+    # 3) Pexels — arama/indir/dağıtım
     per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
-    print("🔎 Per-scene queries:")
-    for q in per_scene_queries: print(f"   • {q}")
+    print("🔎 Per-scene queries:"); [print(f"   • {q}") for q in per_scene_queries]
 
     pool: List[Tuple[int,str]] = []
     seen_ids=set()
@@ -991,22 +996,18 @@ def main():
             if vid not in seen_ids:
                 seen_ids.add(vid); pool.append((vid, link))
 
-    # Havuz yetersizse generic fallback
     if len(pool) < len(metas):
         extras = ["macro detail","city timelapse","nature macro","clean interior","close up hands","ocean waves","night skyline","forest path"]
         for q in (user_terms or []) + extras:
             for vid, link in pexels_pick_many(q):
                 if vid not in seen_ids:
                     seen_ids.add(vid); pool.append((vid, link))
-                if len(pool) >= len(metas)*2:
-                    break
-            if len(pool) >= len(metas)*2:
-                break
+                if len(pool) >= len(metas)*2: break
+            if len(pool) >= len(metas)*2: break
 
     if not pool:
         raise RuntimeError("Pexels: hiç uygun klip bulunamadı.")
 
-    # Klipleri indir ve tekrar limitine göre dağıt
     downloads = {}
     print("⬇️ Download pool…")
     for idx, (vid, link) in enumerate(pool):
@@ -1022,26 +1023,19 @@ def main():
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
 
-    # Dağıtım
     usage = {vid:0 for vid in downloads.keys()}
     chosen_files=[]
     for i in range(len(metas)):
         picked_path=None
-        # öncelik: hiç kullanılmamış
         for vid, p in downloads.items():
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
-                picked_path = p
-                usage[vid] += 1
-                break
+                picked_path = p; usage[vid] += 1; break
         if not picked_path:
-            # mecburen en az kullanılanı seç
             if not usage: raise RuntimeError("Pexels pool empty after filtering.")
-            vid = min(usage.keys(), key=lambda k: usage[k])
-            usage[vid] += 1
+            vid = min(usage.keys(), key=lambda k: usage[k]); usage[vid] += 1
             picked_path = downloads[vid]
         chosen_files.append(picked_path)
 
-    # LOOP: İlk kaynağı ikiye böl → 2. yarı ilk sahne, 1. yarı son sahne
     if chosen_files:
         src0 = chosen_files[0]
         first_half = str(pathlib.Path(tmp)/"loop_first_half.mp4")
@@ -1049,26 +1043,21 @@ def main():
         if split_video_in_half(src0, first_half, second_half):
             chosen_files[0] = second_half
             chosen_files[-1] = first_half
-            print("🔁 Loop mode: first clip split → second half at scene #1, first half at LAST scene.")
+            print("🔁 Loop mode: split first clip → 2nd half first, 1st half last.")
         else:
-            print("ℹ️ Loop split skipped (source too short or split failed).")
+            print("ℹ️ Loop split skipped.")
 
-    # 4) Segment + altyazı
+    # 4) Segment + altyazı (kuantize sürelerle)
     print("🎬 Segments…")
     segs = []
     total_scenes = len(metas)
+    per_trans = _compute_pairwise_transitions(scene_qdurs)
 
-    # TTS süreleri baz alınarak geçiş süreleri (çift bazlı) hesapla
-    durs = [m[1] for m in metas]
-    per_trans = _compute_pairwise_transitions(durs)
-
-    for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
+    for i, ((base_text, _d_raw), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        # İlk sahnede giriş fade yok; son sahnede bitiş fade yok
-        make_segment(src, d, base, no_start_fade=(i == 0), no_end_fade=(i == total_scenes - 1))
+        make_segment(src, scene_qdurs[i], base, no_start_fade=(i == 0), no_end_fade=(i == total_scenes - 1))
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
 
-        # altyazıyı crossfade dışında tut
         start_delay = per_trans[i-1] if i > 0 else 0.0
         end_cut     = per_trans[i]   if i < total_scenes-1 else 0.0
 
@@ -1084,9 +1073,10 @@ def main():
         )
         segs.append(colored)
 
-    # 5) Birleştir — video & ses (ses fadesiz varsayılan)
+    # 5) Video concat (kuantize durlar) + Ses concat (trimlenmiş klipler)
     print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_with_transitions(segs, vcat, per_trans=per_trans)
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4")
+    concat_videos_with_transitions(segs, vcat, per_trans=per_trans, quant_durs=scene_qdurs)
 
     acat = str(pathlib.Path(tmp) / "audio_concat.wav")
     if AUDIO_CROSSFADE:
@@ -1094,15 +1084,21 @@ def main():
     else:
         concat_audios(wavs, acat)
 
-    # 6) Süre & kare kilitleme
+    # 5.5) Final loudness (tek geçiş)
+    if FINAL_LOUDNORM:
+        acat_norm = str(pathlib.Path(tmp) / "audio_loudnorm.wav")
+        apply_final_loudness_normalization(acat, acat_norm)
+        acat = acat_norm
+
+    # 6) Toplam süre & kare kilitleme (A/V aynı toplam frame)
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
     if vdur + 0.02 < adur:
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
         pad_video_to_duration(vcat, adur, vcat_padded)
         vcat = vcat_padded
-    a_frames = max(2, int(round(adur * TARGET_FPS)))
-    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4"); enforce_video_exact_frames(vcat, a_frames, vcat_exact); vcat = vcat_exact
-    acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav"); lock_audio_duration(acat, a_frames, acat_exact); acat = acat_exact
+    a_frames_total = max(2, int(round(adur * TARGET_FPS)))
+    vcat_exact = str(pathlib.Path(tmp) / "video_exact.mp4"); enforce_video_exact_frames(vcat, a_frames_total, vcat_exact); vcat = vcat_exact
+    acat_exact = str(pathlib.Path(tmp) / "audio_exact.wav"); lock_audio_duration(acat, a_frames_total, acat_exact); acat = acat_exact
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
@@ -1115,9 +1111,8 @@ def main():
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8) Metadata (long SEO)
+    # 8) Metadata
     title, description, yt_tags = build_long_description(CHANNEL_NAME, tpc, [m[0] for m in metas], tags)
-
     meta = {
         "title": title,
         "description": description,
@@ -1127,7 +1122,7 @@ def main():
         "defaultAudioLanguage": LANG
     }
 
-    # 9) Upload (varsa env)
+    # 9) Upload (varsa)
     try:
         if os.getenv("UPLOAD_TO_YT","1") == "1":
             print("📤 Uploading to YouTube…")
