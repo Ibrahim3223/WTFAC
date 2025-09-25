@@ -1,18 +1,15 @@
-# autoshorts_daily.py — Topic-locked Gemini • Multi-clip Pexels • Hard A/V lock
-# Kokoro TTS (primary) • Whisper word-chunked ASS subtitles (3–4 words) • Music via URL/dir + sidechain ducking • Soft xfade intro
+# autoshorts_daily.py — Topic-locked Gemini • Multi-clip Pexels • Hard A/V lock • Long SEO desc
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict
 
-# =============================================================================
-# ENV / constants
-# =============================================================================
-VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")   # kept for compatibility; not used by Kokoro
+# -------------------- ENV / constants --------------------
+VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
 TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = os.getenv("MODE", "freeform").strip().lower()      # only for LOG / state
+MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece LOG için
 LANG           = os.getenv("LANG", "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
@@ -23,39 +20,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-# ---- TTS backends
-TTS_ENGINE     = os.getenv("TTS_ENGINE", "kokoro").lower()      # kokoro | edge
-KOKORO_URL     = os.getenv("KOKORO_URL", "").strip()            # http://localhost:8000/tts (POST {text, voice} -> audio bytes)
-KOKORO_VOICE   = os.getenv("KOKORO_VOICE", "af_sky")
-
-# ---- Subtitles
-SUBTITLES_MODE = os.getenv("SUBTITLES_MODE", "ass").lower()     # ass | drawtext
-WHISPER_MODEL  = os.getenv("WHISPER_MODEL", "small")            # tiny/base/small/medium
-CHUNK_WORDS_MIN= int(os.getenv("CHUNK_WORDS_MIN", "3"))
-CHUNK_WORDS_MAX= int(os.getenv("CHUNK_WORDS_MAX", "4"))
-
-# ---- Music (mood selection + sidechain ducking)
-USE_MUSIC      = os.getenv("USE_MUSIC", "1") == "1"
-MUSIC_DIR      = os.getenv("MUSIC_DIR", "music")
-MUSIC_MOOD     = os.getenv("MUSIC_MOOD", "cinematic")           # chill | cinematic | dark | upbeat | ...
-MUSIC_GAIN_DB  = os.getenv("MUSIC_GAIN_DB", "-13")
-DUCKING        = os.getenv("DUCKING", "1") == "1"
-MUSIC_URL      = os.getenv("MUSIC_URL", "").strip()             # direct url to audio file
-MUSIC_API      = os.getenv("MUSIC_API", "").strip()             # endpoint returning {"url": "https://..."}
-
-# ---- Audio smoothing (voice-only) before music mix
-USE_AUDIO_XFADE = os.getenv("USE_AUDIO_XFADE", "1") == "1"
-AUDIO_XFADE_MS  = float(os.getenv("AUDIO_XFADE_MS", "0.08"))     # seconds (0.06–0.12 recommended)
-
-# ---- Visuals / encoding
-TARGET_FPS       = 25
-CRF_VISUAL       = 22
-CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))
-CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
-VFX_XFADE_FIRST   = os.getenv("VFX_XFADE_FIRST", "1") == "1"
-VFX_XFADE_MS      = float(os.getenv("VFX_XFADE_MS", "0.22"))     # 0.18–0.30 sec works well
-
-# ---- Topic & search terms (seed)
+# ---- Channel intent (Topic & Terms) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
@@ -73,17 +38,21 @@ def _parse_terms(s: str) -> List[str]:
 
 SEARCH_TERMS_ENV = _parse_terms(os.getenv("SEARCH_TERMS", ""))
 
-# ---- Pexels tuning
+TARGET_FPS       = 25
+CRF_VISUAL       = 22
+
+CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))
+CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
+
+# Pexels esnetmeler
 PEXELS_PER_PAGE          = int(os.getenv("PEXELS_PER_PAGE", "30"))
-PEXELS_MAX_USES_PER_CLIP = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))  # how many scenes can reuse same clip
+PEXELS_MAX_USES_PER_CLIP = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))  # bir klibi kaç sahnede kullanabiliriz
 PEXELS_ALLOW_LANDSCAPE   = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 GLOBAL_TOPIC_STATE = "state_global_topics.json"
 
-# =============================================================================
-# deps (auto-install)
-# =============================================================================
+# -------------------- deps (auto-install) --------------------
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
 try:
     import requests
@@ -93,7 +62,6 @@ try:
     import edge_tts, nest_asyncio
 except ImportError:
     _pip("edge-tts"); _pip("nest_asyncio"); import edge_tts, nest_asyncio
-# YouTube
 try:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
@@ -107,15 +75,7 @@ except ImportError:
     _pip("google-auth"); from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
 
-# Whisper (CPU-friendly)
-try:
-    from faster_whisper import WhisperModel
-except ImportError:
-    _pip("faster-whisper"); from faster_whisper import WhisperModel
-
-# =============================================================================
-# Voices (Edge fallback list)
-# =============================================================================
+# -------------------- Voices --------------------
 VOICE_OPTIONS = {
     "en": [
         "en-US-JennyNeural","en-US-JasonNeural","en-US-AriaNeural","en-US-GuyNeural",
@@ -125,9 +85,7 @@ VOICE_OPTIONS = {
 }
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
 
-# =============================================================================
-# Utils
-# =============================================================================
+# -------------------- Utils --------------------
 def run(cmd, check=True):
     res = subprocess.run(cmd, text=True, capture_output=True)
     if check and res.returncode != 0:
@@ -162,9 +120,7 @@ def normalize_sentence(raw: str) -> str:
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
 
-# =============================================================================
-# State
-# =============================================================================
+# -------------------- State --------------------
 def _load_json(path, default):
     try: return json.load(open(path, "r", encoding="utf-8"))
     except: return default
@@ -214,7 +170,7 @@ def _blocklist_add_pexels(ids: List[int], days=30):
         st.setdefault("used_pexels_ids", []).append({"id": int(vid), "ts": now})
     cutoff = now - days*86400
     st["used_pexels_ids"] = [x for x in st.get("used_pexels_ids", []) if x.get("ts",0) >= cutoff]
-    _save_json(STATE_FILE, st)
+    _state_save(st)
 
 def _blocklist_get_pexels() -> set:
     st = _state_load()
@@ -229,9 +185,7 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
         if len(uniq) >= limit: break
     return uniq
 
-# =============================================================================
-# Caption helpers
-# =============================================================================
+# -------------------- Caption text & wrap --------------------
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
 def _ff_color(c: str) -> str:
@@ -278,9 +232,7 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
     lines = greedy(max_line_length, max_lines)
     return "\n".join([ln.strip() for ln in lines if ln.strip()])
 
-# =============================================================================
-# TTS
-# =============================================================================
+# -------------------- TTS --------------------
 def _rate_to_atempo(rate_str: str, default: float = 1.10) -> float:
     try:
         if not rate_str: return default
@@ -293,12 +245,21 @@ def _rate_to_atempo(rate_str: str, default: float = 1.10) -> float:
     except Exception:
         return default
 
-def _tts_edge_to_mp3(text: str, mp3_out: str, rate_env: str, selected_voice: str):
+def tts_to_wav(text: str, wav_out: str) -> float:
     import asyncio
     from aiohttp.client_exceptions import WSServerHandshakeError
+    text = (text or "").strip()
+    if not text:
+        run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
+        return 1.0
+    mp3 = wav_out.replace(".wav", ".mp3")
+    rate_env = os.getenv("TTS_RATE", "+12%")
+    atempo = _rate_to_atempo(rate_env, default=1.12)
+    available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
+    selected_voice = VOICE if VOICE in available else available[0]
     async def _edge_save_simple():
         comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
-        await comm.save(mp3_out)
+        await comm.save(mp3)
     for attempt in range(2):
         try:
             try:
@@ -307,89 +268,43 @@ def _tts_edge_to_mp3(text: str, mp3_out: str, rate_env: str, selected_voice: str
                 nest_asyncio.apply()
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(_edge_save_simple())
-            return True
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", mp3,
+                "-ar","48000","-ac","1","-acodec","pcm_s16le",
+                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+                wav_out
+            ])
+            pathlib.Path(mp3).unlink(missing_ok=True)
+            return ffprobe_dur(wav_out) or 0.0
         except WSServerHandshakeError as e:
             if getattr(e, "status", None) == 401 or "401" in str(e):
-                print("⚠️ edge-tts 401 → fast fallback"); break
-            print(f"⚠️ edge-tts attempt {attempt+1}/2 failed: {e}"); time.sleep(0.8)
+                print("⚠️ edge-tts 401 → hızlı fallback TTS"); break
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
         except Exception as e:
-            print(f"⚠️ edge-tts attempt {attempt+1}/2 failed: {e}"); time.sleep(0.8)
-    return False
-
-def _tts_kokoro_http(text: str, tmp_out: str) -> bool:
-    if not KOKORO_URL: return False
+            print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
     try:
-        payload = {"text": text, "voice": KOKORO_VOICE}
-        r = requests.post(KOKORO_URL, json=payload, timeout=60)
-        r.raise_for_status()
-        raw = r.content
-        tmp = pathlib.Path(tmp_out)
-        tmp.write_bytes(raw)
-        wav = str(tmp.with_suffix(".wav"))
-        run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", str(tmp), "-ar","48000","-ac","1","-acodec","pcm_s16le", wav])
-        tmp.unlink(missing_ok=True)
-        pathlib.Path(tmp_out).write_bytes(pathlib.Path(wav).read_bytes())
-        pathlib.Path(wav).unlink(missing_ok=True)
-        return True
-    except Exception as e:
-        print(f"⚠️ kokoro http fail: {e}")
-        return False
+        q = requests.utils.quote(text.replace('"','').replace("'",""))
+        lang_code = (LANG or "en")
+        url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
+        open(mp3, "wb").write(r.content)
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", mp3,
+            "-ar","48000","-ac","1","-acodec","pcm_s16le",
+            "-af", f"dynaudnorm=g=6:f=300,atempo={atempo}",
+            wav_out
+        ])
+        pathlib.Path(mp3).unlink(missing_ok=True)
+        return ffprobe_dur(wav_out) or 0.0
+    except Exception as e2:
+        print(f"❌ TTS tüm yollar başarısız, sessizlik üretilecek: {e2}")
+        run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
+        return 4.0
 
-def tts_to_wav(text: str, wav_out: str) -> float:
-    text = (text or "").strip()
-    if not text:
-        run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
-        return 1.0
-
-    rate_env = os.getenv("TTS_RATE", "+12%")
-    atempo = _rate_to_atempo(rate_env, default=1.12)
-    tmp_in = str(pathlib.Path(wav_out).with_suffix(".tts_in.wav"))
-
-    used_engine = None
-    if TTS_ENGINE == "kokoro":
-        if _tts_kokoro_http(text, tmp_in):
-            used_engine = "kokoro-http"
-
-    if not used_engine:
-        available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
-        selected_voice = VOICE if VOICE in available else available[0]
-        mp3 = str(pathlib.Path(wav_out).with_suffix(".mp3"))
-        ok = _tts_edge_to_mp3(text, mp3, rate_env, selected_voice)
-        if ok:
-            run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", mp3, "-ar","48000","-ac","1","-acodec","pcm_s16le", tmp_in])
-            pathlib.Path(mp3).unlink(missing_ok=True)
-            used_engine = "edge-tts"
-
-    if not used_engine:
-        try:
-            q = requests.utils.quote(text.replace('"','').replace("'",""))
-            lang_code = (LANG or "en")
-            url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
-            mp3 = str(pathlib.Path(wav_out).with_suffix(".mp3"))
-            open(mp3, "wb").write(r.content)
-            run(["ffmpeg","-y","-hide_banner","-loglevel","error","-i", mp3,"-ar","48000","-ac","1","-acodec","pcm_s16le", tmp_in])
-            pathlib.Path(mp3).unlink(missing_ok=True)
-            used_engine = "gtts"
-        except Exception as e2:
-            print(f"❌ TTS all backends failed, generate silence: {e2}")
-            run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
-            return 4.0
-
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", tmp_in,
-        "-ar","48000","-ac","1","-acodec","pcm_s16le",
-        "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
-        wav_out
-    ])
-    pathlib.Path(tmp_in).unlink(missing_ok=True)
-    return ffprobe_dur(wav_out) or 0.0
-
-# =============================================================================
-# Video helpers
-# =============================================================================
+# -------------------- Video helpers --------------------
 def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, float]:
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
@@ -518,20 +433,9 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-def crossfade_pair(a: str, b: str, outp: str, ms=0.22):
-    dur_a = ffprobe_dur(a); fade = max(0.12, min(0.40, ms))
-    run([
-        "ffmpeg","-y","-i", a, "-i", b,
-        "-filter_complex", f"[0:v][1:v]xfade=transition=fade:duration={fade}:offset={max(0.0,dur_a-fade)}[v]",
-        "-map","[v]","-r",str(TARGET_FPS),"-vsync","cfr","-an","-c:v","libx264","-crf",str(CRF_VISUAL),
-        outp
-    ])
-
-# =============================================================================
-# Audio concat / smoothing / music mix
-# =============================================================================
-def concat_audios_raw(files: List[str], outp: str):
-    if not files: raise RuntimeError("concat_audios_raw: empty list")
+# -------------------- Audio concat (lossless) --------------------
+def concat_audios(files: List[str], outp: str):
+    if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
     with open(lst, "w", encoding="utf-8") as f:
         for p in files:
@@ -543,25 +447,6 @@ def concat_audios_raw(files: List[str], outp: str):
         outp
     ])
     pathlib.Path(lst).unlink(missing_ok=True)
-
-def concat_audios_xfade(files: List[str], outp: str, ms: float = 0.08):
-    if not files: raise RuntimeError("concat_audios_xfade: empty")
-    tmp_current = files[0]
-    for i in range(1, len(files)):
-        nxt = files[i]
-        out_i = str(pathlib.Path(outp).with_suffix(f".xf{i:02d}.wav"))
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", tmp_current, "-i", nxt,
-            "-filter_complex", f"[0:a][1:a]acrossfade=d={max(0.02,min(0.20,ms))}:c1=tri:c2=tri[a]",
-            "-map","[a]","-ar","48000","-ac","1","-c:a","pcm_s16le", out_i
-        ])
-        if tmp_current != files[0]:
-            pathlib.Path(tmp_current).unlink(missing_ok=True)
-        tmp_current = out_i
-    pathlib.Path(outp).write_bytes(pathlib.Path(tmp_current).read_bytes())
-    if tmp_current != files[0]:
-        pathlib.Path(tmp_current).unlink(missing_ok=True)
 
 def lock_audio_duration(audio_in: str, target_frames: int, outp: str):
     dur = target_frames / float(TARGET_FPS)
@@ -587,18 +472,17 @@ def mux(video: str, audio: str, outp: str):
         outp
     ])
 
-# =============================================================================
-# Template selection (by TOPIC)
-# =============================================================================
+# -------------------- Template selection (by TOPIC) --------------------
 def _select_template_key(topic: str) -> str:
     t = (topic or "").lower()
+    # Eğer 'country', 'geography', 'nation', 'city facts' gibi alanlar geçiyorsa country_facts şablonu
     geo_kw = ("country", "geograph", "city", "capital", "border", "population", "continent", "flag")
-    if any(k in t for k in geo_kw): return "country_facts"
+    if any(k in t for k in geo_kw):
+        return "country_facts"
+    # Aksi halde genel şablon
     return "_default"
 
-# =============================================================================
-# Gemini (topic-locked)
-# =============================================================================
+# -------------------- Gemini (topic-locked) --------------------
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a 25–40s YouTube Short.
 Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
@@ -610,6 +494,7 @@ CONTENT RULES:
 - Sentences must be visually anchorable with stock b-roll (objects, places, actions, phenomena).
 - Avoid vague fillers (nice/great/thing/stuff). No list headers. No numbering in sentences.
 - Keep 6–12 words per sentence. 7–8 sentences total.""",
+
     "country_facts": """Create amazing country/city facts.
 Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
 Rules:
@@ -617,19 +502,22 @@ Rules:
 - No meta-instructions (no "one clear tip", "see/learn").
 - 6–12 words per sentence; 7–8 sentences total; visually anchorable beats."""
 }
+
 BANNED_PHRASES = [
-    "one clear tip","see it","learn it","plot twist","soap-opera narration","repeat once",
-    "takeaway action","in 60 seconds","just the point","crisp beats"
+    "one clear tip", "see it", "learn it", "plot twist",
+    "soap-opera narration", "repeat once", "takeaway action",
+    "in 60 seconds", "just the point", "crisp beats"
 ]
 
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
+    tot = len(sentences)
     bad = 0
     for s in sentences:
         low = (s or "").lower()
         if any(bp in low for bp in BANNED_PHRASES): bad += 1
         if len(low.split()) < 5: bad += 0.5
-    return max(0.0, 10.0 - (bad * 1.4))
+    return max(0.0, 10.0 - (bad * 1.4))  # 10 iyi, 0 kötü
 
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
@@ -653,6 +541,7 @@ def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], 
     template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
+
     guardrails = """
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
@@ -669,6 +558,7 @@ Avoid overlap for 180 days:
 {guardrails}
 """
     data = _gemini_call(prompt, GEMINI_MODEL)
+
     topic   = topic_lock
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
     sentences = [s for s in sentences if s][:8]
@@ -683,24 +573,13 @@ Avoid overlap for 180 days:
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return topic, sentences, terms, title, desc, tags
 
-# =============================================================================
-# Per-scene queries + domain synonyms + bad-query filter
-# =============================================================================
+# -------------------- Per-scene queries --------------------
 _STOP = set("""
 a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
 this that these those is are was were be been being have has had do does did can could should would may might will shall
 you your we our they their he she it its as than then so such very more most many much just also only even still yet
 """.split())
 _GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff"}
-
-_BAD_QUERY_WORDS = {
-    "work","works","working","create","creates","creating","equal","equals",
-    "eventually","multiple","direct","expelling","liquid","solid","thing","things",
-    "stuff","very","more","most","good","great","nice","just","also","only"
-}
-def _looks_bad_query(q: str) -> bool:
-    toks = re.findall(r"[a-z]+", (q or "").lower())
-    return (len(toks) <= 1) or any(t in _BAD_QUERY_WORDS for t in toks)
 
 def _lower_tokens(s: str) -> List[str]:
     s = re.sub(r"[^A-Za-z0-9 ]+", " ", s.lower())
@@ -723,8 +602,6 @@ def _proper_phrases(texts: List[str]) -> List[str]:
 def _domain_synonyms(all_text: str) -> List[str]:
     t = (all_text or "").lower()
     s = set()
-
-    # legacy
     if any(k in t for k in ["bridge","tunnel","arch","span"]):
         s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
     if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
@@ -733,19 +610,6 @@ def _domain_synonyms(all_text: str) -> List[str]:
         s.update(["city timelapse","plant growth","melting ice","cloud timelapse"])
     if any(k in t for k in ["mechanism","gears","pulley","cam"]):
         s.update(["macro gears","belt pulley","cam follower","robotic arm macro"])
-
-    # SPACE domain
-    if any(k in t for k in [
-        "space","rocket","satellite","orbit","astronaut","planet","galaxy","star",
-        "cosmos","nasa","spacex","launch","moon","mars","earth"
-    ]):
-        s.update([
-            "rocket launch","rocket on launch pad","space launch night",
-            "astronaut spacewalk","satellite in orbit","earth from space",
-            "international space station","mission control nasa","night sky stars",
-            "milky way galaxy","colorful nebula","moon surface","mars landscape",
-            "telescope observatory","iss window earth"
-        ])
     return list(s)
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
@@ -799,36 +663,25 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
         if len(picked.split()) > 2:
             w = picked.split(); picked = f"{w[-2]} {w[-1]}"
 
-        if _looks_bad_query(picked):
-            if topic_key_join:
-                picked = topic_key_join
-        if _looks_bad_query(picked):
-            picked = "rocket launch" if "rocket" in texts_all.lower() or "space" in texts_all.lower() else "macro detail"
-
         queries.append(picked)
 
     return queries
 
-# =============================================================================
-# Pexels (robust pooling)
-# =============================================================================
+# -------------------- Pexels (multi-pick + variety) --------------------
 _USED_PEXELS_IDS_RUNTIME = set()
+
 def _pexels_headers():
     if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
     return {"Authorization": PEXELS_API_KEY}
 
-def _pexels_search(query: str, locale: str, relaxed: bool = False) -> List[Tuple[int, str, int, int, float]]:
+def _pexels_search(query: str, locale: str) -> List[Tuple[int, str, int, int, float]]:
     url = "https://api.pexels.com/videos/search"
-    params = {
-        "query": query,
-        "per_page": max(10, min(80, PEXELS_PER_PAGE)),
-        "size": ("large" if not relaxed else "medium"),
-        "locale": locale
-    }
-    if not relaxed:
-        params["orientation"] = "portrait"
-
-    r = requests.get(url, headers=_pexels_headers(), params=params, timeout=30)
+    r = requests.get(
+        url,
+        headers=_pexels_headers(),
+        params={"query": query, "per_page": max(10, min(80, PEXELS_PER_PAGE)), "orientation":"portrait", "size":"large", "locale": locale},
+        timeout=30
+    )
     if r.status_code != 200:
         return []
     data = r.json() or {}
@@ -838,62 +691,31 @@ def _pexels_search(query: str, locale: str, relaxed: bool = False) -> List[Tuple
         dur = float(v.get("duration",0.0))
         files = v.get("video_files", []) or []
         if not files: continue
+        # portrait tercih; yoksa landscape kabul (crop edeceğiz)
         pf = []
         for x in files:
             w = int(x.get("width",0)); h = int(x.get("height",0))
-            hmin = 1080 if not relaxed else 720
-            if h >= hmin and (h >= w or PEXELS_ALLOW_LANDSCAPE or relaxed):
+            if h >= 1080 and (h >= w or PEXELS_ALLOW_LANDSCAPE):
                 pf.append((w,h,x.get("link")))
         if not pf: continue
-        pf.sort(key=lambda t: (abs(t[1]-1440), -t[0]*t[1]))
-        w,h,link = pf[0]
-        out.append((vid, link, w, h, dur))
-
-    if not out and not relaxed:
-        return _pexels_search(query, locale, relaxed=True)
-    return out
-
-def _pexels_popular(locale: str) -> List[Tuple[int, str, int, int, float]]:
-    url = "https://api.pexels.com/videos/popular"
-    r = requests.get(url, headers=_pexels_headers(),
-                     params={"per_page": max(10, min(80, PEXELS_PER_PAGE)), "min_width": 720, "min_height": 720, "locale": locale},
-                     timeout=30)
-    if r.status_code != 200:
-        return []
-    data = r.json() or {}
-    out=[]
-    for v in data.get("videos", []):
-        vid = int(v.get("id", 0))
-        dur = float(v.get("duration",0.0))
-        files = v.get("video_files", []) or []
-        if not files: continue
-        pf=[]
-        for x in files:
-            w = int(x.get("width",0)); h = int(x.get("height",0))
-            if h >= 720: pf.append((w,h,x.get("link")))
-        if not pf: continue
-        pf.sort(key=lambda t: (abs(t[1]-1440), -t[0]*t[1]))
+        # 1440 hedefe yakın olanları öne al
+        pf.sort(key=lambda t: (abs(t[1]-1440), t[0]*t[1]))
         w,h,link = pf[0]
         out.append((vid, link, w, h, dur))
     return out
 
 def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     locale = "tr-TR" if LANG.startswith("tr") else "en-US"
-    qfixed = (query or "").strip()
-    if _looks_bad_query(qfixed):
-        qfixed = "rocket launch" if "rocket" in (TOPIC.lower()+" "+qfixed.lower()) or "space" in (TOPIC.lower()+" "+qfixed.lower()) else "macro detail"
-
-    items = _pexels_search(qfixed, locale, relaxed=False)
-    if not items:
-        items = _pexels_popular(locale)
+    items = _pexels_search(query, locale)
+    if not items and locale == "tr-TR":
+        items = _pexels_search(query, "en-US")
     if not items:
         return []
-
     block = _blocklist_get_pexels()
     cand=[]
-    qtokens= set(re.findall(r"[a-z0-9]+", qfixed.lower()))
+    qtokens= set(re.findall(r"[a-z0-9]+", query.lower()))
     for vid, link, w, h, dur in items:
-        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
+        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME: 
             continue
         dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
         tokens = set(re.findall(r"[a-z0-9]+", (link or "").lower()))
@@ -905,11 +727,9 @@ def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     for _, vid, link in cand:
         if vid not in _USED_PEXELS_IDS_RUNTIME:
             out.append((vid, link))
-    return out[:5]
+    return out[:5]  # soru başına en fazla 5 aday
 
-# =============================================================================
-# YouTube
-# =============================================================================
+# -------------------- YouTube --------------------
 def yt_service():
     cid  = os.getenv("YT_CLIENT_ID")
     csec = os.getenv("YT_CLIENT_SECRET")
@@ -939,18 +759,22 @@ def upload_youtube(video_path: str, meta: dict) -> str:
     resp = req.execute()
     return resp.get("id", "")
 
-# =============================================================================
-# Long SEO Description
-# =============================================================================
+# -------------------- Long SEO Description --------------------
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
+    # Başlık
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
     title = (hook[:1].upper() + hook[1:])[:95]
+
+    # Kısa pasajları akıcı paragrafa çevir
     para = " ".join(sentences)
+    # Hafif genişletme
     explainer = (
         f"{para} "
         f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
         f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
     )
+
+    # Hashtag seti
     tagset = []
     base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
     for t in base_terms:
@@ -961,6 +785,8 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
             tclean = re.sub(r"[^A-Za-z0-9]+","", t).lower()
             if tclean and ("#"+tclean) not in tagset:
                 tagset.append("#"+tclean)
+
+    # 2000 karaktere yakınlama
     body = (
         f"{explainer}\n\n"
         f"— Key takeaways —\n"
@@ -974,185 +800,18 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
     )
     if len(body) > 4900:
         body = body[:4900]
+
+    # YouTube tag list (max ~15)
     yt_tags = []
     for h in tagset:
         k = h[1:]
         if k and k not in yt_tags:
             yt_tags.append(k)
         if len(yt_tags) >= 15: break
+
     return title, body, yt_tags
 
-# =============================================================================
-# Subtitles (Word-chunked ASS from Whisper timings)
-# =============================================================================
-_WHISPER_SINGLETON = None
-def _whisper_model():
-    global _WHISPER_SINGLETON
-    if _WHISPER_SINGLETON is None:
-        _WHISPER_SINGLETON = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
-    return _WHISPER_SINGLETON
-
-def _force_upper(s: str) -> str:
-    s = re.sub(r"\s+", " ", (s or "").strip())
-    return s.upper()
-
-def transcribe_words(wav_path: str, lang_hint: str = None):
-    model = _whisper_model()
-    language = (lang_hint or "en")
-    segments, _ = model.transcribe(
-        wav_path, language=language, vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=180),
-        word_timestamps=True
-    )
-    words=[]
-    for seg in segments:
-        if getattr(seg, "words", None):
-            for w in seg.words:
-                if not w.word: continue
-                txt = re.sub(r"\W+", "", w.word)
-                if not txt: continue
-                words.append((float(w.start), float(w.end), txt))
-        else:
-            # fallback: split seg.text proportionally
-            st, en = float(seg.start), float(seg.end)
-            toks = [t for t in re.findall(r"[A-Za-z0-9']+", seg.text)]
-            if not toks:
-                continue
-            span = max(0.01, en - st)
-            step = span / len(toks)
-            for i, tok in enumerate(toks):
-                words.append((st + i*step, st + (i+1)*step, tok))
-    return words
-
-def chunk_words(words: List[Tuple[float,float,str]], minw=3, maxw=4):
-    if not words: return []
-    chunks=[]
-    i=0
-    N=len(words)
-    while i < N:
-        k = min(maxw, N - i)
-        if k < minw and chunks:
-            # append leftovers to last chunk
-            st_prev, en_prev, txt_prev = chunks[-1]
-            st = st_prev; en = words[i+k-1][1]
-            txt = txt_prev + " " + " ".join(w[2] for w in words[i:i+k])
-            chunks[-1] = (st, en, txt)
-            break
-        st = words[i][0]
-        en = words[i+k-1][1]
-        txt = " ".join(w[2] for w in words[i:i+k])
-        chunks.append((max(0.0, st-0.02), en+0.04, _force_upper(txt)))
-        i += k
-    # safety: monotonic times
-    out=[]
-    last_end=0.0
-    for st,en,txt in chunks:
-        st = max(last_end, st)
-        if en <= st: en = st + 0.06
-        out.append((st,en,txt))
-        last_end = en
-    return out
-
-def make_ass_from_chunks(chunks, ass_path: str):
-    # ASS colors are &HAABBGGRR (AA=alpha)
-    fontname = pathlib.Path(font_path()).name if font_path() else "Arial"
-    # Active style: white text, blue background (semi-opaque), thick outline shadow disabled
-    active_style = f"Style: CHUNK_ACTIVE,{fontname},62,&H00FFFFFF,&H000000FF,&H00333333,&H64FF901E,0,0,0,0,100,100,0,0,3,5,0,8,20,20,34,1"
-    # You can tune BackColour alpha (64=~60%).
-    header = (
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nScaledBorderAndShadow: yes\n"
-        "\n[V4+ Styles]\n"
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
-        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        + active_style + "\n\n"
-        "[Events]\n"
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-    )
-    def ts(t):
-        h=int(t//3600); m=int((t%3600)//60); s=t%60
-        return f"{h:d}:{m:02d}:{s:05.2f}".replace(".",",")
-    lines=[]
-    for (st,en,txt) in chunks:
-        # position: bottom third, slight tracking via \fsp, uppercase ready
-        ass_text = r"{\an8\bord5\shad0\fs62\fsp2}" + txt
-        lines.append(f"Dialogue: 0,{ts(st)},{ts(en)},CHUNK_ACTIVE,,0,0,34,,{ass_text}")
-    pathlib.Path(ass_path).write_text(header + "\n".join(lines), encoding="utf-8")
-
-def overlay_subtitles(seg_in: str, ass_path: str, seg_out: str):
-    ass_q = str(pathlib.Path(ass_path).as_posix()).replace(":", r"\:")
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", seg_in, "-vf", f"subtitles='{ass_q}'",
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
-        "-pix_fmt","yuv420p","-movflags","+faststart", seg_out
-    ])
-
-# =============================================================================
-# Music selection + URL/API + sidechain ducking
-# =============================================================================
-def _download_to(path: str, url: str) -> Optional[str]:
-    try:
-        r = requests.get(url, timeout=60, stream=True); r.raise_for_status()
-        with open(path, "wb") as f:
-            for ch in r.iter_content(8192):
-                f.write(ch)
-        return path
-    except Exception as e:
-        print(f"⚠️ music download fail: {e}")
-        return None
-
-def resolve_music(tmpdir: str) -> Optional[str]:
-    # 1) explicit URL
-    if MUSIC_URL:
-        dest = str(pathlib.Path(tmpdir) / "ext_music")
-        ext = ".mp3" if MUSIC_URL.lower().endswith(".mp3") else ".wav"
-        dest += ext
-        got = _download_to(dest, MUSIC_URL)
-        if got: return got
-    # 2) API returning {"url": "..."}
-    if MUSIC_API:
-        try:
-            r = requests.get(MUSIC_API, timeout=30); r.raise_for_status()
-            data = r.json() if "application/json" in r.headers.get("Content-Type","") else {}
-            url = (data.get("url") or "").strip()
-            if url:
-                dest = str(pathlib.Path(tmpdir) / "api_music")
-                ext = ".mp3" if url.lower().endswith(".mp3") else ".wav"
-                dest += ext
-                got = _download_to(dest, url)
-                if got: return got
-        except Exception as e:
-            print(f"⚠️ MUSIC_API fail: {e}")
-    # 3) local directory mood pick
-    return pick_music(MUSIC_MOOD)
-
-def pick_music(mood: str) -> Optional[str]:
-    mdir = pathlib.Path(MUSIC_DIR)
-    if not mdir.exists(): return None
-    cand=[p for p in mdir.glob("**/*") if p.suffix.lower() in [".mp3",".wav",".m4a",".flac"]]
-    if not cand: return None
-    mood = (mood or "").lower()
-    cand.sort(key=lambda p: (0 if mood and mood in p.stem.lower() else 1, -p.stat().st_size))
-    return str(cand[0])
-
-def mix_voice_and_music(voice_wav: str, music_in: str, out_wav: str, duck: bool=True, gain_db: str = "-13"):
-    if duck:
-        fc = (
-            f"[1:a]volume={gain_db}dB,aloop=loop=999999:size=40000000:start=0,apad[a1];"
-            f"[0:a][a1]sidechaincompress=threshold=-28dB:ratio=6:attack=12:release=180:makeup=6:mix=0.7[aout]"
-        )
-        run(["ffmpeg","-y","-i", voice_wav, "-stream_loop","-1","-i", music_in,
-             "-filter_complex", fc, "-map","[aout]","-ar","48000","-ac","1","-c:a","pcm_s16le", out_wav])
-    else:
-        run(["ffmpeg","-y","-i", voice_wav, "-stream_loop","-1","-i", music_in,
-             "-filter_complex", f"[1:a]volume={gain_db}dB,apad[a1];[0:a][a1]amix=inputs=2:duration=first:dropout_transition=0[a]",
-             "-map","[a]","-ar","48000","-ac","1","-c:a","pcm_s16le", out_wav])
-
-# =============================================================================
-# Main
-# =============================================================================
+# -------------------- Main --------------------
 def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
     random.seed(ROTATION_SEED or int(time.time()))
@@ -1160,7 +819,7 @@ def main():
     topic_lock = TOPIC or "Interesting Visual Explainers"
     user_terms = SEARCH_TERMS_ENV
 
-    # 1) Content build (Gemini) + quality
+    # 1) İçerik üretim (topic-locked) + kalite kontrol
     attempts = 0
     best = None; best_score = -1.0
     banlist = _recent_topics_for_prompt()
@@ -1202,9 +861,10 @@ def main():
     tpc, sentences, search_terms, ttl, desc, tags = best
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
     _record_recent(_hash12(sig), MODE, tpc)
+
     print(f"📊 Sentences: {len(sentences)}")
 
-    # 2) TTS per sentence
+    # 2) TTS
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
     font = font_path()
     wavs, metas = [], []
@@ -1216,14 +876,7 @@ def main():
         wavs.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 2.5) Optional smooth audio concat (voice only)
-    acat_voice = str(pathlib.Path(tmp) / "audio_voice.wav")
-    if USE_AUDIO_XFADE and len(wavs) >= 2:
-        concat_audios_xfade(wavs, acat_voice, ms=AUDIO_XFADE_MS)
-    else:
-        concat_audios_raw(wavs, acat_voice)
-
-    # 3) Pexels search pool
+    # 3) Pexels — çoklu aday + havuz + tekrar limiti
     per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
@@ -1236,16 +889,9 @@ def main():
             if vid not in seen_ids:
                 seen_ids.add(vid); pool.append((vid, link))
 
+    # Havuz yetersizse generic fallback
     if len(pool) < len(metas):
-        extras = [
-            # space-strong fallbacks
-            "rocket launch","space launch pad","astronaut spacewalk","satellite in orbit",
-            "earth from space","international space station","mission control","milky way","colorful nebula",
-            "moon surface","mars landscape","telescope observatory",
-            # generic
-            "night sky stars","city timelapse","nature macro","close up hands","ocean waves",
-            "forest path","night skyline","cloud timelapse"
-        ]
+        extras = ["macro detail","city timelapse","nature macro","clean interior","close up hands","ocean waves","night skyline","forest path"]
         for q in (user_terms or []) + extras:
             for vid, link in pexels_pick_many(q):
                 if vid not in seen_ids:
@@ -1256,9 +902,9 @@ def main():
                 break
 
     if not pool:
-        raise RuntimeError("Pexels: no suitable clips.")
+        raise RuntimeError("Pexels: hiç uygun klip bulunamadı.")
 
-    # Download pool
+    # Klipleri indir ve tekrar limitine göre dağıt
     downloads = {}
     print("⬇️ Download pool…")
     for idx, (vid, link) in enumerate(pool):
@@ -1274,78 +920,48 @@ def main():
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
 
-    # Assign per sentence (limit reuse)
+    # Dağıtım
     usage = {vid:0 for vid in downloads.keys()}
     chosen_files=[]
     for i in range(len(metas)):
         picked_path=None
+        # öncelik: hiç kullanılmamış
         for vid, p in downloads.items():
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
                 picked_path = p
                 usage[vid] += 1
                 break
         if not picked_path:
+            # mecburen en az kullanılanı seç
             if not usage: raise RuntimeError("Pexels pool empty after filtering.")
             vid = min(usage.keys(), key=lambda k: usage[k])
             usage[vid] += 1
             picked_path = downloads[vid]
         chosen_files.append(picked_path)
 
-    # 4) Segments + word-chunk subtitles
+    # 4) Segment + altyazı
     print("🎬 Segments…")
     segs = []
     for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
         make_segment(src, d, base)
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
-        if SUBTITLES_MODE == "ass":
-            # 1) word timings from TTS wav
-            words = transcribe_words(wavs[i], lang_hint=LANG[:2] if LANG else "en")
-            if not words:
-                # proportional fallback
-                toks = [t for t in re.findall(r"[A-Za-z0-9']+", base_text)]
-                span = max(0.2, d)
-                if toks:
-                    step = span/len(toks)
-                    words = [(j*step, (j+1)*step, toks[j]) for j in range(len(toks))]
-                else:
-                    words = [(0.0, d, base_text)]
-            # 2) chunk into 3–4 words
-            chunks = chunk_words(words, minw=CHUNK_WORDS_MIN, maxw=CHUNK_WORDS_MAX)
-            seg_ass = str(pathlib.Path(tmp) / f"seg_{i:02d}.ass")
-            make_ass_from_chunks(chunks, seg_ass)
-            overlay_subtitles(base, seg_ass, colored)
-        else:
-            draw_capcut_text(
-                base, base_text,
-                CAPTION_COLORS[i % len(CAPTION_COLORS)], font,
-                colored, is_hook=(i==0)
-            )
+        draw_capcut_text(
+            base,
+            base_text,
+            CAPTION_COLORS[i % len(CAPTION_COLORS)],
+            font,
+            colored,
+            is_hook=(i == 0)
+        )
         segs.append(colored)
 
-    # 4.5) Optional xfade only for the first transition
-    if VFX_XFADE_FIRST and len(segs) >= 2:
-        cf0 = str(pathlib.Path(tmp)/"seg_cf_00.mp4")
-        crossfade_pair(segs[0], segs[1], cf0, ms=VFX_XFADE_MS)
-        segs = [cf0] + segs[2:]
-
-    # 5) Assemble video
+    # 5) Birleştir
     print("🎞️ Assemble…")
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
+    acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 5.5) Music mix (voice + bgm)
-    acat = acat_voice
-    if USE_MUSIC:
-        music = resolve_music(tmp)
-        if music:
-            print(f"🎵 Music: {music}")
-            mixed = str(pathlib.Path(tmp)/"audio_mixed.wav")
-            mix_voice_and_music(acat, music, mixed, duck=DUCKING, gain_db=MUSIC_GAIN_DB)
-            acat = mixed
-        else:
-            print("🎵 No music source found, skipping music mix.")
-
-    # 6) Hard A/V lock
+    # 6) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
     if vdur + 0.02 < adur:
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
@@ -1368,6 +984,7 @@ def main():
 
     # 8) Metadata (long SEO)
     title, description, yt_tags = build_long_description(CHANNEL_NAME, tpc, [m[0] for m in metas], tags)
+
     meta = {
         "title": title,
         "description": description,
@@ -1377,7 +994,7 @@ def main():
         "defaultAudioLanguage": LANG
     }
 
-    # 9) Upload (if enabled)
+    # 9) Upload (varsa env)
     try:
         if os.getenv("UPLOAD_TO_YT","1") == "1":
             print("📤 Uploading to YouTube…")
@@ -1388,7 +1005,7 @@ def main():
     except Exception as e:
         print(f"❌ Upload skipped: {e}")
 
-    # 10) Cleanup
+    # 10) Temizlik
     try:
         shutil.rmtree(tmp); print("🧹 Cleaned temp files")
     except: pass
