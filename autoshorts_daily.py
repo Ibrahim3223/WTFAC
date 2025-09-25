@@ -565,7 +565,7 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     # --- G L O B A L  H I Z  D Ü Z E L T M E L E R ---
     # 1) Genel hızlandırma (yüzde)
     try:
-        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "2.6"))
+        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "3.0"))
     except Exception:
         speedup_pct = 1.5
     speedup_pct = max(-5.0, min(5.0, speedup_pct))  # güvenli aralık
@@ -1541,6 +1541,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
