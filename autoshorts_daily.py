@@ -1,36 +1,37 @@
-# autoshorts_daily.py — Topic-locked Gemini • Multi-clip Pexels • Hard A/V lock • Long SEO desc
+# autoshorts_daily.py — Topic-locked Gemini • Per-video search_terms • Robust Pexels • Guaranteed captions
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
 
-# -------------------- ENV / constants --------------------
+# ==================== ENV / constants ====================
 VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
 TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
 TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece LOG için
+MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece log için
 
 def _sanitize_lang(val: Optional[str]) -> str:
     val = (val or "").strip()
-    # Öncelik: VIDEO_LANG -> yoksa LANG
     if not val:
         return "en"
-    # ör. "en-US", "tr_TR.UTF-8", "C.UTF-8" → sadece iki harf
     m = re.match(r"([A-Za-z]{2})", val)
     return (m.group(1).lower() if m else "en")
 
 LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
+REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
+
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_PROMPT  = (os.getenv("GEMINI_PROMPT") or "").strip()
 
-# ---- Channel intent (Topic & Terms) ----
+# ---- Topic & user seed terms ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
@@ -62,13 +63,14 @@ PEXELS_MIN_DURATION        = int(os.getenv("PEXELS_MIN_DURATION", "3"))
 PEXELS_MAX_DURATION        = int(os.getenv("PEXELS_MAX_DURATION", "13"))
 PEXELS_MIN_HEIGHT          = int(os.getenv("PEXELS_MIN_HEIGHT",   "1280"))
 PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "1") == "1"
+
 ALLOW_PIXABAY_FALLBACK     = os.getenv("ALLOW_PIXABAY_FALLBACK", "1") == "1"
 PIXABAY_API_KEY            = os.getenv("PIXABAY_API_KEY", "").strip()
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 GLOBAL_TOPIC_STATE = "state_global_topics.json"
 
-# -------------------- deps (auto-install) --------------------
+# ==================== deps (auto-install) ====================
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
 try:
     import requests
@@ -91,7 +93,7 @@ except ImportError:
     _pip("google-auth"); from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
 
-# -------------------- Voices --------------------
+# ==================== Voices ====================
 VOICE_OPTIONS = {
     "en": [
         "en-US-JennyNeural","en-US-JasonNeural","en-US-AriaNeural","en-US-GuyNeural",
@@ -101,7 +103,7 @@ VOICE_OPTIONS = {
 }
 VOICE = os.getenv("TTS_VOICE", VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])[0])
 
-# -------------------- Utils --------------------
+# ==================== Utils ====================
 def run(cmd, check=True):
     res = subprocess.run(cmd, text=True, capture_output=True)
     if check and res.returncode != 0:
@@ -118,16 +120,12 @@ def ffprobe_dur(p):
 def ffmpeg_has_filter(name: str) -> bool:
     try:
         out = run(["ffmpeg","-hide_banner","-filters"], check=False).stdout
-        name = name.strip()
-        for line in out.splitlines():
-            # satır: " T.. drawtext         V->V       Draw text on top of video frames using libfreetype library"
-            if re.search(rf"\b{name}\b", line):
-                return True
-        return False
+        return bool(re.search(rf"\b{name}\b", out))
     except Exception:
         return False
 
-_HAS_DRAWTEXT = ffmpeg_has_filter("drawtext")
+_HAS_DRAWTEXT   = ffmpeg_has_filter("drawtext")
+_HAS_SUBTITLES  = ffmpeg_has_filter("subtitles")
 
 def font_path():
     for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -150,7 +148,7 @@ def normalize_sentence(raw: str) -> str:
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
 
-# -------------------- State --------------------
+# ==================== State ====================
 def _load_json(path, default):
     try: return json.load(open(path, "r", encoding="utf-8"))
     except: return default
@@ -176,13 +174,6 @@ def _global_topics_save(gst: dict):
 
 def _hash12(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()[:12]
-
-def _is_recent(h: str, window_days=365) -> bool:
-    now = time.time()
-    for r in _state_load().get("recent", []):
-        if r.get("h")==h and (now - r.get("ts",0)) < window_days*86400:
-            return True
-    return False
 
 def _record_recent(h: str, mode: str, topic: str):
     st = _state_load()
@@ -215,7 +206,7 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
         if len(uniq) >= limit: break
     return uniq
 
-# -------------------- Caption text & wrap --------------------
+# ==================== Caption text & wrap ====================
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
 
 def _ff_color(c: str) -> str:
@@ -262,7 +253,7 @@ def wrap_mobile_lines(text: str, max_line_length: int = CAPTION_MAX_LINE, max_li
     lines = greedy(max_line_length, max_lines)
     return "\n".join([ln.strip() for ln in lines if ln.strip()])
 
-# -------------------- TTS --------------------
+# ==================== TTS ====================
 def _rate_to_atempo(rate_str: str, default: float = 1.10) -> float:
     try:
         if not rate_str: return default
@@ -314,7 +305,6 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         except Exception as e:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
     try:
-        # Google TTS fallback — LANG sanitize edildi (ör. 'en'/'tr')
         q = requests.utils.quote(text.replace('"','').replace("'",""))
         lang_code = LANG or "en"
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
@@ -335,7 +325,7 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 4.0
 
-# -------------------- Video helpers --------------------
+# ==================== Video helpers ====================
 def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, float]:
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
@@ -379,70 +369,102 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
-    # Eğer drawtext yoksa, çökme yerine sessizce pas geç
-    if not _HAS_DRAWTEXT:
-        print("⚠️ FFmpeg 'drawtext' filter yok — caption atlanıyor.")
-        # Süre/kareyi koruyarak doğrudan kopyalayalım
-        seg_dur = ffprobe_dur(seg)
-        frames = max(2, int(round(seg_dur * TARGET_FPS)))
-        enforce_video_exact_frames(seg, frames, outp)
-        return
-
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
-    tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
-    pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
-    lines = wrapped.split("\n")
-    n_lines = max(1, len(lines))
-    maxchars = max((len(l) for l in lines), default=1)
+    # ---- Yol 1: drawtext varsa (tercih)
+    if _HAS_DRAWTEXT:
+        tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
+        pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
 
-    base = 60 if is_hook else 50
-    ratio = CAPTION_MAX_LINE / max(1, maxchars)
-    fs = int(base * min(1.0, max(0.50, ratio)))
-    if n_lines >= 5: fs = int(fs * 0.92)
-    if n_lines >= 6: fs = int(fs * 0.88)
-    if n_lines >= 7: fs = int(fs * 0.84)
-    if n_lines >= 8: fs = int(fs * 0.80)
-    fs = max(22, fs)
+        lines = wrapped.split("\n")
+        n_lines = max(1, len(lines))
+        maxchars = max((len(l) for l in lines), default=1)
 
-    if n_lines >= 6:   y_pos = "(h*0.55 - text_h/2)"
-    elif n_lines >= 4: y_pos = "(h*0.58 - text_h/2)"
-    else:              y_pos = "h-h/3-text_h/2"
+        base = 60 if is_hook else 50
+        ratio = CAPTION_MAX_LINE / max(1, maxchars)
+        fs = int(base * min(1.0, max(0.50, ratio)))
+        if n_lines >= 5: fs = int(fs * 0.92)
+        if n_lines >= 6: fs = int(fs * 0.88)
+        if n_lines >= 7: fs = int(fs * 0.84)
+        if n_lines >= 8: fs = int(fs * 0.80)
+        fs = max(22, fs)
 
-    def _ff_color(c: str) -> str:
-        c = (c or "").strip()
-        if c.startswith("#"): return "0x" + c[1:].upper()
-        if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c): return c
-        return "white"
+        if n_lines >= 6:   y_pos = "(h*0.55 - text_h/2)"
+        elif n_lines >= 4: y_pos = "(h*0.58 - text_h/2)"
+        else:              y_pos = "h-h/3-text_h/2"
 
-    col = _ff_color(color)
-    font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
-    common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+        font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
+        col = _ff_color(color)
+        common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
 
-    shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
-    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
-    main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
+        shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
+        box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
+        main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
 
-    vf_overlay = f"{shadow},{box},{main}"
-    vf = f"{vf_overlay},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
-    tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
-    try:
-        run([
-            "ffmpeg","-y","-hide_banner","-loglevel","error",
-            "-i", seg,
-            "-vf", vf,
-            "-r", str(TARGET_FPS), "-vsync","cfr",
-            "-an",
-            "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
-            "-pix_fmt","yuv420p","-movflags","+faststart",
-            tmp_out
-        ])
-        enforce_video_exact_frames(tmp_out, frames, outp)
-    finally:
-        pathlib.Path(tf).unlink(missing_ok=True)
-        pathlib.Path(tmp_out).unlink(missing_ok=True)
+        vf_overlay = f"{shadow},{box},{main}"
+        vf = f"{vf_overlay},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
+        tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
+        try:
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", seg,
+                "-vf", vf,
+                "-r", str(TARGET_FPS), "-vsync","cfr",
+                "-an",
+                "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+                "-pix_fmt","yuv420p","-movflags","+faststart",
+                tmp_out
+            ])
+            enforce_video_exact_frames(tmp_out, frames, outp)
+        finally:
+            pathlib.Path(tf).unlink(missing_ok=True)
+            pathlib.Path(tmp_out).unlink(missing_ok=True)
+        return
+
+    # ---- Yol 2: subtitles (libass) varsa
+    if _HAS_SUBTITLES:
+        fontname = "DejaVu Sans"
+        fontsize = 54 if is_hook else 48
+        margin_v = 260 if is_hook else 320  # alt kenardan boşluk
+        esc = (wrapped or "").replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n","\\N")
+        ass = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{fontname},{fontsize},&H00FFFFFF,&H000000FF,&H00000000,&H7F000000,0,0,0,0,100,100,0,0,1,4,0,2,50,50,{margin_v},0
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,9:59:59.99,Default,,0,0,{margin_v},,{{\\bord4\\shad0}}{esc}
+"""
+        ass_path = str(pathlib.Path(seg).with_suffix(".ass"))
+        pathlib.Path(ass_path).write_text(ass, encoding="utf-8")
+        tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
+        try:
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", seg,
+                "-vf", f"subtitles='{ass_path}'",
+                "-r", str(TARGET_FPS), "-vsync","cfr",
+                "-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+                "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
+            ])
+            enforce_video_exact_frames(tmp_out, frames, outp)
+        finally:
+            pathlib.Path(ass_path).unlink(missing_ok=True)
+            pathlib.Path(tmp_out).unlink(missing_ok=True)
+        return
+
+    # ---- Yol 3: filtre yok → politika
+    if REQUIRE_CAPTIONS:
+        raise RuntimeError("Captions required but neither 'drawtext' nor 'subtitles' filter is available in ffmpeg.")
+    print("⚠️ FFmpeg 'drawtext' ve 'subtitles' filtreleri yok — caption atlanıyor.")
+    enforce_video_exact_frames(seg, frames, outp)
 
 def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     vdur = ffprobe_dur(video_in)
@@ -479,7 +501,7 @@ def concat_videos_filter(files: List[str], outp: str):
         outp
     ])
 
-# -------------------- Audio concat (lossless) --------------------
+# ==================== Audio concat (lossless) ====================
 def concat_audios(files: List[str], outp: str):
     if not files: raise RuntimeError("concat_audios: empty file list")
     lst = str(pathlib.Path(outp).with_suffix(".txt"))
@@ -518,7 +540,7 @@ def mux(video: str, audio: str, outp: str):
         outp
     ])
 
-# -------------------- Template selection (by TOPIC) --------------------
+# ==================== Template selection (by TOPIC) ====================
 def _select_template_key(topic: str) -> str:
     t = (topic or "").lower()
     geo_kw = ("country", "geograph", "city", "capital", "border", "population", "continent", "flag")
@@ -526,7 +548,7 @@ def _select_template_key(topic: str) -> str:
         return "country_facts"
     return "_default"
 
-# -------------------- Gemini (topic-locked) --------------------
+# ==================== Gemini (topic-locked) ====================
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a 25–40s YouTube Short.
 Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
@@ -579,17 +601,42 @@ def _gemini_call(prompt: str, model: str) -> dict:
     raw = re.sub(r"^```json\s*|\s*```$", "", m.group(0).strip(), flags=re.MULTILINE)
     return json.loads(raw)
 
+def _terms_normalize(terms: List[str]) -> List[str]:
+    out=[]
+    seen=set()
+    BAD={"great","nice","good","bad","things","stuff","concept","concepts","idea","ideas"}
+    for t in terms or []:
+        tt = re.sub(r"[^A-Za-z0-9 ]+"," ", str(t)).strip().lower()
+        tt = " ".join([w for w in tt.split() if w and len(w)>2 and w not in BAD])[:64]
+        if not tt: continue
+        if tt not in seen:
+            seen.add(tt); out.append(tt)
+    return out[:12]
+
+def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
+    pool=set()
+    def tok(s):
+        s=re.sub(r"[^A-Za-z0-9 ]+"," ", s.lower())
+        return [w for w in s.split() if len(w)>3]
+    for s in [topic] + sentences:
+        ws=tok(s or "")
+        for i in range(len(ws)-1):
+            pool.add(ws[i]+" "+ws[i+1])
+    base=list(pool)
+    random.shuffle(base)
+    return _terms_normalize(base)[:8]
+
 def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
     tpl_key = _select_template_key(topic_lock)
     template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
+    extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
 
     guardrails = """
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
-- No country/geography pivot unless topic is about geography.
-- No meta sentences, no headers. Return ONLY JSON, no prose/markdown."""
+- Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
     prompt = f"""{template}
 
 Channel: {channel_name}
@@ -597,7 +644,7 @@ Language: {LANG}
 TOPIC (hard lock): {topic_lock}
 Seed search terms (use and expand): {terms_hint}
 Avoid overlap for 180 days:
-{avoid}
+{avoid}{extra}
 {guardrails}
 """
     data = _gemini_call(prompt, GEMINI_MODEL)
@@ -605,28 +652,29 @@ Avoid overlap for 180 days:
     topic   = topic_lock
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
     sentences = [s for s in sentences if s][:8]
+    # --- per-video search_terms ---
     terms = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
-    terms = [t.strip() for t in terms if isinstance(t,str) and t.strip()]
+    terms = _terms_normalize(terms)
+    if not terms:
+        terms = _derive_terms_from_text(topic, sentences)
+    # tohumları öne alıp birleştir
     if user_terms:
-        pref = [t for t in user_terms if t not in terms]
-        terms = pref + terms
+        seed = _terms_normalize(user_terms)
+        terms = _terms_normalize(seed + terms)
+
     title = (data.get("title") or "").strip()
     desc  = (data.get("description") or "").strip()
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return topic, sentences, terms, title, desc, tags
 
-# -------------------- Per-scene queries --------------------
+# ==================== Per-scene queries ====================
 _STOP = set("""
 a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
 this that these those is are was were be been being have has had do does did can could should would may might will shall
 you your we our they their he she it its as than then so such very more most many much just also only even still yet
 """.split())
 _GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff"}
-
-def _lower_tokens(s: str) -> List[str]:
-    s = re.sub(r"[^A-Za-z0-9 ]+", " ", s.lower())
-    return [w for w in s.split() if w and len(w)>2 and w not in _STOP and w not in _GENERIC_BAD]
 
 def _proper_phrases(texts: List[str]) -> List[str]:
     phrases=[]
@@ -710,7 +758,7 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
 
     return queries
 
-# -------------------- TOPIC tabanlı arama sadeleştirici --------------------
+# ==================== TOPIC tabanlı arama sadeleştirici ====================
 def _simplify_query(q: str, keep: int = 4) -> str:
     q = (q or "").lower()
     q = re.sub(r"[^a-z0-9 ]+", " ", q)
@@ -732,7 +780,7 @@ def _gen_topic_query_candidates(topic: str, terms: List[str]) -> List[str]:
         if g not in out: out.append(g)
     return out[:20]
 
-# -------------------- Pexels (robust) --------------------
+# ==================== Pexels (robust) ====================
 _USED_PEXELS_IDS_RUNTIME: Set[int] = set()
 
 def _pexels_headers():
@@ -919,7 +967,7 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     final = (fresh + rest)[:max(need, len(sentences))]
     return final
 
-# -------------------- YouTube --------------------
+# ==================== YouTube ====================
 def yt_service():
     cid  = os.getenv("YT_CLIENT_ID")
     csec = os.getenv("YT_CLIENT_SECRET")
@@ -949,7 +997,7 @@ def upload_youtube(video_path: str, meta: dict) -> str:
     resp = req.execute()
     return resp.get("id", "")
 
-# -------------------- Long SEO Description --------------------
+# ==================== Long SEO Description ====================
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
     title = (hook[:1].upper() + hook[1:])[:95]
@@ -995,17 +1043,28 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
 
     return title, body, yt_tags
 
-# -------------------- Main --------------------
+# ==================== Debug meta ====================
+def _dump_debug_meta(path: str, obj: dict):
+    try:
+        pathlib.Path(path).write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+# ==================== Main ====================
 def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
-    if not _HAS_DRAWTEXT:
-        print("⚠️ UYARI: FFmpeg 'drawtext' filtresi yok (libfreetype eksik). Altyazılar geçici olarak devre dışı.")
-    random.seed(ROTATION_SEED or int(time.time()))
+    if not (_HAS_DRAWTEXT or _HAS_SUBTITLES):
+        msg = "⚠️ UYARI: ffmpeg'te ne 'drawtext' ne 'subtitles' var. Altyazılar üretilemez."
+        if REQUIRE_CAPTIONS:
+            raise RuntimeError(msg + " REQUIRE_CAPTIONS=1 olduğu için durduruldu.")
+        else:
+            print(msg + " (devam edilecek)")
 
+    random.seed(ROTATION_SEED or int(time.time()))
     topic_lock = TOPIC or "Interesting Visual Explainers"
     user_terms = SEARCH_TERMS_ENV
 
-    # 1) İçerik üretim (topic-locked) + kalite kontrol
+    # 1) İçerik üretim (topic-locked) + kalite kontrol (per-video terms)
     attempts = 0
     best = None; best_score = -1.0
     banlist = _recent_topics_for_prompt()
@@ -1029,7 +1088,7 @@ def main():
                 "No meta talk—just what matters on screen.",
                 "Replay to catch micro-details and patterns."
             ]
-            search_terms = user_terms or ["macro detail","timelapse","clean b-roll"]
+            search_terms = _terms_normalize(user_terms or ["macro detail","timelapse","clean b-roll"])
             ttl = ""; desc=""; tags=[]
 
         score = _content_score(sents)
@@ -1048,6 +1107,12 @@ def main():
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
     _record_recent(_hash12(sig), MODE, tpc)
 
+    # debug meta
+    _dump_debug_meta(f"{OUT_DIR}/meta_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json", {
+        "channel": CHANNEL_NAME, "topic": tpc, "sentences": sentences, "search_terms": search_terms,
+        "lang": LANG, "model": GEMINI_MODEL, "ts": time.time()
+    })
+
     print(f"📊 Sentences: {len(sentences)}")
 
     # 2) TTS
@@ -1062,7 +1127,7 @@ def main():
         wavs.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 3) Pexels — TOPIC odaklı
+    # 3) Pexels — per-video terms
     per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
@@ -1181,7 +1246,7 @@ def main():
     except Exception as e:
         print(f"❌ Upload skipped: {e}")
 
-    # 11) Kullanılmış Pexels ID'lerini state'e ekle
+    # 11) Kullanılmış Pexels ID'leri state'e ekle
     try:
         _blocklist_add_pexels(chosen_ids, days=30)
     except Exception as e:
