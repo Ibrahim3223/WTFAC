@@ -6,8 +6,8 @@ from typing import List, Optional, Tuple, Dict, Any, Set
 
 # ==================== ENV / constants ====================
 VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
-TARGET_MIN_SEC = float(os.getenv("TARGET_MIN_SEC", "22"))
-TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
+TARGET_MIN_SEC = _env_float("TARGET_MIN_SEC", 22.0)
+TARGET_MAX_SEC = _env_float("TARGET_MAX_SEC", 42.0)
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
 MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece log için
@@ -20,7 +20,7 @@ def _sanitize_lang(val: Optional[str]) -> str:
 
 LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
-ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
+ROTATION_SEED  = _env_int("ROTATION_SEED", 0)   # <— güvenli okuma
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
 
@@ -44,6 +44,34 @@ GEMINI_TEMP    = float(os.getenv("GEMINI_TEMP", "0.85"))
 # ---- Topic & user seed terms ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
+
+def _env_int(name: str, default: int) -> int:
+    s = os.getenv(name)
+    if s is None:
+        return default
+    s = str(s).strip()
+    if s == "" or s.lower() == "none":
+        return default
+    try:
+        return int(s)
+    except ValueError:
+        # "68.0" gibi değerleri de tolere et
+        try:
+            return int(float(s))
+        except Exception:
+            return default
+
+def _env_float(name: str, default: float) -> float:
+    s = os.getenv(name)
+    if s is None:
+        return default
+    s = str(s).strip()
+    if s == "" or s.lower() == "none":
+        return default
+    try:
+        return float(s)
+    except Exception:
+        return default
 
 def _parse_terms(s: str) -> List[str]:
     s = (s or "").strip()
@@ -1486,6 +1514,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
