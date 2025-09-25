@@ -55,7 +55,7 @@ jobs:
       max-parallel: 6
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
 
-    # Her job ilgili kanal environment'ında koşar (vars.* buradan gelir)
+    # vars.* değerlerini bu environment'tan alacağız
     environment: ${{ matrix.env }}
 
     steps:
@@ -92,22 +92,23 @@ jobs:
           restore-keys: |
             chstate-${{ matrix.name }}-
 
-      # Environment vars (Environment → gerçek env). TOPIC/TERMS dahil!
-      - name: Export channel variables
+      # Environment vars (TOPIC dahil) → güvenli heredoc ile $GITHUB_ENV
+      - name: Export channel variables (safe)
         shell: bash
         run: |
-          echo "CHANNEL_NAME=${{ matrix.name }}" >> $GITHUB_ENV
-          echo "TOPIC=${{ vars.TOPIC }}" >> $GITHUB_ENV
-          echo "LANG=${{ vars.LANG || matrix.lang }}" >> $GITHUB_ENV
-          echo "MODE=${{ vars.MODE || matrix.mode }}" >> $GITHUB_ENV
-          echo "VISIBILITY=${{ vars.VISIBILITY || matrix.visibility }}" >> $GITHUB_ENV
-          echo "ROTATION_SEED=${{ vars.ROTATION_SEED || matrix.seed }}" >> $GITHUB_ENV
-          echo "SEARCH_TERMS=${{ vars.SEARCH_TERMS }}" >> $GITHUB_ENV
-          echo "GEMINI_PROMPT=${{ vars.GEMINI_PROMPT }}" >> $GITHUB_ENV
-          echo "TTS_RATE=${{ vars.TTS_RATE }}" >> $GITHUB_ENV
-          echo "TTS_VOICE=${{ vars.TTS_VOICE }}" >> $GITHUB_ENV
-          # YouTube’a yükleme açık
-          echo "UPLOAD_TO_YT=1" >> $GITHUB_ENV
+          {
+            echo "CHANNEL_NAME<<EOF";   echo "${{ matrix.name }}";                              echo "EOF";
+            echo "TOPIC<<EOF";          echo "${{ vars.TOPIC }}";                               echo "EOF";
+            echo "LANG<<EOF";           echo "${{ vars.LANG || matrix.lang }}";                 echo "EOF";
+            echo "MODE<<EOF";           echo "${{ vars.MODE || matrix.mode }}";                 echo "EOF";
+            echo "VISIBILITY<<EOF";     echo "${{ vars.VISIBILITY || matrix.visibility }}";     echo "EOF";
+            echo "ROTATION_SEED<<EOF";  echo "${{ vars.ROTATION_SEED || matrix.seed }}";        echo "EOF";
+            echo "SEARCH_TERMS<<EOF";   echo "${{ vars.SEARCH_TERMS }}";                        echo "EOF";
+            echo "GEMINI_PROMPT<<EOF";  echo "${{ vars.GEMINI_PROMPT }}";                       echo "EOF";
+            echo "TTS_RATE<<EOF";       echo "${{ vars.TTS_RATE }}";                            echo "EOF";
+            echo "TTS_VOICE<<EOF";      echo "${{ vars.TTS_VOICE }}";                           echo "EOF";
+            echo "UPLOAD_TO_YT<<EOF";   echo "1";                                               echo "EOF";
+          } >> "$GITHUB_ENV"
 
       - name: Install deps
         run: |
@@ -123,14 +124,14 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
-          # Altyazı / karaoke stilin
+          # Altyazı / karaoke stilin (tamamı büyük harf, sarı; aktif kelime mavi)
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER:   "1"
           KARAOKE_MODE:     "fill"
-          KARAOKE_INACTIVE: "#FFD700"  # tüm metin SARI
-          KARAOKE_ACTIVE:   "#3EA6FF"  # aktif kelime MAVİ (hafif)
-          KARAOKE_OUTLINE:  "#000000"  # ince kontur
+          KARAOKE_INACTIVE: "#FFD700"
+          KARAOKE_ACTIVE:   "#3EA6FF"
+          KARAOKE_OUTLINE:  "#000000"
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=$TOPIC"
