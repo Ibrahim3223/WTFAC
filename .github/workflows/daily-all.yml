@@ -2,10 +2,8 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    # 12:30 ET (yaz saati varsayımıyla) -> 16:30 UTC
-    - cron: "30 16 * * *"
-    # 20:30 ET (yaz saati varsayımıyla) -> 00:30 UTC (ertesi gün)
-    - cron: "30 0 * * *"
+    - cron: "30 16 * * *"  # 19:30 TRT
+    - cron: "30 0 * * *"   # 03:30 TRT
   workflow_dispatch: {}
 
 permissions:
@@ -22,127 +20,131 @@ jobs:
   make-matrix:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.build.outputs.matrix }}
+      matrix: ${{ steps.mk.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build matrix from channels.yml
-        id: build
+      - name: Build matrix from channels.yml (no ::set-output)
+        id: mk
         shell: bash
         run: |
           python - <<'PY'
-          import yaml, json
-          data = yaml.safe_load(open("channels.yml","r",encoding="utf-8"))
-          mx = {"include": []}
-          for ch in data.get("channels", []):
-              mx["include"].append({
-                  "name": ch["name"],
-                  "env":  ch.get("env", ch["name"]),
-                  # MODE artık yönlendirmez, yine de çevresel fallback olarak dursun
-                  "mode": ch.get("mode","freeform"),
-                  "lang": ch.get("lang","en"),
-                  "visibility": ch.get("visibility","public"),
-              })
-          print(f"matrix={json.dumps(mx)}")
-          print(f"::set-output name=matrix::{json.dumps(mx)}")
-          PY
+import yaml, json, sys, io
+with open("channels.yml","r",encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
+chs = []
+for ch in data.get("channels", []):
+    chs.append({
+        "name": ch.get("name"),
+        "env": ch.get("env", ch.get("name")),
+        "mode": ch.get("mode","freeform"),
+        "lang": ch.get("lang","en"),
+        "visibility": ch.get("visibility","public"),
+        "seed": ch.get("seed","0"),
+    })
+mx = {"include": chs}
+open("mx.json","w",encoding="utf-8").write(json.dumps(mx))
+PY
+          echo "matrix=$(cat mx.json)" >> "$GITHUB_OUTPUT"
 
   build-upload:
     needs: make-matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 6
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
 
+    # Kanal bazlı onay/secrets kuralları için environment kalabilir
     environment: ${{ matrix.env }}
-    timeout-minutes: 35
-
-    env:
-      TZ:                ${{ vars.TZ || 'UTC' }}
-      CHANNEL_NAME:      ${{ matrix.name }}
-      MODE:              ${{ vars.MODE || matrix.mode }}
-      LANG:              ${{ vars.LANG || matrix.lang }}
-      VISIBILITY:        ${{ vars.VISIBILITY || matrix.visibility }}
-      TTS_VOICE:         ${{ vars.TTS_VOICE || '' }}
-      TARGET_MIN_SEC:    ${{ vars.TARGET_MIN_SEC || '22' }}
-      TARGET_MAX_SEC:    ${{ vars.TARGET_MAX_SEC || '40' }}
-      ROTATION_SEED:     ${{ vars.ROTATION_SEED || '0' }}
-
-      USE_GEMINI:        ${{ vars.USE_GEMINI || '1' }}
-      GEMINI_MODEL:      ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
-      UPLOAD_TO_YT:      ${{ vars.UPLOAD_TO_YT || '1' }}
-
-      TOPIC:             ${{ vars.TOPIC || '' }}
-      SEARCH_TERMS:      ${{ vars.SEARCH_TERMS || '' }}
-
-      GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
-      PEXELS_API_KEY:    ${{ secrets.PEXELS_API_KEY }}
-
-      YT_CLIENT_ID:      ${{ secrets.YT_CLIENT_ID }}
-      YT_CLIENT_SECRET:  ${{ secrets.YT_CLIENT_SECRET }}
-      YT_REFRESH_TOKEN:  ${{ secrets.YT_REFRESH_TOKEN }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore global topic memory
-        uses: actions/cache/restore@v4
-        with:
-          path: state_global_topics.json
-          key: global-state-v1
-
-      - name: Restore channel state
-        uses: actions/cache/restore@v4
-        with:
-          path: state_${{ env.CHANNEL_NAME }}.json
-          key: chstate-${{ env.CHANNEL_NAME }}-v1
-
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
 
-      - name: Cache pip
-        uses: actions/cache@v4
+      - name: Setup FFmpeg (fast + cached)
+        uses: FedericoCarboni/setup-ffmpeg@v3
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          ffmpeg-version: release
 
-      - name: Install ffmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+      # --- STATE CACHE (GLOBAL) - RESTORE ---
+      - name: Restore global state cache
+        id: restore-global
+        uses: actions/cache/restore@v4
+        with:
+          path: state_global.json
+          key: global-state-${{ github.run_id }}
+          restore-keys: |
+            global-state-
+
+      # --- STATE CACHE (CHANNEL) - RESTORE ---
+      - name: Restore channel state cache
+        id: restore-ch
+        uses: actions/cache/restore@v4
+        with:
+          path: state_${{ matrix.name }}.json
+          key: chstate-${{ matrix.name }}-${{ github.run_id }}
+          restore-keys: |
+            chstate-${{ matrix.name }}-
 
       - name: Install deps
         run: |
-          python -V
-          pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m pip install -U pip
+          pip install -r requirements.txt
 
-      - name: Prepare output dir
-        run: mkdir -p out
+      - name: Build video
+        env:
+          # Kanal/konfig değişkenleri matrix’ten
+          CHANNEL_NAME: ${{ matrix.name }}
+          MODE: ${{ matrix.mode }}
+          LANG: ${{ matrix.lang }}
+          VISIBILITY: ${{ matrix.visibility }}
+          ROTATION_SEED: ${{ matrix.seed }}
 
-      - name: Run generator & upload
-        run: python autoshorts_daily.py
+          # Repo-level secrets (veya varsa environment secrets) → process ENV
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
-      - name: Save video artifact
-        if: ${{ always() && hashFiles('out/*.mp4') != '' }}
+          # (Varsa YouTube upload için)
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+        run: |
+          python autoshorts_daily.py
+
+      - name: Upload artifact (mp4)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.CHANNEL_NAME }}-last-video
-          path: out/*.mp4
-          retention-days: 2
+          name: ${{ matrix.name }}-short
+          path: |
+            out/**/*.mp4
+            out/*.mp4
           if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Save states back
-        if: ${{ always() }}
+      # --- STATE CACHE (GLOBAL) - SAVE ---
+      - name: Save global state cache
+        if: always()
         uses: actions/cache/save@v4
         with:
-          path: |
-            state_global_topics.json
-            state_${{ env.CHANNEL_NAME }}.json
-          key: save-${{ github.run_id }}-${{ env.CHANNEL_NAME }}
+          path: state_global.json
+          key: global-state-${{ github.run_id }}
+
+      # --- STATE CACHE (CHANNEL) - SAVE ---
+      - name: Save channel state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state_${{ matrix.name }}.json
+          key: chstate-${{ matrix.name }}-${{ github.run_id }}
