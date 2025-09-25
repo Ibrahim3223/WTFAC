@@ -24,10 +24,13 @@ ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
 
-# Karaoke renkleri (ASS stili) — hepsi SARI, aktif kelime MAVİ
+# Karaoke renkleri (ASS stili)
+# Ortam değişkenlerinden #RRGGBB ya da 0xRRGGBB alır; dönüştürme altta yapılıyor.
 KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
 KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFD700")
 KARAOKE_OUTLINE  = os.getenv("KARAOKE_OUTLINE",  "#000000")
+# Global “erken başlatma”: highlight'ı sese 60–120ms kadar önden yürütür.
+CAPTION_LEAD_MS  = int(os.getenv("CAPTION_LEAD_MS", "90"))
 
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
@@ -65,6 +68,8 @@ CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
 # ---------- Pexels ayarları ----------
 PEXELS_PER_PAGE            = int(os.getenv("PEXELS_PER_PAGE", "30"))
 PEXELS_MAX_USES_PER_CLIP   = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))
+# Varsayılan: tekrar YOK. Gerekirse PEXELS_ALLOW_REUSE=1
+PEXELS_ALLOW_REUSE         = os.getenv("PEXELS_ALLOW_REUSE", "0") == "1"
 PEXELS_ALLOW_LANDSCAPE     = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"
 PEXELS_MIN_DURATION        = int(os.getenv("PEXELS_MIN_DURATION", "3"))
 PEXELS_MAX_DURATION        = int(os.getenv("PEXELS_MAX_DURATION", "13"))
@@ -76,6 +81,9 @@ PIXABAY_API_KEY            = os.getenv("PIXABAY_API_KEY", "").strip()
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 GLOBAL_TOPIC_STATE = "state_global_topics.json"
+# Cache adlarıyla tam uyum için legacy kopyalar
+LEGACY_STATE_FILE = f"state_{CHANNEL_NAME}.json"
+LEGACY_GLOBAL_STATE = "state_global.json"
 
 # ==================== deps (auto-install) ====================
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
@@ -161,7 +169,16 @@ def _load_json(path, default):
     except: return default
 
 def _save_json(path, data):
-    pathlib.Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    txt = json.dumps(data, indent=2, ensure_ascii=False)
+    pathlib.Path(path).write_text(txt, encoding="utf-8")
+    # Legacy eş-yazım (cache uyumluluğu)
+    try:
+        if path == STATE_FILE:
+            pathlib.Path(LEGACY_STATE_FILE).write_text(txt, encoding="utf-8")
+        if path == GLOBAL_TOPIC_STATE:
+            pathlib.Path(LEGACY_GLOBAL_STATE).write_text(txt, encoding="utf-8")
+    except Exception:
+        pass
 
 def _state_load() -> dict:
     st = _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
@@ -282,7 +299,6 @@ def _edge_stream_tts(text: str, voice: str, rate_env: str, mp3_out: str) -> List
             if t == "audio":
                 audio.extend(chunk.get("data", b""))
             elif t == "WordBoundary":
-                # Edge returns offset/duration in 100-ns; convert to seconds
                 off = float(chunk.get("offset", 0))/10_000_000.0
                 dur = float(chunk.get("duration",0))/10_000_000.0
                 marks.append({"t0": off, "t1": off+dur, "text": str(chunk.get("text",""))})
@@ -295,8 +311,12 @@ def _edge_stream_tts(text: str, voice: str, rate_env: str, mp3_out: str) -> List
         loop.run_until_complete(_run())
     return marks
 
-def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float, atempo: float) -> List[Tuple[str,float]]:
-    """Return [(WORD, seconds)] whose sum ≈ total. Edge süreleri atempo ile ölçeklenir."""
+def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float) -> List[Tuple[str,float]]:
+    """
+    Return [(WORD, seconds)] covering total duration.
+    - Edge word boundaries are BEFORE atempo; we rescale to final duration.
+    - Fallback: equal-split if mismatch/empty.
+    """
     words = [w for w in re.split(r"\s+", (text or "").strip()) if w]
     if not words:
         return []
@@ -305,14 +325,14 @@ def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float, a
         ms = [m for m in marks if (m.get("t1",0) > m.get("t0",0))]
         if len(ms) >= len(words)*0.6:
             N = min(len(words), len(ms))
+            raw_durs = [max(0.02, float(ms[i]["t1"]-ms[i]["t0"])) for i in range(N)]
+            sum_raw = sum(raw_durs) if raw_durs else 0.0
+            scale = (total / sum_raw) if sum_raw > 0 else 1.0
             for i in range(N):
-                # hızlandırmadan kaynaklı süre küçülür
-                dur = max(0.05, float(ms[i]["t1"]-ms[i]["t0"]) / max(0.5, atempo))
-                out.append((words[i], dur))
+                out.append((words[i], max(0.05, raw_durs[i]*scale)))
             remain = max(0.0, total - sum(d for _,d in out))
             if len(words) > N and remain>0:
-                extra = (len(words)-N)
-                each = remain/extra
+                each = remain/(len(words)-N)
                 for i in range(N, len(words)):
                     out.append((words[i], max(0.05, each)))
         else:
@@ -352,7 +372,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, marks, dur, atempo)
+        words = _merge_marks_to_words(text, marks, dur)
         return dur, words
     except WSServerHandshakeError as e:
         if getattr(e, "status", None) != 401 and "401" not in str(e):
@@ -380,7 +400,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, [], dur, atempo)
+        words = _merge_marks_to_words(text, [], dur)
         return dur, words
     except Exception as e:
         print(f"⚠️ edge-tts 401 → hızlı fallback TTS")
@@ -402,7 +422,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, [], dur, atempo)
+        words = _merge_marks_to_words(text, [], dur)
         return dur, words
     except Exception as e2:
         print(f"❌ TTS tüm yollar başarısız, sessizlik üretilecek: {e2}")
@@ -458,7 +478,7 @@ def _ass_time(s: float) -> str:
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
-    # renk dönüşümü: #RRGGBB → &H00BBGGRR
+    # ASS renk notasyonu: &HAABBGGRR; burada A yok (00), biz &H00RRGGBB verdik → yer değiştir.
     def _to_ass(c:str)->str:
         c=c.strip()
         if c.startswith("0x"): c=c[2:]
@@ -468,15 +488,16 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         return f"&H00{bb}{gg}{rr}"
 
     fontname = "DejaVu Sans"
-    base_fs  = 58 if is_hook else 52
+    fontsize = 58 if is_hook else 52
+    margin_v = 270 if is_hook else 330
     outline  = 4 if is_hook else 3
 
-    # ALL CAPS sözlük
+    # kelimeleri UPPERCASE
     words_upper = [(re.sub(r"\s+"," ", w.upper()), d) for w,d in words if w.strip()]
     if not words_upper:
         words_upper = [(w.upper(), 0.5) for w in (text or "…").split()]
 
-    # toplam süreyi cs'a çevir, \k dizisine dağıt
+    # \k (centisecond) dizisi toplam süre ile uyuşsun
     total_cs = int(round(seg_dur*100))
     ds = [max(5, int(round(d*100))) for _,d in words_upper]
     diff = total_cs - sum(ds)
@@ -488,29 +509,21 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
             ds[i%len(ds)] = max(5, ds[i%len(ds)]+step)
             diff -= step; i+=1
 
-    # mobil sarmaya göre satır kırımları
-    cap_text = " ".join([w for w,_ in words_upper])
-    wrapped  = wrap_mobile_lines(cap_text, max_line_length=CAPTION_MAX_LINE, max_lines=3)
-    lines    = wrapped.split("\n")
-    line_counts = [len(ln.split()) for ln in lines if ln.strip()]
-    breaks = set()
-    cum = 0
-    for cnt in line_counts[:-1]:
-        cum += cnt
-        breaks.add(cum)
+    # Global erken başlatma: ilk kelimelerden biraz süre al, sona ekle
+    lead_cs_target = max(0, int(round(CAPTION_LEAD_MS / 10)))
+    removed = 0
+    if lead_cs_target > 0 and sum(ds) > 5*len(ds):
+        for i in range(len(ds)):
+            if removed >= lead_cs_target: break
+            can_take = max(0, ds[i] - 5)
+            take = min(can_take, lead_cs_target - removed)
+            ds[i] -= take
+            removed += take
+        ds[-1] += removed  # toplam eşitlensin
 
-    # \k satırı — doğru yerlere \N
-    parts = []
-    for idx, ((w,_), cs) in enumerate(zip(words_upper, ds), start=1):
-        parts.append(f"{{\\k{cs}}}{w}")
-        if idx in breaks: parts.append("\\N")
-        else: parts.append(" ")
-    kline = "".join(parts).strip()
-
-    # satır sayısına göre MarginV / Fontsize
-    n_lines = max(1, len(lines))
-    margin_v = 660 if n_lines <= 3 else (720 if n_lines == 4 else 760)
-    fontsize = max(22, int(base_fs * (0.96 if n_lines>=5 else 1.0)))
+    cap = " ".join([w for w,_ in words_upper])
+    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n","\\N")
+    kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(len(words_upper))]).strip()
 
     ass = f"""[Script Info]
 ScriptType: v4.00+
@@ -529,10 +542,12 @@ Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outli
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
     """KARAOKE öncelikli. subtitles yoksa drawtext; ikisi de yoksa opsiyonel fail."""
+    # segment süresi
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
     if KARAOKE_CAPTIONS and _HAS_SUBTITLES:
+        # karaoke (ALL CAPS + kelime highlight)
         words = words or []
         ass_txt = _build_karaoke_ass(text, seg_dur, words, is_hook)
         ass_path = str(pathlib.Path(seg).with_suffix(".ass"))
@@ -866,23 +881,47 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
 
     queries=[]
     fb_idx = 0
+
+    # Aydınlatma odaklı küçük sözlük → daha hedefli sonuçlar
+    lex = [
+        ("window", "window light"),
+        ("curtain", "sheer curtains"),
+        ("uplight", "floor lamp uplight"),
+        ("floor lamp", "floor lamp corner"),
+        ("desk", "desk near window"),
+        ("strip", "led strip ambient"),
+        ("wall wash", "wall wash"),
+        ("corner", "corner lamp"),
+        ("glare", "reduce glare"),
+        ("ambient", "ambient lighting"),
+    ]
+
+    fb_strong = [t for t in (fallback_terms or []) if t]
+
     for s in sentences:
         s_low = " " + (s or "").lower() + " "
         picked=None
 
-        for ph in phrase_pool:
-            if f" {ph} " in s_low:
-                picked = ph; break
+        # Önce özel lexicon
+        for key, val in lex:
+            if key in s_low:
+                picked = val; break
+
+        if not picked:
+            for ph in phrase_pool:
+                if f" {ph} " in s_low:
+                    picked = ph; break
 
         if not picked:
             toks = _tok4(s)
             if len(toks) >= 2:
-                picked = f"{toks[0]} {toks[1]}"
+                picked = f"{toks[-2]} {toks[-1]}"
             elif len(toks) == 1:
                 picked = toks[0]
 
-        if (not picked or len(picked) < 4) and fb:
-            picked = fb[fb_idx % len(fb)]; fb_idx += 1
+        if (not picked or len(picked) < 4) and (fb_strong or fb):
+            seedlist = (fb_strong if fb_strong else fb)
+            picked = seedlist[fb_idx % len(seedlist)]; fb_idx += 1
 
         if (not picked or len(picked) < 4) and topic_key_join:
             picked = topic_key_join
@@ -1071,6 +1110,7 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
     rest  = [(vid,link) for vid,link in dedup if vid in block]
     final = (fresh + rest)[:max(need, len(sentences))]
+    print(f"   Pexels candidates: q={len(queries)} | pool={len(final)} (fresh={len(fresh)})")
     return final
 
 # ==================== YouTube ====================
@@ -1248,17 +1288,73 @@ def main():
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
     if not downloads: raise RuntimeError("Pexels pool empty after downloads.")
+    print(f"   Downloaded unique clips: {len(downloads)}")
+
+    # Yeterli benzersiz klip yoksa otomatik doldur
+    if not PEXELS_ALLOW_REUSE and len(downloads) < len(metas):
+        print(f"   Not enough uniques ({len(downloads)}/{len(metas)}). Backfilling from popular…")
+        locale = "tr-TR" if LANG.startswith("tr") else "en-US"
+        need_more = len(metas) - len(downloads)
+        page = 1
+        tried = set(downloads.keys())
+        while need_more > 0 and page <= 4:
+            pops = _pexels_popular(locale, page=page, per_page=50)
+            page += 1
+            for vid, link, w,h,dur in pops:
+                if vid in tried: continue
+                try:
+                    f = str(pathlib.Path(tmp) / f"pop_{vid}.mp4")
+                    with requests.get(link, stream=True, timeout=120) as rr:
+                        rr.raise_for_status()
+                        with open(f, "wb") as wfd:
+                            for ch in rr.iter_content(8192): wfd.write(ch)
+                    if pathlib.Path(f).stat().st_size > 300_000:
+                        downloads[vid] = f; tried.add(vid); need_more -= 1
+                        if need_more <= 0: break
+                except Exception:
+                    continue
+        # Pixabay fallback
+        if need_more > 0:
+            pix = _pixabay_fallback("interior lighting", need_more, locale)
+            for vid, link in pix:
+                try:
+                    f = str(pathlib.Path(tmp) / f"pix_{vid}.mp4")
+                    with requests.get(link, stream=True, timeout=120) as rr:
+                        rr.raise_for_status()
+                        with open(f, "wb") as wfd:
+                            for ch in rr.iter_content(8192): wfd.write(ch)
+                    if pathlib.Path(f).stat().st_size > 300_000:
+                        downloads[vid] = f
+                        need_more -= 1
+                        if need_more <= 0: break
+                except Exception:
+                    pass
+        print(f"   After backfill uniques: {len(downloads)}")
 
     usage = {vid:0 for vid in downloads.keys()}
     chosen_files: List[str] = []; chosen_ids: List[int] = []
-    for i in range(len(metas)):
-        picked_vid = None
-        for vid in list(usage.keys()):
-            if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
-                picked_vid = vid; usage[vid] += 1; break
-        if picked_vid is None:
-            picked_vid = min(usage.keys(), key=lambda k: usage[k]); usage[picked_vid] += 1
-        chosen_files.append(downloads[picked_vid]); chosen_ids.append(picked_vid); _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
+    if not PEXELS_ALLOW_REUSE:
+        # tamamen benzersiz seç
+        ordered = list(downloads.items())[:len(metas)]
+        if len(ordered) < len(metas):
+            print("⚠️ Still short on unique clips; enabling minimal reuse for remaining.")
+        for i in range(len(metas)):
+            if i < len(ordered):
+                vid, pathv = ordered[i]
+            else:
+                vid = min(usage.keys(), key=lambda k: usage[k]); pathv = downloads[vid]
+            usage[vid] += 1
+            chosen_files.append(pathv); chosen_ids.append(vid); _USED_PEXELS_IDS_RUNTIME.add(vid)
+    else:
+        for i in range(len(metas)):
+            picked_vid = None
+            for vid in list(usage.keys()):
+                if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
+                    picked_vid = vid; break
+            if picked_vid is None:
+                picked_vid = min(usage.keys(), key=lambda k: usage[k])
+            usage[picked_vid] += 1
+            chosen_files.append(downloads[picked_vid]); chosen_ids.append(picked_vid); _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
 
     # 5) Segment + altyazı (KARAOKE)
     print("🎬 Segments…")
