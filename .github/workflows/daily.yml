@@ -95,7 +95,7 @@ jobs:
           wenv TOPIC               "${VARS_TOPIC}"
           wenv LANG                "${LANG_VAL}"
           wenv MODE                "${MODE_VAL}"
-          wenv VISIBILITY          "${VIS_VAL}"
+          wenv VISIBILITY          "${VIS_VAL:-public}"
           wenv ROTATION_SEED       "${SEED_VAL}"
           wenv SEARCH_TERMS        "${VARS_SEARCH_TERMS}"
           wenv GEMINI_PROMPT       "${VARS_GEMINI_PROMPT}"
