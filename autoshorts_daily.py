@@ -1,16 +1,33 @@
 # autoshorts_daily.py — Topic-locked Gemini • Per-video search_terms • Robust Pexels
 # Captions: ALL CAPS + karaoke (word highlight) with drawtext/subtitles fallbacks
 # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
 
-# ==================== ENV / constants ====================
-VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
-TARGET_MIN_SEC = _env_float("TARGET_MIN_SEC", 22.0)
-TARGET_MAX_SEC = _env_float("TARGET_MAX_SEC", 42.0)
+# ---------- helpers (ÖNCE gelmeli) ----------
+def _env_int(name: str, default: int) -> int:
+    s = os.getenv(name)
+    if s is None: return default
+    s = str(s).strip()
+    if s == "" or s.lower() == "none": return default
+    try:
+        return int(s)
+    except ValueError:
+        try:
+            return int(float(s))  # "68.0" gibi değerler
+        except Exception:
+            return default
 
-CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
-MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece log için
+def _env_float(name: str, default: float) -> float:
+    s = os.getenv(name)
+    if s is None: return default
+    s = str(s).strip()
+    if s == "" or s.lower() == "none": return default
+    try:
+        return float(s)
+    except Exception:
+        return default
 
 def _sanitize_lang(val: Optional[str]) -> str:
     val = (val or "").strip()
@@ -18,18 +35,24 @@ def _sanitize_lang(val: Optional[str]) -> str:
     m = re.match(r"([A-Za-z]{2})", val)
     return (m.group(1).lower() if m else "en")
 
+# ==================== ENV / constants ====================
+VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
+TARGET_MIN_SEC = _env_float("TARGET_MIN_SEC", 22.0)
+TARGET_MAX_SEC = _env_float("TARGET_MAX_SEC", 42.0)
+
+CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
+MODE           = os.getenv("MODE", "freeform").strip().lower()
+
 LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
-ROTATION_SEED  = _env_int("ROTATION_SEED", 0)   # <— güvenli okuma
+ROTATION_SEED  = _env_int("ROTATION_SEED", 0)
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
 
 # Karaoke renkleri (ASS stili)
-# Ortam değişkenlerinden #RRGGBB ya da 0xRRGGBB alır; dönüştürme altta yapılıyor.
 KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
 KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFD700")
 KARAOKE_OUTLINE  = os.getenv("KARAOKE_OUTLINE",  "#000000")
-# Global “erken başlatma”: highlight'ı sese 60–120ms kadar önden yürütür.
 CAPTION_LEAD_MS  = int(os.getenv("CAPTION_LEAD_MS", "60"))
 
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
@@ -39,7 +62,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 GEMINI_PROMPT  = (os.getenv("GEMINI_PROMPT") or "").strip()
-GEMINI_TEMP    = float(os.getenv("GEMINI_TEMP", "0.85"))
+GEMINI_TEMP    = _env_float("GEMINI_TEMP", 0.85)
 
 # ---- Topic & user seed terms ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
@@ -1514,6 +1537,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
