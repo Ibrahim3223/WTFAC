@@ -55,7 +55,6 @@ jobs:
       max-parallel: 6
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
 
-    # vars.* değerleri buradan okunur
     environment: ${{ matrix.env }}
 
     steps:
@@ -74,7 +73,6 @@ jobs:
         with:
           ffmpeg-version: release
 
-      # --- STATE CACHE (GLOBAL) - RESTORE ---
       - name: Restore global state cache
         uses: actions/cache/restore@v4
         with:
@@ -83,7 +81,6 @@ jobs:
           restore-keys: |
             global-state-
 
-      # --- STATE CACHE (CHANNEL) - RESTORE ---
       - name: Restore channel state cache
         uses: actions/cache/restore@v4
         with:
@@ -92,23 +89,58 @@ jobs:
           restore-keys: |
             chstate-${{ matrix.name }}-
 
-      # --- ENV EXPORT (SAFE) ---
+      # ---------- SAFE ENV EXPORT ----------
       - name: Export channel variables (safe)
         shell: bash
+        env:
+          MATRIX_NAME:           ${{ matrix.name }}
+          DEFAULT_LANG:          ${{ matrix.lang }}
+          DEFAULT_MODE:          ${{ matrix.mode }}
+          DEFAULT_VISIBILITY:    ${{ matrix.visibility }}
+          DEFAULT_SEED:          ${{ matrix.seed }}
+
+          VARS_TOPIC:            ${{ vars.TOPIC }}
+          VARS_LANG:             ${{ vars.LANG }}
+          VARS_MODE:             ${{ vars.MODE }}
+          VARS_VISIBILITY:       ${{ vars.VISIBILITY }}
+          VARS_ROTATION_SEED:    ${{ vars.ROTATION_SEED }}
+          VARS_SEARCH_TERMS:     ${{ vars.SEARCH_TERMS }}
+          VARS_GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
+          VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
+          VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
         run: |
-          {
-            printf 'CHANNEL_NAME<<__EOF_CHANNEL__\n';   printf '%s\n' "${{ matrix.name }}";                          printf '__EOF_CHANNEL__\n';
-            printf 'TOPIC<<__EOF_TOPIC__\n';            printf '%s\n' "${{ vars.TOPIC }}";                           printf '__EOF_TOPIC__\n';
-            printf 'LANG<<__EOF_LANG__\n';              printf '%s\n' "${{ vars.LANG || matrix.lang }}";             printf '__EOF_LANG__\n';
-            printf 'MODE<<__EOF_MODE__\n';              printf '%s\n' "${{ vars.MODE || matrix.mode }}";             printf '__EOF_MODE__\n';
-            printf 'VISIBILITY<<__EOF_VIS__\n';         printf '%s\n' "${{ vars.VISIBILITY || matrix.visibility }}"; printf '__EOF_VIS__\n';
-            printf 'ROTATION_SEED<<__EOF_SEED__\n';     printf '%s\n' "${{ vars.ROTATION_SEED || matrix.seed }}";    printf '__EOF_SEED__\n';
-            printf 'SEARCH_TERMS<<__EOF_TERMS__\n';     printf '%s\n' "${{ vars.SEARCH_TERMS }}";                    printf '__EOF_TERMS__\n';
-            printf 'GEMINI_PROMPT<<__EOF_GPR__\n';      printf '%s\n' "${{ vars.GEMINI_PROMPT }}";                   printf '__EOF_GPR__\n';
-            printf 'TTS_RATE<<__EOF_TR__\n';            printf '%s\n' "${{ vars.TTS_RATE }}";                        printf '__EOF_TR__\n';
-            printf 'TTS_VOICE<<__EOF_TV__\n';           printf '%s\n' "${{ vars.TTS_VOICE }}";                       printf '__EOF_TV__\n';
-            printf 'UPLOAD_TO_YT<<__EOF_UP__\n';        printf '%s\n' "1";                                           printf '__EOF_UP__\n';
-          } >> "$GITHUB_ENV"
+          set -euo pipefail
+
+          # Fallback'ları shell tarafında yap
+          CHANNEL_NAME="$MATRIX_NAME"
+          LANG_VAL="${VARS_LANG:-$DEFAULT_LANG}"
+          MODE_VAL="${VARS_MODE:-$DEFAULT_MODE}"
+          VIS_VAL="${VARS_VISIBILITY:-$DEFAULT_VISIBILITY}"
+          SEED_VAL="${VARS_ROTATION_SEED:-$DEFAULT_SEED}"
+
+          wenv () {
+            # usage: wenv VAR_NAME "value..."
+            local __name="$1"; shift
+            local __val="$*"
+            local __delim="EOF_${__name}_$$"
+            {
+              echo "${__name}<<${__delim}"
+              printf '%s\n' "${__val}"
+              echo "${__delim}"
+            } >> "$GITHUB_ENV"
+          }
+
+          wenv CHANNEL_NAME        "${CHANNEL_NAME}"
+          wenv TOPIC               "${VARS_TOPIC}"
+          wenv LANG                "${LANG_VAL}"
+          wenv MODE                "${MODE_VAL}"
+          wenv VISIBILITY          "${VIS_VAL}"
+          wenv ROTATION_SEED       "${SEED_VAL}"
+          wenv SEARCH_TERMS        "${VARS_SEARCH_TERMS}"
+          wenv GEMINI_PROMPT       "${VARS_GEMINI_PROMPT}"
+          wenv TTS_RATE            "${VARS_TTS_RATE}"
+          wenv TTS_VOICE           "${VARS_TTS_VOICE}"
+          wenv UPLOAD_TO_YT        "1"
 
       - name: Install deps
         run: |
@@ -117,26 +149,24 @@ jobs:
 
       - name: Build video
         env:
-          # Secrets
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
-          # Altyazı / karaoke stilin
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER:   "1"
           KARAOKE_MODE:     "fill"
-          KARAOKE_INACTIVE: "#FFD700"  # tüm metin SARI
-          KARAOKE_ACTIVE:   "#3EA6FF"  # aktif kelime MAVİ (hafif)
-          KARAOKE_OUTLINE:  "#000000"  # ince kontur
+          KARAOKE_INACTIVE: "#FFD700"  # sarı taban
+          KARAOKE_ACTIVE:   "#3EA6FF"  # mavi vurgu
+          KARAOKE_OUTLINE:  "#000000"
         run: |
           echo "== ${CHANNEL_NAME} =="
-          echo "TOPIC=$TOPIC"
-          echo "LANG=$LANG"
-          echo "SEARCH_TERMS=$SEARCH_TERMS"
+          echo "TOPIC=${TOPIC}"
+          echo "LANG=${LANG}"
+          echo "SEARCH_TERMS=${SEARCH_TERMS}"
           python autoshorts_daily.py
 
       - name: Upload artifact (mp4)
@@ -150,7 +180,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      # --- STATE CACHE - SAVE ---
       - name: Save global state cache
         if: always()
         uses: actions/cache/save@v4
