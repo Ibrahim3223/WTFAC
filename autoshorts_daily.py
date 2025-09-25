@@ -20,6 +20,15 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 USE_GEMINI     = os.getenv("USE_GEMINI", "1") == "1"
 GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
+# Geçiş (transition) ayarları (yeni)
+TRANSITION_SEC  = float(os.getenv("TRANSITION_SEC", "0.28"))
+TRANSITION_LIST = [t.strip() for t in os.getenv(
+    "TRANSITION_LIST",
+    "fade,dissolve,slideleft,slideright,slideup,slidedown,"
+    "wipeleft,wiperight,wipeup,wipedown,smoothleft,smoothright,"
+    "circleopen,circleclose,radial,zoom,pixelize,distance,squeezeh,squeezew"
+).split(",") if t.strip()]
+
 # ---- Channel intent (Topic & Terms) ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
@@ -309,20 +318,23 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     frames = max(2, int(round(seconds * fps)))
     return frames, frames / float(fps)
 
-def make_segment(src: str, dur_s: float, outp: str):
+# no_end_fade=True olduğunda sahnenin sonunda fade-out uygulanmaz (finalde "efektsiz bitiş" için)
+def make_segment(src: str, dur_s: float, outp: str, no_end_fade: bool = False):
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
-    vf = (
-        "scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,"
-        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
-        f"fps={TARGET_FPS},"
-        f"setpts=N/{TARGET_FPS}/TB,"
-        f"trim=start_frame=0:end_frame={frames},"
-        f"fade=t=in:st=0:d={fade:.2f},"
-        f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
-    )
+    vf_parts = [
+        "scale=1080:1920:force_original_aspect_ratio=increase",
+        "crop=1080:1920",
+        "eq=brightness=0.02:contrast=1.08:saturation=1.1",
+        f"fps={TARGET_FPS}",
+        f"setpts=N/{TARGET_FPS}/TB",
+        f"trim=start_frame=0:end_frame={frames}",
+        f"fade=t=in:st=0:d={fade:.2f}",
+    ]
+    if not no_end_fade:
+        vf_parts.append(f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}")
+    vf = ",".join(vf_parts)
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", src,
@@ -427,6 +439,47 @@ def concat_videos_filter(files: List[str], outp: str):
         *inputs,
         "-filter_complex", filtergraph,
         "-map","[v]",
+        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart",
+        outp
+    ])
+
+# --- Yeni: xfade ile çeşitli geçişler ---
+def concat_videos_with_transitions(files: List[str], outp: str, trans_sec: float = TRANSITION_SEC):
+    if not files: raise RuntimeError("concat_videos_with_transitions: empty")
+    if len(files) == 1:
+        # tek sahnede geçiş yok; eski concat yoluna gerek yok, doğrudan re-encode et
+        return concat_videos_filter(files, outp)
+
+    # Girişler ve sahne süreleri
+    inputs = []
+    for p in files:
+        inputs += ["-i", p]
+    durs = [max(0.02, ffprobe_dur(p)) for p in files]
+
+    # Normalize her giriş akışını
+    pre = [f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]" for i in range(len(files))]
+
+    # xfade zinciri
+    chain = []
+    cur_label = "[v0]"
+    cur_dur = durs[0]
+    for i in range(1, len(files)):
+        trans = TRANSITION_LIST[(i-1) % max(1, len(TRANSITION_LIST))]
+        # offset = bir önceki akışın (o ana kadarki birleşik akış) süresi - trans_sec
+        offset = max(0.0, cur_dur - trans_sec)
+        next_label = f"[x{i}]"
+        chain.append(f"{cur_label}[v{i}]xfade=transition={trans}:duration={trans_sec:.3f}:offset={offset:.3f}{next_label}")
+        cur_label = next_label
+        cur_dur = cur_dur + durs[i] - trans_sec
+
+    filtergraph = ";".join(pre + chain)
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        *inputs,
+        "-filter_complex", filtergraph,
+        "-map", cur_label,
         "-r", str(TARGET_FPS), "-vsync","cfr",
         "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart",
@@ -715,7 +768,7 @@ def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
     cand=[]
     qtokens= set(re.findall(r"[a-z0-9]+", query.lower()))
     for vid, link, w, h, dur in items:
-        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME: 
+        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
             continue
         dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
         tokens = set(re.findall(r"[a-z0-9]+", (link or "").lower()))
@@ -810,6 +863,28 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
         if len(yt_tags) >= 15: break
 
     return title, body, yt_tags
+
+# --------- Yardımcı: İlk Pexels kaynağını ikiye böl (loop efekti) ----------
+def split_video_in_half(src: str, out_first_half: str, out_second_half: str) -> bool:
+    try:
+        dur = ffprobe_dur(src)
+        if dur <= 0.6:
+            return False
+        half = max(0.3, dur / 2.0)
+        # İlk yarı
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", src, "-t", f"{half:.3f}", "-c","copy", out_first_half
+        ])
+        # İkinci yarı
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-ss", f"{half:.3f}", "-i", src, "-t", f"{max(0.3, dur-half):.3f}", "-c","copy", out_second_half
+        ])
+        return pathlib.Path(out_first_half).exists() and pathlib.Path(out_second_half).exists()
+    except Exception as e:
+        print(f"⚠️ split_video_in_half failed: {e}")
+        return False
 
 # -------------------- Main --------------------
 def main():
@@ -939,12 +1014,26 @@ def main():
             picked_path = downloads[vid]
         chosen_files.append(picked_path)
 
+    # --- LOOP ETKİSİ: İlk seçilen kaynağı ikiye böl, 2. yarı -> ilk sahne, 1. yarı -> son sahne
+    if chosen_files:
+        src0 = chosen_files[0]
+        first_half = str(pathlib.Path(tmp)/"loop_first_half.mp4")
+        second_half = str(pathlib.Path(tmp)/"loop_second_half.mp4")
+        if split_video_in_half(src0, first_half, second_half):
+            chosen_files[0] = second_half
+            chosen_files[-1] = first_half
+            print("🔁 Loop mode: first clip split → second half used at scene #1, first half used at LAST scene.")
+        else:
+            print("ℹ️ Loop split skipped (source too short or split failed).")
+
     # 4) Segment + altyazı
     print("🎬 Segments…")
     segs = []
+    total_scenes = len(metas)
     for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
         base   = str(pathlib.Path(tmp) / f"seg_{i:02d}.mp4")
-        make_segment(src, d, base)
+        # son sahne için bitiş fade-out yok (video efektsiz bitsin)
+        make_segment(src, d, base, no_end_fade=(i == total_scenes - 1))
         colored = str(pathlib.Path(tmp) / f"segsub_{i:02d}.mp4")
         draw_capcut_text(
             base,
@@ -956,9 +1045,9 @@ def main():
         )
         segs.append(colored)
 
-    # 5) Birleştir
-    print("🎞️ Assemble…")
-    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
+    # 5) Birleştir (çeşitli geçişler)
+    print("🎞️ Assemble with transitions…")
+    vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_with_transitions(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
     # 6) Süre & kare kilitleme
