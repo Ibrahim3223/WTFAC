@@ -30,7 +30,7 @@ KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
 KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFD700")
 KARAOKE_OUTLINE  = os.getenv("KARAOKE_OUTLINE",  "#000000")
 # Global “erken başlatma”: highlight'ı sese 60–120ms kadar önden yürütür.
-CAPTION_LEAD_MS  = int(os.getenv("CAPTION_LEAD_MS", "350"))
+CAPTION_LEAD_MS  = int(os.getenv("CAPTION_LEAD_MS", "80"))
 
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
@@ -478,7 +478,7 @@ def _ass_time(s: float) -> str:
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
-    # ASS renk notasyonu: &HAABBGGRR; burada A yok (00), biz &H00RRGGBB verdik → yer değiştir.
+    # ASS renk notasyonu: &HAABBGGRR
     def _to_ass(c:str)->str:
         c=c.strip()
         if c.startswith("0x"): c=c[2:]
@@ -497,30 +497,63 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     if not words_upper:
         words_upper = [(w.upper(), 0.5) for w in (text or "…").split()]
 
-    # \k (centisecond) dizisi toplam süre ile uyuşsun
-    total_cs = int(round(seg_dur*100))
-    ds = [max(5, int(round(d*100))) for _,d in words_upper]
-    diff = total_cs - sum(ds)
-    if abs(diff) >= len(ds):
-        ds[-1] = max(5, ds[-1]+diff)
-    else:
-        i=0; step=1 if diff>0 else -1
-        while diff != 0 and ds:
-            ds[i%len(ds)] = max(5, ds[i%len(ds)]+step)
-            diff -= step; i+=1
+    # hedef süre (centisecond)
+    total_cs = int(round(seg_dur * 100))
 
-    # Global erken başlatma: ilk kelimelerden biraz süre al, sona ekle
-    lead_cs_target = max(0, int(round(CAPTION_LEAD_MS / 10)))
+    # ham süreler (centisecond)
+    ds = [max(5, int(round(d * 100))) for _, d in words_upper]
+    if sum(ds) == 0:
+        ds = [50] * len(words_upper)
+
+    # === YENİ: global hız düzeltmeleri ===
+    # 1) hızlı akış (yüzde): 1.5 → ~%1.5 daha hızlı highlight
+    try:
+        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "1.5"))
+    except Exception:
+        speedup_pct = 1.5
+    speedup_pct = max(-5.0, min(5.0, speedup_pct))  # güvenli aralık
+
+    # 2) satırı biraz erken bitir (ms)
+    try:
+        early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "80"))
+    except Exception:
+        early_end_ms = 80
+    early_end_cs = max(0, int(round(early_end_ms / 10.0)))
+
+    # hedef toplam cs: total_cs'i hem hızlandırma hem de erken bitiş ile küçült
+    target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
+    target_cs = max(5 * len(ds), target_cs)
+
+    # ham toplamı hedefe eşitle (orantılı ölçek → sonra yuvarlama düzelt)
+    sum_ds = sum(ds)
+    if sum_ds > 0:
+        scale = target_cs / sum_ds
+        ds = [max(5, int(round(x * scale))) for x in ds]
+
+    # olası yuvarlama taşmasını indir
+    while sum(ds) > target_cs:
+        for i in range(len(ds)):
+            if sum(ds) <= target_cs: break
+            if ds[i] > 5: ds[i] -= 1
+    # gerekirse eksikleri dağıt
+    i = 0
+    while sum(ds) < target_cs:
+        if ds[i % len(ds)] < 9999: ds[i % len(ds)] += 1
+        i += 1
+
+    # Global erken başlatma: ilk kelimelerden al, sona ekle (toplam değişmez)
+    lead_cs_target = max(0, int(round(CAPTION_LEAD_MS / 10.0)))
     removed = 0
-    if lead_cs_target > 0 and sum(ds) > 5*len(ds):
+    if lead_cs_target > 0 and sum(ds) > 5 * len(ds):
         for i in range(len(ds)):
             if removed >= lead_cs_target: break
             can_take = max(0, ds[i] - 5)
             take = min(can_take, lead_cs_target - removed)
             ds[i] -= take
             removed += take
-        ds[-1] += removed  # toplam eşitlensin
+        ds[-1] += removed  # toplam aynı kalsın
 
+    # ekranda görünen metin
     cap = " ".join([w for w,_ in words_upper])
     wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n","\\N")
     kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(len(words_upper))]).strip()
@@ -1425,6 +1458,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
