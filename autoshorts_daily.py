@@ -35,6 +35,10 @@ def _sanitize_lang(val: Optional[str]) -> str:
     m = re.match(r"([A-Za-z]{2})", val)
     return (m.group(1).lower() if m else "en")
 
+def _sanitize_privacy(val: Optional[str]) -> str:
+    v = (val or "").strip().lower()
+    return v if v in {"public", "unlisted", "private"} else "public"
+
 # ==================== ENV / constants ====================
 VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
 TARGET_MIN_SEC = _env_float("TARGET_MIN_SEC", 22.0)
@@ -44,7 +48,7 @@ CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
 MODE           = os.getenv("MODE", "freeform").strip().lower()
 
 LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or "en")
-VISIBILITY     = os.getenv("VISIBILITY", "public")
+VISIBILITY     = = _sanitize_privacy(os.getenv("VISIBILITY"))
 ROTATION_SEED  = _env_int("ROTATION_SEED", 0)
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
@@ -1537,6 +1541,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
