@@ -39,6 +39,17 @@ def _sanitize_privacy(val: Optional[str]) -> str:
     v = (val or "").strip().lower()
     return v if v in {"public", "unlisted", "private"} else "public"
 
+KARAOKE_OFFSET_MS = int(os.getenv("KARAOKE_OFFSET_MS", "0"))
+KARAOKE_SPEED = float(os.getenv("KARAOKE_SPEED", "1.0"))
+
+def _adj_time(t_seconds: float) -> float:
+    """
+    Vurgu zamanlarını topluca öne/al ve çok küçük bir hız düzeltmesi uygula.
+    Negatif offset => daha erken vurgu.
+    """
+    return max(0.0, (t_seconds + KARAOKE_OFFSET_MS / 1000.0) / max(KARAOKE_SPEED, 1e-6))
+
+
 # ==================== ENV / constants ====================
 VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
 TARGET_MIN_SEC = _env_float("TARGET_MIN_SEC", 22.0)
@@ -1541,6 +1552,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
