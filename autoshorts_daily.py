@@ -1,7 +1,7 @@
 # autoshorts_daily.py — Topic-locked Gemini • Multi-clip Pexels • Hard A/V lock • Long SEO desc
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any, Set
 
 # -------------------- ENV / constants --------------------
 VOICE_STYLE    = os.getenv("TTS_STYLE", "narration-professional")
@@ -44,10 +44,16 @@ CRF_VISUAL       = 22
 CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))
 CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
 
-# Pexels esnetmeler
-PEXELS_PER_PAGE          = int(os.getenv("PEXELS_PER_PAGE", "30"))
-PEXELS_MAX_USES_PER_CLIP = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))  # bir klibi kaç sahnede kullanabiliriz
-PEXELS_ALLOW_LANDSCAPE   = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"
+# ---------- Pexels ayarları (TOPIC odaklı, dikey ve süre filtreli) ----------
+PEXELS_PER_PAGE            = int(os.getenv("PEXELS_PER_PAGE", "30"))
+PEXELS_MAX_USES_PER_CLIP   = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))  # bir klibi kaç sahnede kullanabiliriz
+PEXELS_ALLOW_LANDSCAPE     = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"  # landscape kabul edip crop’layalım mı
+PEXELS_MIN_DURATION        = int(os.getenv("PEXELS_MIN_DURATION", "3"))       # saniye
+PEXELS_MAX_DURATION        = int(os.getenv("PEXELS_MAX_DURATION", "13"))
+PEXELS_MIN_HEIGHT          = int(os.getenv("PEXELS_MIN_HEIGHT",   "1280"))    # dikey 1080x1920 güvenli alan
+PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "1") == "1"  # h>w şartı
+ALLOW_PIXABAY_FALLBACK     = os.getenv("ALLOW_PIXABAY_FALLBACK", "1") == "1"  # Pixabay opsiyonel fallback
+PIXABAY_API_KEY            = os.getenv("PIXABAY_API_KEY", "").strip()
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 GLOBAL_TOPIC_STATE = "state_global_topics.json"
@@ -475,11 +481,9 @@ def mux(video: str, audio: str, outp: str):
 # -------------------- Template selection (by TOPIC) --------------------
 def _select_template_key(topic: str) -> str:
     t = (topic or "").lower()
-    # Eğer 'country', 'geography', 'nation', 'city facts' gibi alanlar geçiyorsa country_facts şablonu
     geo_kw = ("country", "geograph", "city", "capital", "border", "population", "continent", "flag")
     if any(k in t for k in geo_kw):
         return "country_facts"
-    # Aksi halde genel şablon
     return "_default"
 
 # -------------------- Gemini (topic-locked) --------------------
@@ -667,19 +671,57 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
 
     return queries
 
-# -------------------- Pexels (multi-pick + variety) --------------------
-_USED_PEXELS_IDS_RUNTIME = set()
+# -------------------- TOPIC tabanlı arama sadeleştirici --------------------
+def _simplify_query(q: str, keep: int = 4) -> str:
+    q = (q or "").lower()
+    q = re.sub(r"[^a-z0-9 ]+", " ", q)
+    toks = [t for t in q.split() if t and t not in _STOP]
+    return " ".join(toks[:keep]) if toks else (q.strip()[:40] if q else "")
+
+def _gen_topic_query_candidates(topic: str, terms: List[str]) -> List[str]:
+    out: List[str] = []
+    base = _simplify_query(topic, keep=4)
+    if base: out += [base, _simplify_query(base, keep=2)]
+    for t in (terms or []):
+        tt = _simplify_query(t, keep=2)
+        if tt and tt not in out: out.append(tt)
+    # Tek kelimelik ultra-sade
+    if base:
+        for w in base.split():
+            if w not in out:
+                out.append(w)
+    # Biraz genel B-roll tohumları
+    for g in ["city timelapse","ocean waves","forest path","night skyline","macro detail","street crowd","mountain landscape"]:
+        if g not in out: out.append(g)
+    return out[:20]
+
+# -------------------- Pexels (robust) --------------------
+_USED_PEXELS_IDS_RUNTIME: Set[int] = set()
 
 def _pexels_headers():
     if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
     return {"Authorization": PEXELS_API_KEY}
 
-def _pexels_search(query: str, locale: str) -> List[Tuple[int, str, int, int, float]]:
+def _is_vertical_ok(w: int, h: int) -> bool:
+    if PEXELS_STRICT_VERTICAL:
+        return h > w and h >= PEXELS_MIN_HEIGHT
+    # Landscape kabul edilecekse de en azından yükseklik yeterli olsun
+    return (h >= PEXELS_MIN_HEIGHT) and (h >= w or PEXELS_ALLOW_LANDSCAPE)
+
+def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None) -> List[Tuple[int, str, int, int, float]]:
+    per_page = per_page or max(10, min(80, PEXELS_PER_PAGE))
     url = "https://api.pexels.com/videos/search"
     r = requests.get(
         url,
         headers=_pexels_headers(),
-        params={"query": query, "per_page": max(10, min(80, PEXELS_PER_PAGE)), "orientation":"portrait", "size":"large", "locale": locale},
+        params={
+            "query": query,
+            "per_page": per_page,
+            "page": page,
+            "orientation": "portrait",   # server-side portre bias
+            "size": "large",
+            "locale": locale
+        },
         timeout=30
     )
     if r.status_code != 200:
@@ -689,45 +731,171 @@ def _pexels_search(query: str, locale: str) -> List[Tuple[int, str, int, int, fl
     for v in data.get("videos", []):
         vid = int(v.get("id", 0))
         dur = float(v.get("duration",0.0))
+        if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
+            continue
         files = v.get("video_files", []) or []
         if not files: continue
-        # portrait tercih; yoksa landscape kabul (crop edeceğiz)
         pf = []
         for x in files:
             w = int(x.get("width",0)); h = int(x.get("height",0))
-            if h >= 1080 and (h >= w or PEXELS_ALLOW_LANDSCAPE):
+            if _is_vertical_ok(w, h):
                 pf.append((w,h,x.get("link")))
-        if not pf: continue
-        # 1440 hedefe yakın olanları öne al
-        pf.sort(key=lambda t: (abs(t[1]-1440), t[0]*t[1]))
+        if not pf: 
+            continue
+        # 1440-1920 bandına yakın olanları öne al
+        pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
         w,h,link = pf[0]
         out.append((vid, link, w, h, dur))
     return out
 
-def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
-    locale = "tr-TR" if LANG.startswith("tr") else "en-US"
-    items = _pexels_search(query, locale)
-    if not items and locale == "tr-TR":
-        items = _pexels_search(query, "en-US")
-    if not items:
+def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tuple[int, str, int, int, float]]:
+    url = "https://api.pexels.com/videos/popular"
+    r = requests.get(
+        url,
+        headers=_pexels_headers(),
+        params={"per_page": per_page, "page": page},
+        timeout=30
+    )
+    if r.status_code != 200:
         return []
-    block = _blocklist_get_pexels()
-    cand=[]
-    qtokens= set(re.findall(r"[a-z0-9]+", query.lower()))
-    for vid, link, w, h, dur in items:
-        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME: 
+    data = r.json() or {}
+    out=[]
+    for v in data.get("videos", []):
+        vid = int(v.get("id", 0))
+        dur = float(v.get("duration",0.0))
+        if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
             continue
-        dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
+        files = v.get("video_files", []) or []
+        if not files: continue
+        pf = []
+        for x in files:
+            w = int(x.get("width",0)); h = int(x.get("height",0))
+            if _is_vertical_ok(w, h):
+                pf.append((w,h,x.get("link")))
+        if not pf: continue
+        pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
+        w,h,link = pf[0]
+        out.append((vid, link, w, h, dur))
+    return out
+
+def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
+    if not (ALLOW_PIXABAY_FALLBACK and PIXABAY_API_KEY):
+        return []
+    try:
+        params = {
+            "key": PIXABAY_API_KEY,
+            "q": q,
+            "safesearch": "true",
+            "per_page": min(50, max(10, need*4)),
+            "video_type": "film",
+            "order": "popular"
+        }
+        r = requests.get("https://pixabay.com/api/videos/", params=params, timeout=30)
+        if r.status_code != 200:
+            return []
+        data = r.json() or {}
+        outs=[]
+        for h in data.get("hits", []):
+            dur = float(h.get("duration",0.0))
+            if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
+                continue
+            vids = h.get("videos", {})
+            chosen=None
+            # büyükten küçüğe
+            for qual in ("large","medium","small","tiny"):
+                v = vids.get(qual)
+                if not v: continue
+                w,hh = int(v.get("width",0)), int(v.get("height",0))
+                if _is_vertical_ok(w, hh):
+                    chosen = (w,hh,v.get("url")); break
+            if chosen:
+                outs.append( (int(h.get("id",0)), chosen[2]) )
+        return outs[:need]
+    except Exception:
+        return []
+
+def _rank_and_dedup(items: List[Tuple[int, str, int, int, float]], qtokens: Set[str], block: Set[int]) -> List[Tuple[int,str]]:
+    cand=[]
+    for vid, link, w, h, dur in items:
+        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
+            continue
         tokens = set(re.findall(r"[a-z0-9]+", (link or "").lower()))
         overlap = len(tokens & qtokens)
-        score = overlap*2.0 + dur_bonus + (1.0 if 1080 <= h else 0.0)
+        score = overlap*2.0 + (1.0 if 2.0 <= dur <= 12.0 else 0.0) + (1.0 if h >= 1440 else 0.0)
         cand.append((score, vid, link))
     cand.sort(key=lambda x: x[0], reverse=True)
     out=[]
+    seen=set()
     for _, vid, link in cand:
-        if vid not in _USED_PEXELS_IDS_RUNTIME:
-            out.append((vid, link))
-    return out[:5]  # soru başına en fazla 5 aday
+        if vid in seen: 
+            continue
+        seen.add(vid); out.append((vid, link))
+    return out
+
+def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
+    """TOPIC-öncelikli + per-scene queries + çok sayfa + popular + (opsiyonel) pixabay fallback."""
+    random.seed(rotation_seed or int(time.time()))
+    locale = "tr-TR" if LANG.startswith("tr") else "en-US"
+    block = _blocklist_get_pexels()
+
+    # 1) Per-scene kısa sorgular
+    per_scene = build_per_scene_queries(sentences, search_terms, topic=topic)
+    # 2) Topic tabanlı sade adaylar
+    topic_cands = _gen_topic_query_candidates(topic, search_terms)
+    queries = []
+    # önce per-scene, sonra topic based; tekrarları at
+    seen_q=set()
+    for q in per_scene + topic_cands:
+        q = (q or "").strip()
+        if q and q not in seen_q:
+            seen_q.add(q); queries.append(q)
+
+    pool: List[Tuple[int,str]] = []
+    qtokens_cache: Dict[str, Set[str]] = {}
+
+    # 3) Her sorguda birden fazla sayfa tara
+    for q in queries:
+        qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
+        merged: List[Tuple[int, str, int, int, float]] = []
+        for page in (1, 2, 3):
+            merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
+            # hızlı erken çıkış
+            if len(merged) >= need*3:
+                break
+        ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
+        pool += ranked[:max(3, need//2)]  # her sorgudan sınırlı katkı
+        # yeterince topladıysak çık
+        if len(pool) >= need*2:
+            break
+
+    # 4) Popular fallback
+    if len(pool) < need:
+        merged=[]
+        for page in (1,2,3):
+            merged += _pexels_popular(locale, page=page, per_page=40)
+            if len(merged) >= need*3:
+                break
+        # popular'da query yok; hafif bir overlap hesabı yapamayız, direkt sade skor
+        pop_rank = _rank_and_dedup(merged, set(), block)
+        pool += pop_rank[:need*2 - len(pool)]
+
+    # 5) Pixabay fallback (opsiyonel)
+    if len(pool) < need:
+        fallback_q = (queries[-1] if queries else _simplify_query(topic, keep=1)) or "city"
+        pix = _pixabay_fallback(fallback_q, need - len(pool), locale)
+        pool += pix
+
+    # Tekrarsız + blocklist filtrasyonunu yineleyelim
+    seen=set(); dedup=[]
+    for vid, link in pool:
+        if vid in seen: continue
+        seen.add(vid); dedup.append((vid, link))
+
+    # Yeni klipleri öne al
+    fresh = [(vid,link) for vid,link in dedup if vid not in block]
+    rest  = [(vid,link) for vid,link in dedup if vid in block]
+    final = (fresh + rest)[:max(need, len(sentences))]
+    return final
 
 # -------------------- YouTube --------------------
 def yt_service():
@@ -876,36 +1044,25 @@ def main():
         wavs.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 3) Pexels — çoklu aday + havuz + tekrar limiti
+    # 3) Pexels — TOPIC odaklı, çok sayfalı, popular + pixabay fallback
     per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
 
-    pool: List[Tuple[int,str]] = []
-    seen_ids=set()
-    for q in per_scene_queries:
-        picks = pexels_pick_many(q)
-        for vid, link in picks:
-            if vid not in seen_ids:
-                seen_ids.add(vid); pool.append((vid, link))
-
-    # Havuz yetersizse generic fallback
-    if len(pool) < len(metas):
-        extras = ["macro detail","city timelapse","nature macro","clean interior","close up hands","ocean waves","night skyline","forest path"]
-        for q in (user_terms or []) + extras:
-            for vid, link in pexels_pick_many(q):
-                if vid not in seen_ids:
-                    seen_ids.add(vid); pool.append((vid, link))
-                if len(pool) >= len(metas)*2:
-                    break
-            if len(pool) >= len(metas)*2:
-                break
+    need_clips = max(6, min(12, int(os.getenv("SCENE_COUNT", "8"))))
+    pool: List[Tuple[int,str]] = build_pexels_pool(
+        topic=tpc,
+        sentences=[m[0] for m in metas],
+        search_terms=(search_terms or user_terms or []),
+        need=need_clips,
+        rotation_seed=ROTATION_SEED
+    )
 
     if not pool:
-        raise RuntimeError("Pexels: hiç uygun klip bulunamadı.")
+        raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
 
-    # Klipleri indir ve tekrar limitine göre dağıt
-    downloads = {}
+    # 4) İndir ve tekrar limiti ile dağıt
+    downloads: Dict[int,str] = {}
     print("⬇️ Download pool…")
     for idx, (vid, link) in enumerate(pool):
         try:
@@ -920,26 +1077,28 @@ def main():
         except Exception as e:
             print(f"⚠️ download fail ({vid}): {e}")
 
-    # Dağıtım
+    if not downloads:
+        raise RuntimeError("Pexels pool empty after downloads.")
+
     usage = {vid:0 for vid in downloads.keys()}
-    chosen_files=[]
+    chosen_files: List[str] = []
+    chosen_ids: List[int] = []
     for i in range(len(metas)):
-        picked_path=None
+        picked_vid = None
         # öncelik: hiç kullanılmamış
-        for vid, p in downloads.items():
+        for vid in list(usage.keys()):
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
-                picked_path = p
+                picked_vid = vid
                 usage[vid] += 1
                 break
-        if not picked_path:
-            # mecburen en az kullanılanı seç
-            if not usage: raise RuntimeError("Pexels pool empty after filtering.")
-            vid = min(usage.keys(), key=lambda k: usage[k])
-            usage[vid] += 1
-            picked_path = downloads[vid]
-        chosen_files.append(picked_path)
+        if picked_vid is None:
+            picked_vid = min(usage.keys(), key=lambda k: usage[k])
+            usage[picked_vid] += 1
+        chosen_files.append(downloads[picked_vid])
+        chosen_ids.append(picked_vid)
+        _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
 
-    # 4) Segment + altyazı
+    # 5) Segment + altyazı
     print("🎬 Segments…")
     segs = []
     for i, ((base_text, d), src) in enumerate(zip(metas, chosen_files)):
@@ -956,12 +1115,12 @@ def main():
         )
         segs.append(colored)
 
-    # 5) Birleştir
+    # 6) Birleştir
     print("🎞️ Assemble…")
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
-    # 6) Süre & kare kilitleme
+    # 7) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
     if vdur + 0.02 < adur:
         vcat_padded = str(pathlib.Path(tmp) / "video_padded.mp4")
@@ -973,7 +1132,7 @@ def main():
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
-    # 7) Mux
+    # 8) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Short"
     outp = f"{OUT_DIR}/{CHANNEL_NAME}_{safe_topic}_{ts}.mp4"
@@ -982,7 +1141,7 @@ def main():
     final = ffprobe_dur(outp)
     print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8) Metadata (long SEO)
+    # 9) Metadata (long SEO)
     title, description, yt_tags = build_long_description(CHANNEL_NAME, tpc, [m[0] for m in metas], tags)
 
     meta = {
@@ -994,7 +1153,7 @@ def main():
         "defaultAudioLanguage": LANG
     }
 
-    # 9) Upload (varsa env)
+    # 10) Upload (varsa env)
     try:
         if os.getenv("UPLOAD_TO_YT","1") == "1":
             print("📤 Uploading to YouTube…")
@@ -1005,7 +1164,13 @@ def main():
     except Exception as e:
         print(f"❌ Upload skipped: {e}")
 
-    # 10) Temizlik
+    # 11) Kullanılmış Pexels ID'lerini state'e ekle
+    try:
+        _blocklist_add_pexels(chosen_ids, days=30)
+    except Exception as e:
+        print(f"⚠️ Blocklist save warn: {e}")
+
+    # 12) Temizlik
     try:
         shutil.rmtree(tmp); print("🧹 Cleaned temp files")
     except: pass
