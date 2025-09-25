@@ -22,7 +22,6 @@ jobs:
   build-upload:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # Kanal bazlı vars/secrets için environment'ı bağla
     environment: ${{ inputs.environment }}
 
     steps:
@@ -59,22 +58,22 @@ jobs:
           restore-keys: |
             chstate-${{ inputs.environment }}-
 
-      # Environment vars (TOPIC dahil) → güvenli heredoc ile $GITHUB_ENV
+      # --- ENV EXPORT (SAFE) ---
       - name: Export channel variables (safe)
         shell: bash
         run: |
           {
-            echo "CHANNEL_NAME<<EOF";   echo "${{ inputs.environment }}";           echo "EOF";
-            echo "TOPIC<<EOF";          echo "${{ vars.TOPIC }}";                   echo "EOF";
-            echo "LANG<<EOF";           echo "${{ vars.LANG }}";                    echo "EOF";
-            echo "MODE<<EOF";           echo "${{ vars.MODE }}";                    echo "EOF";
-            echo "VISIBILITY<<EOF";     echo "${{ vars.VISIBILITY }}";              echo "EOF";
-            echo "ROTATION_SEED<<EOF";  echo "${{ vars.ROTATION_SEED }}";           echo "EOF";
-            echo "SEARCH_TERMS<<EOF";   echo "${{ vars.SEARCH_TERMS }}";            echo "EOF";
-            echo "GEMINI_PROMPT<<EOF";  echo "${{ vars.GEMINI_PROMPT }}";           echo "EOF";
-            echo "TTS_RATE<<EOF";       echo "${{ vars.TTS_RATE }}";                echo "EOF";
-            echo "TTS_VOICE<<EOF";      echo "${{ vars.TTS_VOICE }}";               echo "EOF";
-            echo "UPLOAD_TO_YT<<EOF";   echo "1";                                   echo "EOF";
+            printf 'CHANNEL_NAME<<__EOF_CHANNEL__\n';   printf '%s\n' "${{ inputs.environment }}";         printf '__EOF_CHANNEL__\n';
+            printf 'TOPIC<<__EOF_TOPIC__\n';            printf '%s\n' "${{ vars.TOPIC }}";                 printf '__EOF_TOPIC__\n';
+            printf 'LANG<<__EOF_LANG__\n';              printf '%s\n' "${{ vars.LANG }}";                  printf '__EOF_LANG__\n';
+            printf 'MODE<<__EOF_MODE__\n';              printf '%s\n' "${{ vars.MODE }}";                  printf '__EOF_MODE__\n';
+            printf 'VISIBILITY<<__EOF_VIS__\n';         printf '%s\n' "${{ vars.VISIBILITY }}";            printf '__EOF_VIS__\n';
+            printf 'ROTATION_SEED<<__EOF_SEED__\n';     printf '%s\n' "${{ vars.ROTATION_SEED }}";         printf '__EOF_SEED__\n';
+            printf 'SEARCH_TERMS<<__EOF_TERMS__\n';     printf '%s\n' "${{ vars.SEARCH_TERMS }}";          printf '__EOF_TERMS__\n';
+            printf 'GEMINI_PROMPT<<__EOF_GPR__\n';      printf '%s\n' "${{ vars.GEMINI_PROMPT }}";         printf '__EOF_GPR__\n';
+            printf 'TTS_RATE<<__EOF_TR__\n';            printf '%s\n' "${{ vars.TTS_RATE }}";              printf '__EOF_TR__\n';
+            printf 'TTS_VOICE<<__EOF_TV__\n';           printf '%s\n' "${{ vars.TTS_VOICE }}";             printf '__EOF_TV__\n';
+            printf 'UPLOAD_TO_YT<<__EOF_UP__\n';        printf '%s\n' "1";                                 printf '__EOF_UP__\n';
           } >> "$GITHUB_ENV"
 
       - name: Install deps
