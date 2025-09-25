@@ -508,7 +508,7 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     # === YENİ: global hız düzeltmeleri ===
     # 1) hızlı akış (yüzde): 1.5 → ~%1.5 daha hızlı highlight
     try:
-        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "1.5"))
+        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "2.2"))
     except Exception:
         speedup_pct = 1.5
     speedup_pct = max(-5.0, min(5.0, speedup_pct))  # güvenli aralık
@@ -1458,6 +1458,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
