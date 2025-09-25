@@ -24,10 +24,10 @@ ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
 
-# Karaoke renkleri (ASS stili)
-KARAOKE_ACTIVE  = os.getenv("KARAOKE_ACTIVE",  "00FFD700")  # &H00RRGGBB (BGR değil, ASS RGBA'nın BGR'siz hali)
-KARAOKE_INACTIVE= os.getenv("KARAOKE_INACTIVE","00FFFFFF")
-KARAOKE_OUTLINE = os.getenv("KARAOKE_OUTLINE", "00000000")  # siyah
+# Karaoke renkleri (ASS stili) — hepsi SARI, aktif kelime MAVİ
+KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
+KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFD700")
+KARAOKE_OUTLINE  = os.getenv("KARAOKE_OUTLINE",  "#000000")
 
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
@@ -295,23 +295,20 @@ def _edge_stream_tts(text: str, voice: str, rate_env: str, mp3_out: str) -> List
         loop.run_until_complete(_run())
     return marks
 
-def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float) -> List[Tuple[str,float]]:
-    """Return [(WORD, seconds)] covering total duration. Fallback to equal-split if mismatch/empty."""
+def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float, atempo: float) -> List[Tuple[str,float]]:
+    """Return [(WORD, seconds)] whose sum ≈ total. Edge süreleri atempo ile ölçeklenir."""
     words = [w for w in re.split(r"\s+", (text or "").strip()) if w]
     if not words:
         return []
     out=[]
     if marks:
-        # group marks by whitespace tokens (ignore punctuation drift)
-        # naive: just take consecutive marks and map to words by order
         ms = [m for m in marks if (m.get("t1",0) > m.get("t0",0))]
         if len(ms) >= len(words)*0.6:
-            # take min(len))
             N = min(len(words), len(ms))
             for i in range(N):
-                dur = max(0.05, float(ms[i]["t1"]-ms[i]["t0"]))
+                # hızlandırmadan kaynaklı süre küçülür
+                dur = max(0.05, float(ms[i]["t1"]-ms[i]["t0"]) / max(0.5, atempo))
                 out.append((words[i], dur))
-            # if leftover words, distribute remaining time
             remain = max(0.0, total - sum(d for _,d in out))
             if len(words) > N and remain>0:
                 extra = (len(words)-N)
@@ -321,10 +318,8 @@ def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float) -
         else:
             out=[]
     if not out:
-        # equal split
         each = max(0.05, total/max(1,len(words)))
         out = [(w, each) for w in words]
-        # adjust rounding so sum≈total
         s = sum(d for _,d in out)
         if s>0 and abs(s-total)>0.02:
             out[-1] = (out[-1][0], max(0.05, out[-1][1] + (total-s)))
@@ -357,7 +352,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, marks, dur)
+        words = _merge_marks_to_words(text, marks, dur, atempo)
         return dur, words
     except WSServerHandshakeError as e:
         if getattr(e, "status", None) != 401 and "401" not in str(e):
@@ -385,7 +380,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, [], dur)
+        words = _merge_marks_to_words(text, [], dur, atempo)
         return dur, words
     except Exception as e:
         print(f"⚠️ edge-tts 401 → hızlı fallback TTS")
@@ -407,7 +402,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, [], dur)
+        words = _merge_marks_to_words(text, [], dur, atempo)
         return dur, words
     except Exception as e2:
         print(f"❌ TTS tüm yollar başarısız, sessizlik üretilecek: {e2}")
@@ -463,46 +458,59 @@ def _ass_time(s: float) -> str:
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
-    # ASS renk notasyonu: &HAABBGGRR; burada A yok (00), biz &H00RRGGBB verdik → yer değiştir.
+    # renk dönüşümü: #RRGGBB → &H00BBGGRR
     def _to_ass(c:str)->str:
         c=c.strip()
         if c.startswith("0x"): c=c[2:]
         if c.startswith("#"): c=c[1:]
         if len(c)==6: c="00"+c
-        # ASS BGR ister: RRGGBB -> BBGGRR
         rr=c[-6:-4]; gg=c[-4:-2]; bb=c[-2:]
         return f"&H00{bb}{gg}{rr}"
 
     fontname = "DejaVu Sans"
-    fontsize = 58 if is_hook else 52
-    margin_v = 270 if is_hook else 330
+    base_fs  = 58 if is_hook else 52
     outline  = 4 if is_hook else 3
 
-    # kelimeleri UPPERCASE
+    # ALL CAPS sözlük
     words_upper = [(re.sub(r"\s+"," ", w.upper()), d) for w,d in words if w.strip()]
     if not words_upper:
         words_upper = [(w.upper(), 0.5) for w in (text or "…").split()]
 
-    # \k (centisecond) dizisi toplam süre ile uyuşsun
+    # toplam süreyi cs'a çevir, \k dizisine dağıt
     total_cs = int(round(seg_dur*100))
     ds = [max(5, int(round(d*100))) for _,d in words_upper]
     diff = total_cs - sum(ds)
     if abs(diff) >= len(ds):
         ds[-1] = max(5, ds[-1]+diff)
     else:
-        # küçük farkı yay
         i=0; step=1 if diff>0 else -1
         while diff != 0 and ds:
             ds[i%len(ds)] = max(5, ds[i%len(ds)]+step)
             diff -= step; i+=1
 
-    # tek satırlı karaoke; istersen satır kır: çok uzun ise \N
-    cap = " ".join([w for w,_ in words_upper])
-    # kaba sarma (mobil)
-    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n","\\N")
+    # mobil sarmaya göre satır kırımları
+    cap_text = " ".join([w for w,_ in words_upper])
+    wrapped  = wrap_mobile_lines(cap_text, max_line_length=CAPTION_MAX_LINE, max_lines=3)
+    lines    = wrapped.split("\n")
+    line_counts = [len(ln.split()) for ln in lines if ln.strip()]
+    breaks = set()
+    cum = 0
+    for cnt in line_counts[:-1]:
+        cum += cnt
+        breaks.add(cum)
 
-    # ama \k tokenleri için orijinal sıra lazım:
-    kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(len(words_upper))]).strip()
+    # \k satırı — doğru yerlere \N
+    parts = []
+    for idx, ((w,_), cs) in enumerate(zip(words_upper, ds), start=1):
+        parts.append(f"{{\\k{cs}}}{w}")
+        if idx in breaks: parts.append("\\N")
+        else: parts.append(" ")
+    kline = "".join(parts).strip()
+
+    # satır sayısına göre MarginV / Fontsize
+    n_lines = max(1, len(lines))
+    margin_v = 660 if n_lines <= 3 else (720 if n_lines == 4 else 760)
+    fontsize = max(22, int(base_fs * (0.96 if n_lines>=5 else 1.0)))
 
     ass = f"""[Script Info]
 ScriptType: v4.00+
@@ -521,12 +529,10 @@ Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outli
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
     """KARAOKE öncelikli. subtitles yoksa drawtext; ikisi de yoksa opsiyonel fail."""
-    # segment süresi
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
     if KARAOKE_CAPTIONS and _HAS_SUBTITLES:
-        # karaoke (ALL CAPS + kelime highlight)
         words = words or []
         ass_txt = _build_karaoke_ass(text, seg_dur, words, is_hook)
         ass_path = str(pathlib.Path(seg).with_suffix(".ass"))
@@ -770,7 +776,6 @@ def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], 
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
 - Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
-    # hafif jitter: aynı TOPIC ile bile çeşitlilik
     jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
     temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
 
