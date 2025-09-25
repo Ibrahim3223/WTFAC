@@ -10,7 +10,17 @@ TARGET_MAX_SEC = float(os.getenv("TARGET_MAX_SEC", "42"))
 
 CHANNEL_NAME   = os.getenv("CHANNEL_NAME", "DefaultChannel")
 MODE           = os.getenv("MODE", "freeform").strip().lower()  # sadece LOG için
-LANG           = os.getenv("LANG", "en")
+
+def _sanitize_lang(val: Optional[str]) -> str:
+    val = (val or "").strip()
+    # Öncelik: VIDEO_LANG -> yoksa LANG
+    if not val:
+        return "en"
+    # ör. "en-US", "tr_TR.UTF-8", "C.UTF-8" → sadece iki harf
+    m = re.match(r"([A-Za-z]{2})", val)
+    return (m.group(1).lower() if m else "en")
+
+LANG           = _sanitize_lang(os.getenv("VIDEO_LANG") or os.getenv("LANG") or "en")
 VISIBILITY     = os.getenv("VISIBILITY", "public")
 ROTATION_SEED  = int(os.getenv("ROTATION_SEED", "0"))
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
@@ -44,15 +54,15 @@ CRF_VISUAL       = 22
 CAPTION_MAX_LINE  = int(os.getenv("CAPTION_MAX_LINE",  "28"))
 CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
 
-# ---------- Pexels ayarları (TOPIC odaklı, dikey ve süre filtreli) ----------
+# ---------- Pexels ayarları ----------
 PEXELS_PER_PAGE            = int(os.getenv("PEXELS_PER_PAGE", "30"))
-PEXELS_MAX_USES_PER_CLIP   = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))  # bir klibi kaç sahnede kullanabiliriz
-PEXELS_ALLOW_LANDSCAPE     = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"  # landscape kabul edip crop’layalım mı
-PEXELS_MIN_DURATION        = int(os.getenv("PEXELS_MIN_DURATION", "3"))       # saniye
+PEXELS_MAX_USES_PER_CLIP   = int(os.getenv("PEXELS_MAX_USES_PER_CLIP", "1"))
+PEXELS_ALLOW_LANDSCAPE     = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"
+PEXELS_MIN_DURATION        = int(os.getenv("PEXELS_MIN_DURATION", "3"))
 PEXELS_MAX_DURATION        = int(os.getenv("PEXELS_MAX_DURATION", "13"))
-PEXELS_MIN_HEIGHT          = int(os.getenv("PEXELS_MIN_HEIGHT",   "1280"))    # dikey 1080x1920 güvenli alan
-PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "1") == "1"  # h>w şartı
-ALLOW_PIXABAY_FALLBACK     = os.getenv("ALLOW_PIXABAY_FALLBACK", "1") == "1"  # Pixabay opsiyonel fallback
+PEXELS_MIN_HEIGHT          = int(os.getenv("PEXELS_MIN_HEIGHT",   "1280"))
+PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "1") == "1"
+ALLOW_PIXABAY_FALLBACK     = os.getenv("ALLOW_PIXABAY_FALLBACK", "1") == "1"
 PIXABAY_API_KEY            = os.getenv("PIXABAY_API_KEY", "").strip()
 
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
@@ -104,6 +114,20 @@ def ffprobe_dur(p):
         return float(out) if out else 0.0
     except:
         return 0.0
+
+def ffmpeg_has_filter(name: str) -> bool:
+    try:
+        out = run(["ffmpeg","-hide_banner","-filters"], check=False).stdout
+        name = name.strip()
+        for line in out.splitlines():
+            # satır: " T.. drawtext         V->V       Draw text on top of video frames using libfreetype library"
+            if re.search(rf"\b{name}\b", line):
+                return True
+        return False
+    except Exception:
+        return False
+
+_HAS_DRAWTEXT = ffmpeg_has_filter("drawtext")
 
 def font_path():
     for p in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -290,8 +314,9 @@ def tts_to_wav(text: str, wav_out: str) -> float:
         except Exception as e:
             print(f"⚠️ edge-tts deneme {attempt+1}/2 başarısız: {e}"); time.sleep(0.8)
     try:
+        # Google TTS fallback — LANG sanitize edildi (ör. 'en'/'tr')
         q = requests.utils.quote(text.replace('"','').replace("'",""))
-        lang_code = (LANG or "en")
+        lang_code = LANG or "en"
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
         headers = {"User-Agent": "Mozilla/5.0"}
         r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
@@ -354,6 +379,15 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     ])
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False):
+    # Eğer drawtext yoksa, çökme yerine sessizce pas geç
+    if not _HAS_DRAWTEXT:
+        print("⚠️ FFmpeg 'drawtext' filter yok — caption atlanıyor.")
+        # Süre/kareyi koruyarak doğrudan kopyalayalım
+        seg_dur = ffprobe_dur(seg)
+        frames = max(2, int(round(seg_dur * TARGET_FPS)))
+        enforce_video_exact_frames(seg, frames, outp)
+        return
+
     wrapped = wrap_mobile_lines(clean_caption_text(text), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
     tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
@@ -376,6 +410,12 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
     if n_lines >= 6:   y_pos = "(h*0.55 - text_h/2)"
     elif n_lines >= 4: y_pos = "(h*0.58 - text_h/2)"
     else:              y_pos = "h-h/3-text_h/2"
+
+    def _ff_color(c: str) -> str:
+        c = (c or "").strip()
+        if c.startswith("#"): return "0x" + c[1:].upper()
+        if re.fullmatch(r"0x[0-9A-Fa-f]{6}", c): return c
+        return "white"
 
     col = _ff_color(color)
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
@@ -515,13 +555,12 @@ BANNED_PHRASES = [
 
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
-    tot = len(sentences)
     bad = 0
     for s in sentences:
         low = (s or "").lower()
         if any(bp in low for bp in BANNED_PHRASES): bad += 1
         if len(low.split()) < 5: bad += 0.5
-    return max(0.0, 10.0 - (bad * 1.4))  # 10 iyi, 0 kötü
+    return max(0.0, 10.0 - (bad * 1.4))
 
 def _gemini_call(prompt: str, model: str) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
@@ -685,12 +724,10 @@ def _gen_topic_query_candidates(topic: str, terms: List[str]) -> List[str]:
     for t in (terms or []):
         tt = _simplify_query(t, keep=2)
         if tt and tt not in out: out.append(tt)
-    # Tek kelimelik ultra-sade
     if base:
         for w in base.split():
             if w not in out:
                 out.append(w)
-    # Biraz genel B-roll tohumları
     for g in ["city timelapse","ocean waves","forest path","night skyline","macro detail","street crowd","mountain landscape"]:
         if g not in out: out.append(g)
     return out[:20]
@@ -705,7 +742,6 @@ def _pexels_headers():
 def _is_vertical_ok(w: int, h: int) -> bool:
     if PEXELS_STRICT_VERTICAL:
         return h > w and h >= PEXELS_MIN_HEIGHT
-    # Landscape kabul edilecekse de en azından yükseklik yeterli olsun
     return (h >= PEXELS_MIN_HEIGHT) and (h >= w or PEXELS_ALLOW_LANDSCAPE)
 
 def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None) -> List[Tuple[int, str, int, int, float]]:
@@ -718,7 +754,7 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
             "query": query,
             "per_page": per_page,
             "page": page,
-            "orientation": "portrait",   # server-side portre bias
+            "orientation": "portrait",
             "size": "large",
             "locale": locale
         },
@@ -742,7 +778,6 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
                 pf.append((w,h,x.get("link")))
         if not pf: 
             continue
-        # 1440-1920 bandına yakın olanları öne al
         pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
         w,h,link = pf[0]
         out.append((vid, link, w, h, dur))
@@ -801,7 +836,6 @@ def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
                 continue
             vids = h.get("videos", {})
             chosen=None
-            # büyükten küçüğe
             for qual in ("large","medium","small","tiny"):
                 v = vids.get(qual)
                 if not v: continue
@@ -833,17 +867,13 @@ def _rank_and_dedup(items: List[Tuple[int, str, int, int, float]], qtokens: Set[
     return out
 
 def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
-    """TOPIC-öncelikli + per-scene queries + çok sayfa + popular + (opsiyonel) pixabay fallback."""
     random.seed(rotation_seed or int(time.time()))
     locale = "tr-TR" if LANG.startswith("tr") else "en-US"
     block = _blocklist_get_pexels()
 
-    # 1) Per-scene kısa sorgular
     per_scene = build_per_scene_queries(sentences, search_terms, topic=topic)
-    # 2) Topic tabanlı sade adaylar
     topic_cands = _gen_topic_query_candidates(topic, search_terms)
     queries = []
-    # önce per-scene, sonra topic based; tekrarları at
     seen_q=set()
     for q in per_scene + topic_cands:
         q = (q or "").strip()
@@ -853,45 +883,37 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     pool: List[Tuple[int,str]] = []
     qtokens_cache: Dict[str, Set[str]] = {}
 
-    # 3) Her sorguda birden fazla sayfa tara
     for q in queries:
         qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
         merged: List[Tuple[int, str, int, int, float]] = []
         for page in (1, 2, 3):
             merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
-            # hızlı erken çıkış
             if len(merged) >= need*3:
                 break
         ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
-        pool += ranked[:max(3, need//2)]  # her sorgudan sınırlı katkı
-        # yeterince topladıysak çık
+        pool += ranked[:max(3, need//2)]
         if len(pool) >= need*2:
             break
 
-    # 4) Popular fallback
     if len(pool) < need:
         merged=[]
         for page in (1,2,3):
             merged += _pexels_popular(locale, page=page, per_page=40)
             if len(merged) >= need*3:
                 break
-        # popular'da query yok; hafif bir overlap hesabı yapamayız, direkt sade skor
         pop_rank = _rank_and_dedup(merged, set(), block)
         pool += pop_rank[:need*2 - len(pool)]
 
-    # 5) Pixabay fallback (opsiyonel)
     if len(pool) < need:
         fallback_q = (queries[-1] if queries else _simplify_query(topic, keep=1)) or "city"
         pix = _pixabay_fallback(fallback_q, need - len(pool), locale)
         pool += pix
 
-    # Tekrarsız + blocklist filtrasyonunu yineleyelim
     seen=set(); dedup=[]
     for vid, link in pool:
         if vid in seen: continue
         seen.add(vid); dedup.append((vid, link))
 
-    # Yeni klipleri öne al
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
     rest  = [(vid,link) for vid,link in dedup if vid in block]
     final = (fresh + rest)[:max(need, len(sentences))]
@@ -929,20 +951,16 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 # -------------------- Long SEO Description --------------------
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
-    # Başlık
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
     title = (hook[:1].upper() + hook[1:])[:95]
 
-    # Kısa pasajları akıcı paragrafa çevir
     para = " ".join(sentences)
-    # Hafif genişletme
     explainer = (
         f"{para} "
         f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
         f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
     )
 
-    # Hashtag seti
     tagset = []
     base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
     for t in base_terms:
@@ -954,7 +972,6 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
             if tclean and ("#"+tclean) not in tagset:
                 tagset.append("#"+tclean)
 
-    # 2000 karaktere yakınlama
     body = (
         f"{explainer}\n\n"
         f"— Key takeaways —\n"
@@ -969,7 +986,6 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
     if len(body) > 4900:
         body = body[:4900]
 
-    # YouTube tag list (max ~15)
     yt_tags = []
     for h in tagset:
         k = h[1:]
@@ -982,6 +998,8 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
 # -------------------- Main --------------------
 def main():
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
+    if not _HAS_DRAWTEXT:
+        print("⚠️ UYARI: FFmpeg 'drawtext' filtresi yok (libfreetype eksik). Altyazılar geçici olarak devre dışı.")
     random.seed(ROTATION_SEED or int(time.time()))
 
     topic_lock = TOPIC or "Interesting Visual Explainers"
@@ -1044,7 +1062,7 @@ def main():
         wavs.append(w); metas.append((base, d))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 3) Pexels — TOPIC odaklı, çok sayfalı, popular + pixabay fallback
+    # 3) Pexels — TOPIC odaklı
     per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
     print("🔎 Per-scene queries:")
     for q in per_scene_queries: print(f"   • {q}")
@@ -1061,7 +1079,7 @@ def main():
     if not pool:
         raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
 
-    # 4) İndir ve tekrar limiti ile dağıt
+    # 4) İndir ve dağıt
     downloads: Dict[int,str] = {}
     print("⬇️ Download pool…")
     for idx, (vid, link) in enumerate(pool):
@@ -1085,7 +1103,6 @@ def main():
     chosen_ids: List[int] = []
     for i in range(len(metas)):
         picked_vid = None
-        # öncelik: hiç kullanılmamış
         for vid in list(usage.keys()):
             if usage[vid] < PEXELS_MAX_USES_PER_CLIP:
                 picked_vid = vid
