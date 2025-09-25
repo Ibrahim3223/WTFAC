@@ -30,7 +30,7 @@ KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
 KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFD700")
 KARAOKE_OUTLINE  = os.getenv("KARAOKE_OUTLINE",  "#000000")
 # Global “erken başlatma”: highlight'ı sese 60–120ms kadar önden yürütür.
-CAPTION_LEAD_MS  = int(os.getenv("CAPTION_LEAD_MS", "80"))
+CAPTION_LEAD_MS  = int(os.getenv("CAPTION_LEAD_MS", "150"))
 
 OUT_DIR        = "out"; pathlib.Path(OUT_DIR).mkdir(exist_ok=True)
 
@@ -1458,6 +1458,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
