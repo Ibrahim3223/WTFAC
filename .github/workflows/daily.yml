@@ -1,79 +1,133 @@
-name: daily
+name: Daily Shorts (single channel)
 
 on:
   workflow_dispatch:
     inputs:
-      channel:
-        description: GitHub Environment adı (kanal adıyla birebir aynı)
+      environment:
+        description: "Environment (channel) name"
         required: true
         type: string
 
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  id-token: none
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
   build-upload:
-    runs-on: ubuntu-24.04
-
-    # Bu çok önemli: job'ı ilgili Environment üzerinde koşturuyoruz
-    environment:
-      name: ${{ inputs.channel }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Kanal bazlı onay/secrets; vars.* bu environment'tan gelir
+    environment: ${{ inputs.environment }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: pip
+          python-version: "3.10"
+          cache: "pip"
           cache-dependency-path: requirements.txt
 
-      - uses: FedericoCarboni/setup-ffmpeg@v3
+      - name: Setup FFmpeg (fast + cached)
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
 
-      # Environment Variables (vars.*) -> gerçek env
+      # --- STATE CACHE (GLOBAL) - RESTORE ---
+      - name: Restore global state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: state_global.json
+          key: global-state-${{ github.run_id }}
+          restore-keys: |
+            global-state-
+
+      # --- STATE CACHE (CHANNEL) - RESTORE ---
+      - name: Restore channel state cache
+        uses: actions/cache/restore@v4
+        env:
+          CHANNEL_NAME: ${{ inputs.environment }}
+        with:
+          path: state_${{ env.CHANNEL_NAME }}.json
+          key: chstate-${{ env.CHANNEL_NAME }}-${{ github.run_id }}
+          restore-keys: |
+            chstate-${{ env.CHANNEL_NAME }}-
+
+      # Environment vars (Environment → gerçek env). TOPIC/TERMS dahil!
       - name: Export channel variables
         shell: bash
         run: |
-          echo "CHANNEL_NAME=${{ inputs.channel }}" >> $GITHUB_ENV
+          echo "CHANNEL_NAME=${{ inputs.environment }}" >> $GITHUB_ENV
           echo "TOPIC=${{ vars.TOPIC }}" >> $GITHUB_ENV
           echo "LANG=${{ vars.LANG }}" >> $GITHUB_ENV
           echo "MODE=${{ vars.MODE }}" >> $GITHUB_ENV
+          echo "VISIBILITY=${{ vars.VISIBILITY }}" >> $GITHUB_ENV
           echo "ROTATION_SEED=${{ vars.ROTATION_SEED }}" >> $GITHUB_ENV
           echo "SEARCH_TERMS=${{ vars.SEARCH_TERMS }}" >> $GITHUB_ENV
           echo "GEMINI_PROMPT=${{ vars.GEMINI_PROMPT }}" >> $GITHUB_ENV
           echo "TTS_RATE=${{ vars.TTS_RATE }}" >> $GITHUB_ENV
           echo "TTS_VOICE=${{ vars.TTS_VOICE }}" >> $GITHUB_ENV
-          echo "VISIBILITY=${{ vars.VISIBILITY }}" >> $GITHUB_ENV
+          echo "UPLOAD_TO_YT=1" >> $GITHUB_ENV
 
       - name: Install deps
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
 
-      - name: Run autoshorts
+      - name: Build video
         env:
-          # Secrets
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
-          # Video / caption ayarları
-          UPLOAD_TO_YT: "1"
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
-          KARAOKE_MODE: "fill"          # fill = kelime-içi dolum (önerilen)
-          CAPTIONS_UPPER: "1"           # altyazı tam büyük harf
-          KARAOKE_INACTIVE: "#FFD700"   # tüm metin SARI
-          KARAOKE_ACTIVE:   "#1E90FF"   # aktif kelime MAVİ (hafif, göze hoş)
-          KARAOKE_OUTLINE:  "#000000"   # ince siyah kontur
+          CAPTIONS_UPPER:   "1"
+          KARAOKE_MODE:     "fill"
+          KARAOKE_INACTIVE: "#FFD700"
+          KARAOKE_ACTIVE:   "#3EA6FF"
+          KARAOKE_OUTLINE:  "#000000"
         run: |
-          echo "DEBUG TOPIC=$TOPIC  LANG=$LANG  SEARCH_TERMS=$SEARCH_TERMS"
+          echo "== ${CHANNEL_NAME} =="
+          echo "TOPIC=$TOPIC"
+          echo "LANG=$LANG"
+          echo "SEARCH_TERMS=$SEARCH_TERMS"
           python autoshorts_daily.py
 
-      - name: Upload MP4 artifact
+      - name: Upload artifact (mp4)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.channel }}-short
+          name: ${{ inputs.environment }}-short
           path: |
             out/**/*.mp4
             out/*.mp4
+          if-no-files-found: ignore
           retention-days: 7
+
+      # --- STATE CACHE - SAVE ---
+      - name: Save global state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state_global.json
+          key: global-state-${{ github.run_id }}
+
+      - name: Save channel state cache
+        if: always()
+        uses: actions/cache/save@v4
+        env:
+          CHANNEL_NAME: ${{ inputs.environment }}
+        with:
+          path: state_${{ env.CHANNEL_NAME }}.json
+          key: chstate-${{ env.CHANNEL_NAME }}-${{ github.run_id }}
