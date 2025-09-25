@@ -558,11 +558,31 @@ def _proper_phrases(texts: List[str]) -> List[str]:
         if p not in seen: seen.add(p); out.append(p)
     return out
 def _domain_synonyms(all_text: str) -> List[str]:
-    t=(all_text or "").lower(); s=set()
-    if any(k in t for k in ["bridge","tunnel","arch","span"]): s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
-    if any(k in t for k in ["ocean","coast","tide","wave","storm"]): s.update(["ocean waves","coastal storm","rocky coast","lighthouse coast"])
-    if any(k in t for k in ["timelapse","growth","melt","cloud"]): s.update(["city timelapse","plant growth","melting ice","cloud timelapse"])
-    if any(k in t for k in ["mechanism","gears","pulley","cam"]): s.update(["macro gears","belt pulley","cam follower","robotic arm macro"])
+    t = (all_text or "").lower()
+    s = set()
+
+    # bridges / mechanisms / oceans (mevcutlar korunuyor)
+    if any(k in t for k in ["bridge","tunnel","arch","span"]):
+        s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
+    if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
+        s.update(["ocean waves","coastal storm","rocky coast","lighthouse coast"])
+    if any(k in t for k in ["timelapse","growth","melt","cloud"]):
+        s.update(["city timelapse","plant growth","melting ice","cloud timelapse"])
+    if any(k in t for k in ["mechanism","gears","pulley","cam"]):
+        s.update(["macro gears","belt pulley","cam follower","robotic arm macro"])
+
+    # *** SPACE domain (yeni) ***
+    if any(k in t for k in [
+        "space","rocket","satellite","orbit","astronaut","planet","galaxy","star",
+        "cosmos","nasa","spacex","launch","moon","mars","earth"
+    ]):
+        s.update([
+            "rocket launch","rocket on launch pad","space launch night",
+            "astronaut spacewalk","satellite in orbit","earth from space",
+            "international space station","mission control nasa","night sky stars",
+            "milky way galaxy","colorful nebula","moon surface","mars landscape",
+            "telescope observatory","iss window earth"
+        ])
     return list(s)
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
     topic=(topic or "").strip()
@@ -590,9 +610,28 @@ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], top
             picked=fb[fb_idx % len(fb)]; fb_idx+=1
         if (not picked or len(picked)<4) and topic_key_join: picked=topic_key_join
         if not picked or picked in ("great","nice","good","bad","things","stuff"): picked="macro detail"
-        if len(picked.split())>2: w=picked.split(); picked=f"{w[-2]} {w[-1]}"
+                if len(picked.split()) > 2:
+            w = picked.split(); picked = f"{w[-2]} {w[-1]}"
+
+        # zayıf/fiil ağırlıklı sorguları at ve domain/fallback kullan
+        if _looks_bad_query(picked):
+            if topic_key_join:
+                picked = topic_key_join
+        if _looks_bad_query(picked):
+            picked = "macro detail"
+
         queries.append(picked)
     return queries
+    # Kötü, anlamsız sorgu parçaları (fiil/bağlaç ağırlıklı)
+_BAD_QUERY_WORDS = {
+    "work","works","working","create","creates","creating","equal","equals",
+    "eventually","multiple","direct","expelling","liquid","solid","thing","things",
+    "stuff","very","more","most","good","great","nice","just","also","only"
+}
+def _looks_bad_query(q: str) -> bool:
+    toks = re.findall(r"[a-z]+", q.lower())
+    return (len(toks) <= 1) or any(t in _BAD_QUERY_WORDS for t in toks)
+
 
 # =============================================================================
 # Pexels (multi-pick + variety)
@@ -601,38 +640,99 @@ _USED_PEXELS_IDS_RUNTIME=set()
 def _pexels_headers():
     if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
     return {"Authorization": PEXELS_API_KEY}
-def _pexels_search(query: str, locale: str) -> List[Tuple[int,str,int,int,float]]:
-    url="https://api.pexels.com/videos/search"
-    r=requests.get(url, headers=_pexels_headers(), params={"query":query,"per_page":max(10,min(80,PEXELS_PER_PAGE)),"orientation":"portrait","size":"large","locale":locale}, timeout=30)
-    if r.status_code!=200: return []
-    data=r.json() or {}; out=[]
+def _pexels_search(query: str, locale: str, relaxed: bool = False) -> List[Tuple[int, str, int, int, float]]:
+    url = "https://api.pexels.com/videos/search"
+    params = {
+        "query": query,
+        "per_page": max(10, min(80, PEXELS_PER_PAGE)),
+        "size": ("large" if not relaxed else "medium"),
+        "locale": locale
+    }
+    if not relaxed:
+        params["orientation"] = "portrait"  # ilk deneme dikey
+
+    r = requests.get(url, headers=_pexels_headers(), params=params, timeout=30)
+    if r.status_code != 200:
+        return []
+    data = r.json() or {}
+    out=[]
     for v in data.get("videos", []):
-        vid=int(v.get("id",0)); dur=float(v.get("duration",0.0)); files=v.get("video_files", []) or []
+        vid = int(v.get("id", 0))
+        dur = float(v.get("duration",0.0))
+        files = v.get("video_files", []) or []
+        if not files: continue
+        pf = []
+        for x in files:
+            w = int(x.get("width",0)); h = int(x.get("height",0))
+            # relaxed modda 720p+ ve landscape kabul; normalde 1080p+ ve portrait öncelik
+            hmin = 1080 if not relaxed else 720
+            if h >= hmin and (h >= w or PEXELS_ALLOW_LANDSCAPE or relaxed):
+                pf.append((w,h,x.get("link")))
+        if not pf: continue
+        pf.sort(key=lambda t: (abs(t[1]-1440), -t[0]*t[1]))
+        w,h,link = pf[0]
+        out.append((vid, link, w, h, dur))
+
+    # ilk arama boşsa: orientation serbest + 720p (relaxed) tekrar dene
+    if not out and not relaxed:
+        return _pexels_search(query, locale, relaxed=True)
+    return out
+
+def _pexels_popular(locale: str) -> List[Tuple[int, str, int, int, float]]:
+    url = "https://api.pexels.com/videos/popular"
+    r = requests.get(url, headers=_pexels_headers(),
+                     params={"per_page": max(10, min(80, PEXELS_PER_PAGE)), "min_width": 720, "min_height": 720, "locale": locale},
+                     timeout=30)
+    if r.status_code != 200:
+        return []
+    data = r.json() or {}
+    out=[]
+    for v in data.get("videos", []):
+        vid = int(v.get("id", 0))
+        dur = float(v.get("duration",0.0))
+        files = v.get("video_files", []) or []
         if not files: continue
         pf=[]
         for x in files:
-            w=int(x.get("width",0)); h=int(x.get("height",0))
-            if h>=1080 and (h>=w or PEXELS_ALLOW_LANDSCAPE): pf.append((w,h,x.get("link")))
+            w = int(x.get("width",0)); h = int(x.get("height",0))
+            if h >= 720: pf.append((w,h,x.get("link")))
         if not pf: continue
-        pf.sort(key=lambda t:(abs(t[1]-1440), t[0]*t[1])); w,h,link=pf[0]
-        out.append((vid,link,w,h,dur))
+        pf.sort(key=lambda t: (abs(t[1]-1440), -t[0]*t[1]))
+        w,h,link = pf[0]
+        out.append((vid, link, w, h, dur))
     return out
 def pexels_pick_many(query: str) -> List[Tuple[int,str]]:
-    locale="tr-TR" if LANG.startswith("tr") else "en-US"
-    items=_pexels_search(query, locale)
-    if not items and locale=="tr-TR": items=_pexels_search(query, "en-US")
-    if not items: return []
-    block=_blocklist_get_pexels(); cand=[]; qtokens=set(re.findall(r"[a-z0-9]+", query.lower()))
-    for vid,link,w,h,dur in items:
-        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME: continue
-        dur_bonus=1.0 if 2.0<=dur<=12.0 else 0.0
-        tokens=set(re.findall(r"[a-z0-9]+", (link or "").lower()))
-        overlap=len(tokens & qtokens); score=overlap*2.0 + dur_bonus + (1.0 if 1080 <= h else 0.0)
-        cand.append((score,vid,link))
-    cand.sort(key=lambda x:x[0], reverse=True)
+    locale = "tr-TR" if LANG.startswith("tr") else "en-US"
+
+    qfixed = query.strip()
+    if _looks_bad_query(qfixed):
+        # space alanı için güçlü varsayılanlar
+        qfixed = "rocket launch"
+
+    items = _pexels_search(qfixed, locale, relaxed=False)
+    if not items:
+        # son çare: popular
+        items = _pexels_popular(locale)
+
+    if not items:
+        return []
+
+    block = _blocklist_get_pexels()
+    cand=[]
+    qtokens= set(re.findall(r"[a-z0-9]+", qfixed.lower()))
+    for vid, link, w, h, dur in items:
+        if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
+            continue
+        dur_bonus = 1.0 if 2.0 <= dur <= 12.0 else 0.0
+        tokens = set(re.findall(r"[a-z0-9]+", (link or "").lower()))
+        overlap = len(tokens & qtokens)
+        score = overlap*2.0 + dur_bonus + (1.0 if 1080 <= h else 0.0)
+        cand.append((score, vid, link))
+    cand.sort(key=lambda x: x[0], reverse=True)
     out=[]
-    for _,vid,link in cand:
-        if vid not in _USED_PEXELS_IDS_RUNTIME: out.append((vid,link))
+    for _, vid, link in cand:
+        if vid not in _USED_PEXELS_IDS_RUNTIME:
+            out.append((vid, link))
     return out[:5]
 
 # =============================================================================
@@ -772,14 +872,22 @@ def main():
         picks=pexels_pick_many(q)
         for vid,link in picks:
             if vid not in seen_ids: seen_ids.add(vid); pool.append((vid,link))
-    if len(pool)<len(metas):
-        extras=["macro detail","city timelapse","nature macro","clean interior","close up hands","ocean waves","night skyline","forest path","nature","globe","space","ocean"]
+    if len(pool) < len(metas):
+        extras = [
+            # space-strong fallbacks
+            "rocket launch","space launch pad","astronaut spacewalk","satellite in orbit",
+            "earth from space","international space station","mission control","milky way","colorful nebula",
+            "moon surface","mars landscape","telescope observatory",
+            # generic
+            "night sky stars","city timelapse","nature macro","close up hands","ocean waves",
+            "forest path","night skyline","cloud timelapse"
+        ]
         for q in (user_terms or []) + extras:
-            for vid,link in pexels_pick_many(q):
-                if vid not in seen_ids: seen_ids.add(vid); pool.append((vid,link))
-                if len(pool)>=len(metas)*2: break
-            if len(pool)>=len(metas)*2: break
-    if not pool: raise RuntimeError("Pexels: no suitable clips found.")
+            for vid, link in pexels_pick_many(q):
+                if vid not in seen_ids:
+                    seen_ids.add(vid); pool.append((vid, link))
+                if len(pool) >= len(metas)*2:
+                    break
 
     # Download pool
     downloads={}
@@ -880,3 +988,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
