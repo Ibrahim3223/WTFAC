@@ -195,7 +195,7 @@ jobs:
           CAPTION_LEAD_MS:     "80"
 
           # ==== BGM (Background Music) ====
-          BGM_ENABLE:   "1"        # 0: kapalı, 1: açık
+          BGM_ENABLE:   "0"        # 0: kapalı, 1: açık
           BGM_DIR:      "bgm"      # repo kökünde bgm/ klasörü
           BGM_GAIN_DB:  "-20"      # genel müzik seviyesi
           BGM_DUCK_DB:  "-6"       # konuşma sırasında ekstra kıs
