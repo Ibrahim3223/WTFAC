@@ -1424,43 +1424,77 @@ def _make_bgm_looped(src: str, dur: float, out_wav: str):
         out_wav
     ])
 
-# === FIXED: sidechain ducking/mix ===
-def _duck_and_mix(voice_in: str, bgm_in: str, out_wav: str):
-    """
-    voice_in  : TTS WAV (48k mono)
-    bgm_in    : loop/trim yapılmış BGM (48k mono)
-    out_wav   : çıktı WAV (48k mono)
-    Ortak env:
-      BGM_GAIN_DB, BGM_DUCK_DB, BGM_FADE_IN_S, BGM_FADE_OUT_S
-    """
-    bgm_gain_db = float(os.getenv("BGM_GAIN_DB", "-16"))
-    # threshold: sabit, ratio yüksek tut, makeup=1.0 güvenli
-    threshold = "0.02"
-    ratio = "12"
-    attack = "5"
-    release = "200"
-    fade_in = float(os.getenv("BGM_FADE_IN_S", "0.6"))
-    fade_out = float(os.getenv("BGM_FADE_OUT_S", "0.8"))
+# --- BGM helpers (ekleyin / değiştirin) ---
 
-    # 0:a = voice, 1:a = bgm
-    # ÖNEMLİ: sidechaincompress’te ana giriş BGM, sidechain konuşma olmalı.
-    # Sonra duck’lı BGM ile konuşmayı amix’le.
-    filtergraph = (
-        f"[0:a]volume=1.0[aV];"
-        f"[1:a]volume={bgm_gain_db}dB,"
-        f"afade=t=in:st=0:d={fade_in},"
-        f"afade=t=out:st=9999:d={fade_out}[aB];"
-        f"[aB][aV]sidechaincompress="
-        f"threshold={threshold}:ratio={ratio}:attack={attack}:release={release}:makeup=1.0[duck];"
-        f"[aV][duck]amix=inputs=2:duration=shortest,aresample=48000"
+def _find_bgm_candidates() -> List[str]:
+    """repo kökünde bgm/ klasöründen veya BGM_URLS (virgül/boşlukla ayrılmış http linkleri) listesinden adayları döndürür."""
+    out = []
+    try:
+        d = pathlib.Path("bgm")
+        if d.exists():
+            for pat in ("*.mp3","*.wav","*.m4a","*.flac","*.ogg"):
+                out += [str(p) for p in d.glob(pat)]
+    except Exception:
+        pass
+
+    urls = (os.getenv("BGM_URLS") or "").strip()
+    if urls:
+        for u in re.split(r"[,\s]+", urls):
+            u = u.strip()
+            if u.startswith("http"):
+                out.append(u)
+    return out
+
+def _loop_to_duration(bgm_in: str, target_sec: float, outp: str):
+    """
+    BGM'i tam süreye uzatır (gerekirse loop). Yerel dosya bekler; URL verdiysek önce indirildiğini varsayıyoruz.
+    """
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-stream_loop","-1","-t",f"{max(0.1,target_sec):.3f}",
+        "-i", bgm_in,
+        "-ar","48000","-ac","1",
+        "-af","dynaudnorm=f=250:g=4",
+        outp
+    ])
+
+def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
+    """
+    Seslendirme + BGM karışımı:
+      1) BGM'i önce istediğimiz dB'e çekeriz.
+      2) BGM'i, seslendirmeyi sidechain olarak kullanarak bastırırız (duck).
+      3) Sonra VOICE + DUCKED_BGM'i karıştırırız.
+    """
+    bgm_gain_db   = float(os.getenv("BGM_GAIN_DB", "-10"))     # daha yüksek için -8 / -6 deneyebilirsiniz
+    thr           = float(os.getenv("BGM_DUCK_THRESH", "0.03"))
+    ratio         = float(os.getenv("BGM_DUCK_RATIO",  "10"))
+    attack_ms     = int(os.getenv("BGM_DUCK_ATTACK_MS","6"))
+    release_ms    = int(os.getenv("BGM_DUCK_RELEASE_MS","180"))
+
+    # ÖNEMLİ: sidechaincompress SIRASI [PROGRAM][SIDECHAIN] → [BGM][VOICE]
+    # Ayrıca makeup en az 1 olmalı (0 hatası alıyordunuz).
+    sc = (
+        f"sidechaincompress="
+        f"threshold={thr}:ratio={ratio}:attack={attack_ms}:release={release_ms}:"
+        f"makeup=1.0:level_in=1.0:level_sc=1.0"
+    )
+
+    # 0:a = VOICE, 1:a = BGM
+    # BGM'i önce volume ile kıs, sonra VOICE ile duck et, sonra VOICE ile amix
+    filter_complex = (
+        f"[1:a]volume={bgm_gain_db}dB[b];"
+        f"[b][0:a]{sc}[duck];"
+        f"[0:a][duck]amix=inputs=2:weights=1 1:duration=shortest,"
+        f"aresample=48000"
     )
 
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", voice_in, "-i", bgm_in,
-        "-filter_complex", filtergraph,
-        "-ar","48000","-ac","1","-acodec","pcm_s16le",
-        out_wav
+        "-filter_complex", filter_complex,
+        "-ar","48000","-ac","1",
+        "-c:a","pcm_s16le",
+        outp
     ])
 
 # ==================== Main ====================
@@ -1742,5 +1776,6 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
