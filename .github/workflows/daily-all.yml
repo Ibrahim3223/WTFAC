@@ -213,7 +213,7 @@ jobs:
           BGM_DUCK_THRESH:    "0.03"
           BGM_DUCK_RATIO:     "10"
           BGM_DUCK_ATTACK_MS: "6"
-          BGM_DUCK_RELEASE_MS:"180"
+          BGM_DUCK_RELEASE_MS: "180"
           BGM_URLS:           ${{ vars.BGM_URLS }}  # opsiyonel (http linkleri, boşsa bgm/ klasörü taranır)
         run: |
           echo "== ${CHANNEL_NAME} =="
