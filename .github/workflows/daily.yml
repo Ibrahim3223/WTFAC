@@ -40,23 +40,7 @@ jobs:
         with:
           ffmpeg-version: release
 
-      - name: Restore global state cache
-        uses: actions/cache/restore@v4
-        with:
-          path: state_global.json
-          key: global-state-${{ github.run_id }}
-          restore-keys: |
-            global-state-
-
-      - name: Restore channel state cache
-        uses: actions/cache/restore@v4
-        with:
-          path: state_${{ inputs.environment }}.json
-          key: chstate-${{ inputs.environment }}-${{ github.run_id }}
-          restore-keys: |
-            chstate-${{ inputs.environment }}-
-
-      # ---------- SAFE ENV EXPORT ----------
+      # ---------- SAFE ENV EXPORT (ÖNCE) ----------
       - name: Export channel variables (safe)
         shell: bash
         env:
@@ -71,6 +55,7 @@ jobs:
           VARS_GEMINI_PROMPT:   ${{ vars.GEMINI_PROMPT }}
           VARS_TTS_RATE:        ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:       ${{ vars.TTS_VOICE }}
+          VARS_BGM_URLS:        ${{ vars.BGM_URLS }}   # optional JSON list (["https://.../track.mp3"])
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.20"
         run: |
@@ -82,6 +67,7 @@ jobs:
           VIS_VAL="${VARS_VISIBILITY:-}"
           SEED_VAL="${VARS_ROTATION_SEED:-}"
 
+          # env'e güvenli yazan yardımcı
           wenv () {
             local __name="$1"; shift
             local __val="$*"
@@ -103,7 +89,27 @@ jobs:
           wenv GEMINI_PROMPT       "${VARS_GEMINI_PROMPT}"
           wenv TTS_RATE            "${VARS_TTS_RATE}"
           wenv TTS_VOICE           "${VARS_TTS_VOICE}"
+          wenv BGM_URLS            "${VARS_BGM_URLS}"
           wenv UPLOAD_TO_YT        "1"
+
+      # ---------- STATE caches ----------
+      - name: Restore global state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            state_global.json
+            state_global_topics.json
+          key: global-state-${{ github.run_id }}
+          restore-keys: |
+            global-state-
+
+      - name: Restore channel state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: state_${{ inputs.environment }}.json
+          key: chstate-${{ inputs.environment }}-${{ github.run_id }}
+          restore-keys: |
+            chstate-${{ inputs.environment }}-
 
       - name: Install deps
         run: |
@@ -118,6 +124,7 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
+          # captions / karaoke
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER:   "1"
@@ -125,11 +132,24 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
-                    # ==== SYNC FIX ====
+          # ==== SYNC FIX ====
           KARAOKE_SPEEDUP_PCT: "5.0"   # genel hızlandırma (yüzde)
           KARAOKE_RAMP_PCT:    "2.0"   # sona doğru kademeli hızlanma (yüzde)
-          KARAOKE_EARLY_END_MS: "120"   # vurguyu cümle bitmeden biraz erken bitir (ms)
+          KARAOKE_EARLY_END_MS: "120"  # vurguyu cümle bitmeden biraz erken bitir (ms)
           CAPTION_LEAD_MS:     "80"    # başlangıcı hafifçe öne çek (ms)
+
+          # novelty gate (tekrar azaltma)
+          NOVELTY_ENFORCE: "1"
+          NOVELTY_WINDOW: "40"
+          NOVELTY_JACCARD_MAX: "0.55"
+          NOVELTY_RETRIES: "4"
+
+          # optional BGM
+          BGM_ENABLE: "0"      # müzik istiyorsan "1" yap
+          BGM_DB: "-26"
+          BGM_DUCK_DB: "-12"
+          BGM_FADE: "0.8"
+          BGM_DIR: "bgm"
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=${TOPIC}"
@@ -152,7 +172,9 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: state_global.json
+          path: |
+            state_global.json
+            state_global_topics.json
           key: global-state-${{ github.run_id }}
 
       - name: Save channel state cache
