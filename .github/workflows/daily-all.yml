@@ -87,6 +87,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: (Optional) Fetch LFS assets (e.g., bgm/)
+        run: |
+          if command -v git >/dev/null 2>&1; then
+            if git lfs version >/dev/null 2>&1; then git lfs pull || true; fi
+          fi
+          ls -la bgm || true
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -102,7 +109,9 @@ jobs:
       - name: Restore global state cache
         uses: actions/cache/restore@v4
         with:
-          path: state_global.json
+          path: |
+            state_global.json
+            state_global_topics.json
           key: global-state-${{ github.run_id }}
           restore-keys: |
             global-state-
@@ -134,10 +143,13 @@ jobs:
           VARS_GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
           VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
+
+          # karaoke timing
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.35"
         run: |
           set -euo pipefail
+
           CHANNEL_NAME="$MATRIX_NAME"
           LANG_VAL="${VARS_LANG:-$DEFAULT_LANG}"
           MODE_VAL="${VARS_MODE:-$DEFAULT_MODE}"
@@ -188,24 +200,21 @@ jobs:
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
 
-          # ==== SYNC FIX ====
-          KARAOKE_SPEEDUP_PCT: "5.0"
-          KARAOKE_RAMP_PCT:    "2.0"
+          # ==== CAPTION SYNC TWEAKS ====
+          KARAOKE_SPEEDUP_PCT:  "5.0"
+          KARAOKE_RAMP_PCT:     "2.0"
           KARAOKE_EARLY_END_MS: "120"
-          CAPTION_LEAD_MS:     "80"
+          CAPTION_LEAD_MS:      "80"
 
           # ==== BGM (Background Music) ====
-          BGM_ENABLE:   "0"        # 0: kapalı, 1: açık
-          BGM_DIR:      "bgm"      # repo kökünde bgm/ klasörü
-          BGM_GAIN_DB:  "-20"      # genel müzik seviyesi
-          BGM_DUCK_DB:  "-6"       # konuşma sırasında ekstra kıs
-          BGM_SHUFFLE:  "1"        # birden çok parça varsa karıştır
-          BGM_START_AT_SEC: "0"
-          BGM_FADE_IN_MS:  "600"
-          BGM_FADE_OUT_MS: "800"
-          # BGM_URLS: |           # yerel parça yoksa URL'den çekmek için aç
-          #   https://example.com/music1.mp3
-          #   https://example.com/music2.wav
+          BGM_ENABLE:         "1"     # <— BGM açık
+          BGM_SIDECHAIN:      "1"     # 1: ducking açık, 0: düz karışım
+          BGM_GAIN_DB:        "-10"   # genel arka plan seviyesi; gerekirse -8 / -6
+          BGM_DUCK_THRESH:    "0.03"
+          BGM_DUCK_RATIO:     "10"
+          BGM_DUCK_ATTACK_MS: "6"
+          BGM_DUCK_RELEASE_MS:"180"
+          BGM_URLS:           ${{ vars.BGM_URLS }}  # opsiyonel (http linkleri, boşsa bgm/ klasörü taranır)
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=${TOPIC}"
@@ -228,7 +237,9 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: state_global.json
+          path: |
+            state_global.json
+            state_global_topics.json
           key: global-state-${{ github.run_id }}
 
       - name: Save channel state cache
