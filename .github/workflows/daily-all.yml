@@ -164,6 +164,11 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"  # sarı taban
           KARAOKE_ACTIVE:   "#3EA6FF"  # mavi vurgu
           KARAOKE_OUTLINE:  "#000000"
+                    # ==== SYNC FIX ====
+          KARAOKE_SPEEDUP_PCT: "5.0"   # genel hızlandırma (yüzde)
+          KARAOKE_RAMP_PCT:    "2.0"   # sona doğru kademeli hızlanma (yüzde)
+          KARAOKE_EARLY_END_MS: "120"   # vurguyu cümle bitmeden biraz erken bitir (ms)
+          CAPTION_LEAD_MS:     "80"    # başlangıcı hafifçe öne çek (ms)
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=${TOPIC}"
