@@ -28,6 +28,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: (Optional) Fetch LFS assets (e.g., bgm/)
+        run: |
+          if command -v git >/dev/null 2>&1; then
+            if git lfs version >/dev/null 2>&1; then git lfs pull || true; fi
+          fi
+          ls -la bgm || true
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -55,7 +62,7 @@ jobs:
           VARS_GEMINI_PROMPT:   ${{ vars.GEMINI_PROMPT }}
           VARS_TTS_RATE:        ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:       ${{ vars.TTS_VOICE }}
-          VARS_BGM_URLS:        ${{ vars.BGM_URLS }}   # optional JSON list (["https://.../track.mp3"])
+          VARS_BGM_URLS:        ${{ vars.BGM_URLS }}   # optional (http linkleri)
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.20"
         run: |
@@ -67,7 +74,6 @@ jobs:
           VIS_VAL="${VARS_VISIBILITY:-}"
           SEED_VAL="${VARS_ROTATION_SEED:-}"
 
-          # env'e güvenli yazan yardımcı
           wenv () {
             local __name="$1"; shift
             local __val="$*"
@@ -132,24 +138,28 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
-          # ==== SYNC FIX ====
-          KARAOKE_SPEEDUP_PCT: "5.0"   # genel hızlandırma (yüzde)
-          KARAOKE_RAMP_PCT:    "2.0"   # sona doğru kademeli hızlanma (yüzde)
-          KARAOKE_EARLY_END_MS: "120"  # vurguyu cümle bitmeden biraz erken bitir (ms)
-          CAPTION_LEAD_MS:     "80"    # başlangıcı hafifçe öne çek (ms)
 
-          # novelty gate (tekrar azaltma)
+          # ==== SYNC FIX ====
+          KARAOKE_SPEEDUP_PCT: "5.0"
+          KARAOKE_RAMP_PCT:    "2.0"
+          KARAOKE_EARLY_END_MS: "120"
+          CAPTION_LEAD_MS:     "80"
+
+          # novelty gate (tekrar azaltma) — kod bunu kullanmıyorsa zararsızdır
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
           NOVELTY_JACCARD_MAX: "0.55"
           NOVELTY_RETRIES: "4"
 
-          # optional BGM
-          BGM_ENABLE: "1"      # müzik istiyorsan "1" yap
-          BGM_DB: "-26"
-          BGM_DUCK_DB: "-12"
-          BGM_FADE: "0.8"
-          BGM_DIR: "bgm"
+          # ==== BGM ====
+          BGM_ENABLE:         "1"
+          BGM_SIDECHAIN:      "1"
+          BGM_GAIN_DB:        "-10"
+          BGM_DUCK_THRESH:    "0.03"
+          BGM_DUCK_RATIO:     "10"
+          BGM_DUCK_ATTACK_MS: "6"
+          BGM_DUCK_RELEASE_MS:"180"
+          BGM_URLS:           ${{ vars.BGM_URLS }}  # opsiyonel; boşsa bgm/ klasörü taranır
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=${TOPIC}"
