@@ -1,6 +1,5 @@
 # autoshorts_daily.py — Topic-locked Gemini • Per-video search_terms • Robust Pexels
-# Captions: ALL CAPS + karaoke (word highlight) with drawtext/subtitles fallbacks
-# -*- coding: utf-8 -*-
+# Captions: ALL CAPS + karaoke (kelime highlight) — drawtext/subtitles fallback
 # -*- coding: utf-8 -*-
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
@@ -83,34 +82,6 @@ GEMINI_TEMP    = _env_float("GEMINI_TEMP", 0.85)
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
-def _env_int(name: str, default: int) -> int:
-    s = os.getenv(name)
-    if s is None:
-        return default
-    s = str(s).strip()
-    if s == "" or s.lower() == "none":
-        return default
-    try:
-        return int(s)
-    except ValueError:
-        # "68.0" gibi değerleri de tolere et
-        try:
-            return int(float(s))
-        except Exception:
-            return default
-
-def _env_float(name: str, default: float) -> float:
-    s = os.getenv(name)
-    if s is None:
-        return default
-    s = str(s).strip()
-    if s == "" or s.lower() == "none":
-        return default
-    try:
-        return float(s)
-    except Exception:
-        return default
-
 def _parse_terms(s: str) -> List[str]:
     s = (s or "").strip()
     if not s: return []
@@ -145,11 +116,25 @@ PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "1") == "1"
 ALLOW_PIXABAY_FALLBACK     = os.getenv("ALLOW_PIXABAY_FALLBACK", "1") == "1"
 PIXABAY_API_KEY            = os.getenv("PIXABAY_API_KEY", "").strip()
 
+# ---- State dosyaları (legacy uyumlu) ----
 STATE_FILE = f"state_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json"
 GLOBAL_TOPIC_STATE = "state_global_topics.json"
-# Cache adlarıyla tam uyum için legacy kopyalar
 LEGACY_STATE_FILE = f"state_{CHANNEL_NAME}.json"
 LEGACY_GLOBAL_STATE = "state_global.json"
+
+# === NOVELTY (tekrar engelleme) — ENV ===
+NOVELTY_ENFORCE       = os.getenv("NOVELTY_ENFORCE", "1") == "1"
+NOVELTY_WINDOW        = _env_int("NOVELTY_WINDOW", 40)
+NOVELTY_JACCARD_MAX   = _env_float("NOVELTY_JACCARD_MAX", 0.55)
+NOVELTY_RETRIES       = _env_int("NOVELTY_RETRIES", 4)
+
+# === BGM (arka müzik) — ENV ===
+BGM_ENABLE  = os.getenv("BGM_ENABLE", "0") == "1"
+BGM_DB      = _env_float("BGM_DB", -26.0)          # temel müzik seviyesi (dB)
+BGM_DUCK_DB = _env_float("BGM_DUCK_DB", -12.0)     # konuşmada kısılacak miktar (dB) — sidechaincompress ile
+BGM_FADE    = _env_float("BGM_FADE", 0.8)          # giriş/çıkış fade saniyesi
+BGM_DIR     = os.getenv("BGM_DIR", "bgm").strip()
+BGM_URLS    = _parse_terms(os.getenv("BGM_URLS", ""))  # JSON/virgül listesini destekler
 
 # ==================== deps (auto-install) ====================
 def _pip(p): subprocess.run([sys.executable, "-m", "pip", "install", "-q", p], check=True)
@@ -173,6 +158,7 @@ try:
 except ImportError:
     _pip("google-auth"); from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
+from googleapiclient.errors import HttpError
 
 # ==================== Voices ====================
 VOICE_OPTIONS = {
@@ -247,8 +233,14 @@ def _save_json(path, data):
         pass
 
 def _state_load() -> dict:
-    st = _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
-    return st
+    # Önce modern dosya, yoksa legacy'den yükleyip promote et
+    if pathlib.Path(STATE_FILE).exists():
+        return _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
+    if pathlib.Path(LEGACY_STATE_FILE).exists():
+        st = _load_json(LEGACY_STATE_FILE, {"recent": [], "used_pexels_ids": []})
+        _save_json(STATE_FILE, st)
+        return st
+    return {"recent": [], "used_pexels_ids": []}
 
 def _state_save(st: dict):
     st["recent"] = st.get("recent", [])[-1200:]
@@ -256,7 +248,14 @@ def _state_save(st: dict):
     _save_json(STATE_FILE, st)
 
 def _global_topics_load() -> dict:
-    return _load_json(GLOBAL_TOPIC_STATE, {"recent_topics": []})
+    default = {"recent_topics": []}
+    if pathlib.Path(GLOBAL_TOPIC_STATE).exists():
+        return _load_json(GLOBAL_TOPIC_STATE, default)
+    if pathlib.Path(LEGACY_GLOBAL_STATE).exists():
+        gst = _load_json(LEGACY_GLOBAL_STATE, default)
+        _save_json(GLOBAL_TOPIC_STATE, gst)
+        return gst
+    return default
 
 def _global_topics_save(gst: dict):
     gst["recent_topics"] = gst.get("recent_topics", [])[-4000:]
@@ -265,9 +264,11 @@ def _global_topics_save(gst: dict):
 def _hash12(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()[:12]
 
-def _record_recent(h: str, mode: str, topic: str):
+def _record_recent(h: str, mode: str, topic: str, fp: Optional[List[str]] = None):
     st = _state_load()
-    st.setdefault("recent", []).append({"h":h,"mode":mode,"topic":topic,"ts":time.time()})
+    rec = {"h":h,"mode":mode,"topic":topic,"ts":time.time()}
+    if fp: rec["fp"] = list(fp)
+    st.setdefault("recent", []).append(rec)
     _state_save(st)
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
@@ -295,6 +296,53 @@ def _recent_topics_for_prompt(limit=20) -> List[str]:
         if t and t not in uniq: uniq.append(t)
         if len(uniq) >= limit: break
     return uniq
+
+# ---- novelty helpers ----
+def _tok_words(s: str) -> List[str]:
+    s = re.sub(r"[^a-z0-9 ]+", " ", (s or "").lower())
+    return [w for w in s.split() if len(w) >= 3]
+
+def _trigrams(words: List[str]) -> Set[str]:
+    return {" ".join(words[i:i+3]) for i in range(len(words)-2)} if len(words) >= 3 else set()
+
+def _sentences_fp(sentences: List[str]) -> Set[str]:
+    ws = _tok_words(" ".join(sentences or []))
+    return _trigrams(ws)
+
+def _jaccard(a: Set[str], b: Set[str]) -> float:
+    if not a or not b: return 0.0
+    inter = len(a & b); union = len(a | b)
+    return (inter / union) if union else 0.0
+
+def _recent_fps_from_state(limit: int = NOVELTY_WINDOW) -> List[Set[str]]:
+    st = _state_load()
+    out=[]
+    for item in reversed(st.get("recent", [])):
+        fp = item.get("fp")
+        if isinstance(fp, list):
+            out.append(set(fp))
+        if len(out) >= limit: break
+    return out
+
+def _novelty_ok(sentences: List[str]) -> Tuple[bool, List[str]]:
+    """Dön: (yeterince yeni mi?, kaçınma-terimleri)"""
+    if not NOVELTY_ENFORCE:
+        return True, []
+    cur = _sentences_fp(sentences)
+    if not cur: return True, []
+    for fp in _recent_fps_from_state(NOVELTY_WINDOW):
+        sim = _jaccard(cur, fp)
+        if sim > NOVELTY_JACCARD_MAX:
+            common = list(cur & fp)
+            terms = []
+            for tri in common[:40]:
+                for w in tri.split():
+                    if len(w) >= 4 and w not in terms:
+                        terms.append(w)
+                    if len(terms) >= 12: break
+                if len(terms) >= 12: break
+            return False, terms
+    return True, []
 
 # ==================== Caption helpers ====================
 CAPTION_COLORS = ["0xFFD700","0xFF6B35","0x00F5FF","0x32CD32","0xFF1493","0x1E90FF","0xFFA500","0xFF69B4"]
@@ -461,7 +509,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
             "-ar","48000","-ac","1","-acodec","pcm_s16le",
-            "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+            "-af", f"dynaudnorm=g=7:f=300,atempo={atempo}",
             wav_out
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
@@ -573,46 +621,39 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     if sum(ds) == 0:
         ds = [50] * n
 
-    # --- G L O B A L  H I Z  D Ü Z E L T M E L E R ---
-    # 1) Genel hızlandırma (yüzde)
+    # --- global hız düzeltmeleri ---
     try:
         speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "3.0"))
     except Exception:
         speedup_pct = 1.5
-    speedup_pct = max(-5.0, min(5.0, speedup_pct))  # güvenli aralık
+    speedup_pct = max(-5.0, min(5.0, speedup_pct))
 
-    # 2) Sonda biraz erken bitir (ms -> cs)
     try:
         early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "80"))
     except Exception:
         early_end_ms = 80
     early_end_cs = max(0, int(round(early_end_ms / 10.0)))
 
-    # 3) Sona doğru kademeli hızlanma (yüzde)
     try:
         ramp_pct = float(os.getenv("KARAOKE_RAMP_PCT", "1.0"))
     except Exception:
         ramp_pct = 1.0
-    ramp_pct = max(0.0, min(5.0, ramp_pct))  # 0–5 arası makul
+    ramp_pct = max(0.0, min(5.0, ramp_pct))
 
-    # Hedef toplam cs: hızlandırma + erken bitiş
     target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
     target_cs = max(5 * n, target_cs)
 
-    # Kademeli hızlanmayı uygula (son kelimeler biraz daha kısa)
     if n > 1 and ramp_pct > 0:
         ramp = (ramp_pct / 100.0)
         for i in range(n):
-            k = i / (n - 1)                  # 0 → baş, 1 → son
+            k = i / (n - 1)
             ds[i] = max(5, int(round(ds[i] * (1.0 - ramp * k))))
 
-    # Orantılı ölçekle hedefe oturt
     s = sum(ds)
     if s > 0:
         scale = target_cs / s
         ds = [max(5, int(round(x * scale))) for x in ds]
 
-    # Yuvarlama düzeltmeleri (taşma/eksik)
     while sum(ds) > target_cs:
         for i in range(n):
             if sum(ds) <= target_cs: break
@@ -622,7 +663,7 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         ds[i % n] += 1
         i += 1
 
-    # Başlangıcı öne çek (lead) — ilk kelimelerden alıp sona ekle
+    # lead (başlangıcı öne çek)
     try:
         lead_ms = int(os.getenv("CAPTION_LEAD_MS", os.getenv("KARAOKE_LEAD_MS", "0")))
     except Exception:
@@ -638,7 +679,6 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
             if take > 0:
                 ds[i] -= take
                 removed += take
-        # Ekleme: son iki kelimeye yarı yarıya dağıt (tek kelime varsa sona)
         if n >= 2:
             add_a = removed // 2
             add_b = removed - add_a
@@ -647,9 +687,8 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         else:
             ds[-1] += removed
 
-    # Ekranda görünecek metin + \k satırı
     cap = " ".join([w for w, _ in words_upper])
-    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
+    _ = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
     kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(n)]).strip()
 
     ass = f"""[Script Info]
@@ -669,7 +708,6 @@ Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outli
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
     """KARAOKE öncelikli. subtitles yoksa drawtext; ikisi de yoksa opsiyonel fail."""
-    # segment süresi
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
@@ -837,18 +875,18 @@ Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), t
 
 CONTENT RULES:
 - Stay laser-focused on the provided TOPIC (no pivoting).
-- Coherent, causally linked beats; each sentence advances a single concrete idea.
-- No meta-instructions like "one clear tip", "see/learn", "plot twist", "soap-opera narration".
-- Sentences must be visually anchorable with stock b-roll (objects, places, actions, phenomena).
-- Avoid vague fillers (nice/great/thing/stuff). No list headers. No numbering in sentences.
-- Keep 6–12 words per sentence. 7–8 sentences total.""",
+- Sentence 1 = a punchy HOOK (≤10 words, question or bold claim).
+- Sentence 8 = a SOFT CTA that nudges comments (no 'subscribe/like' words).
+- Aim for a seamless loop: let the last line mirror the first line idea.
+- Coherent, visually anchorable beats; each sentence advances one concrete idea.
+- Avoid vague fillers and meta-talk. No numbering. 6–12 words per sentence.""",
 
     "country_facts": """Create amazing country/city facts.
 Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
 Rules:
-- Facts must be specific (culture, geography, record-holding places, history).
-- No meta-instructions (no "one clear tip", "see/learn").
-- 6–12 words per sentence; 7–8 sentences total; visually anchorable beats."""
+- Sentence 1 is a short HOOK (≤10 words, question/claim).
+- Sentence 8 is a soft CTA for comments (no 'subscribe/like').
+- Each fact must be specific & visual. 6–12 words per sentence."""
 }
 
 BANNED_PHRASES = [
@@ -1266,9 +1304,12 @@ def upload_youtube(video_path: str, meta: dict) -> str:
         "status": {"privacyStatus": meta.get("privacy", VISIBILITY), "selfDeclaredMadeForKids": False}
     }
     media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
-    req = y.videos().insert(part="snippet,status", body=body, media_body=media)
-    resp = req.execute()
-    return resp.get("id", "")
+    try:
+        req = y.videos().insert(part="snippet,status", body=body, media_body=media)
+        resp = req.execute()
+        return resp.get("id", "")
+    except HttpError as e:
+        raise RuntimeError(f"YouTube upload error: {e}")
 
 # ==================== Long SEO Description ====================
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
@@ -1304,12 +1345,96 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
         if len(yt_tags) >= 15: break
     return title, body, yt_tags
 
-# ==================== Debug meta ====================
-def _dump_debug_meta(path: str, obj: dict):
+# ==================== HOOK/CTA cilası ====================
+HOOK_MAX_WORDS = _env_int("HOOK_MAX_WORDS", 10)
+CTA_STYLE      = os.getenv("CTA_STYLE", "soft_comment")
+LOOP_HINT      = os.getenv("LOOP_HINT", "1") == "1"
+
+def _polish_hook_cta(sentences: List[str]) -> List[str]:
+    if not sentences: return sentences
+    ss = sentences[:]
+
+    # HOOK: ilk cümle ≤ 10 kelime ve vurucu olsun
+    hook = clean_caption_text(ss[0])
+    words = hook.split()
+    if len(words) > HOOK_MAX_WORDS:
+        hook = " ".join(words[:HOOK_MAX_WORDS])
+    if not re.search(r"[?!]$", hook):
+        if hook.split()[0:1] and hook.split()[0].lower() not in {"why","how","did","are","is","can"}:
+            hook = hook.rstrip(".") + "?"
+    ss[0] = hook
+
+    # CTA (yumuşak yorum teşviki)
+    if CTA_STYLE == "soft_comment":
+        cta = "Spot a better twist? Drop it in 3 words below."
+        if LANG.startswith("tr"):
+            cta = "Daha iyi bir fikir mi var? 3 kelimeyle yoruma bırak."
+    else:
+        cta = "What would you add? Tell me below."
+
+    # SON cümle – loop ipucu: ilk 3 kelimeyi aynala
+    if LOOP_HINT and len(ss) >= 2:
+        start3 = " ".join(ss[0].split()[:3]).rstrip(",.?!").lower()
+        end = f"{cta} {start3}…"
+        ss[-1] = end
+    else:
+        ss[-1] = cta
+    return ss
+
+# ==================== BGM helpers (download, loop, duck, mix) ====================
+def _pick_bgm_source(tmpdir: str) -> Optional[str]:
+    # 1) repo içi bgm/ klasörü
     try:
-        pathlib.Path(path).write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
+        p = pathlib.Path(BGM_DIR)
+        if p.exists():
+            files = [str(x) for x in p.glob("*.mp3")] + [str(x) for x in p.glob("*.wav")]
+            if files:
+                random.shuffle(files)
+                return files[0]
     except Exception:
         pass
+    # 2) URL listesinden indir
+    urls = list(BGM_URLS or [])
+    random.shuffle(urls)
+    for u in urls:
+        try:
+            ext = ".mp3" if ".mp3" in u.lower() else ".wav"
+            outp = str(pathlib.Path(tmpdir) / f"bgm_src{ext}")
+            with requests.get(u, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with open(outp, "wb") as f:
+                    for ch in r.iter_content(8192): f.write(ch)
+            if pathlib.Path(outp).stat().st_size > 100_000:
+                return outp
+        except Exception:
+            continue
+    return None
+
+def _make_bgm_looped(src: str, dur: float, out_wav: str):
+    fade = max(0.3, float(BGM_FADE))
+    endst = max(0.0, dur - fade)
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-stream_loop","-1","-i", src,
+        "-t", f"{dur:.3f}",
+        "-af", f"loudnorm=I=-23:TP=-2.0:LRA=11,volume={BGM_DB}dB,"
+               f"afade=t=in:st=0:d={fade:.2f},afade=t=out:st={endst:.2f}:d={fade:.2f},"
+               "aresample=48000,pan=mono|c0=0.5*FL+0.5*FR",
+        "-ar","48000","-ac","1","-c:a","pcm_s16le",
+        out_wav
+    ])
+
+def _duck_and_mix(voice_wav: str, bgm_wav: str, out_wav: str):
+    # sidechaincompress: voice, müziği konuştukça kısmak için tetikler
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", bgm_wav, "-i", voice_wav,
+        "-filter_complex",
+        "[0:a][1:a]sidechaincompress=threshold=0.015:ratio=12:attack=5:release=200:makeup=0[duck];"
+        "[duck][1:a]amix=inputs=2:weights=1 6:duration=shortest,aresample=48000",
+        "-ar","48000","-ac","1","-c:a","pcm_s16le",
+        out_wav
+    ])
 
 # ==================== Main ====================
 def main():
@@ -1323,11 +1448,13 @@ def main():
     topic_lock = TOPIC or "Interesting Visual Explainers"
     user_terms = SEARCH_TERMS_ENV
 
-    # 1) İçerik üretim (topic-locked) + kalite kontrol (per-video terms)
+    # 1) İçerik üretim (topic-locked) + kalite kontrol + NOVELTY
     attempts = 0
     best = None; best_score = -1.0
     banlist = _recent_topics_for_prompt()
-    while attempts < 3:
+    novelty_tries = 0
+
+    while attempts < max(3, NOVELTY_RETRIES):
         attempts += 1
         if USE_GEMINI and GEMINI_API_KEY:
             try:
@@ -1345,17 +1472,30 @@ def main():
                 "You can picture it clearly as you listen.",
                 "A tiny contrast locks the idea in memory.",
                 "No meta talk—just what matters on screen.",
-                "Replay to catch micro-details and patterns."
+                "Replay to catch micro-details and patterns.",
+                "What would you add? Tell me below."
             ]
             search_terms = _terms_normalize(user_terms or ["macro detail","timelapse","clean b-roll"])
             ttl = ""; desc=""; tags=[]
+
+        # Hook + CTA cilası
+        sents = _polish_hook_cta(sents)
+
+        # NOVELTY kontrolü
+        ok, avoid_terms = _novelty_ok(sents)
+        if not ok and novelty_tries < NOVELTY_RETRIES:
+            novelty_tries += 1
+            print(f"⚠️ Similar to recent videos (try {novelty_tries}/{NOVELTY_RETRIES}) → rebuilding with bans: {avoid_terms[:8]}")
+            banlist = avoid_terms + banlist
+            continue
 
         score = _content_score(sents)
         print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
         if score > best_score:
             best = (tpc, sents, search_terms, ttl, desc, tags)
             best_score = score
-        if score >= 7.2: break
+        if score >= 7.2 and ok:
+            break
         else:
             print("⚠️ Low content score → rebuilding…")
             banlist = [tpc] + banlist
@@ -1363,7 +1503,8 @@ def main():
 
     tpc, sentences, search_terms, ttl, desc, tags = best
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
-    _record_recent(_hash12(sig), MODE, tpc)
+    fp = sorted(list(_sentences_fp(sentences)))[:500]
+    _record_recent(_hash12(sig), MODE, tpc, fp=fp)
 
     # debug meta
     _dump_debug_meta(f"{OUT_DIR}/meta_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json", {
@@ -1461,7 +1602,6 @@ def main():
     usage = {vid:0 for vid in downloads.keys()}
     chosen_files: List[str] = []; chosen_ids: List[int] = []
     if not PEXELS_ALLOW_REUSE:
-        # tamamen benzersiz seç
         ordered = list(downloads.items())[:len(metas)]
         if len(ordered) < len(metas):
             print("⚠️ Still short on unique clips; enabling minimal reuse for remaining.")
@@ -1517,6 +1657,22 @@ def main():
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
+    # 7.5) BGM mix (opsiyonel)
+    if BGM_ENABLE:
+        bgm_src = _pick_bgm_source(tmp)
+        if bgm_src:
+            print("🎧 BGM: mixing with sidechain ducking…")
+            bgm_loop = str(pathlib.Path(tmp) / "bgm_loop.wav")
+            _make_bgm_looped(bgm_src, adur2, bgm_loop)
+            a_mix = str(pathlib.Path(tmp) / "audio_with_bgm.wav")
+            _duck_and_mix(acat, bgm_loop, a_mix)
+            # yeniden tam kare süreye kilitle
+            a_mix_exact = str(pathlib.Path(tmp) / "audio_with_bgm_exact.wav")
+            lock_audio_duration(a_mix, max(2, int(round(adur2 * TARGET_FPS))), a_mix_exact)
+            acat = a_mix_exact
+        else:
+            print("🎧 BGM: kaynak bulunamadı (BGM_DIR veya BGM_URLS).")
+
     # 8) Mux
     ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_topic = re.sub(r'[^A-Za-z0-9]+', '_', tpc)[:60] or "Short"
@@ -1550,20 +1706,12 @@ def main():
     try: shutil.rmtree(tmp); print("🧹 Cleaned temp files")
     except: pass
 
+# ==================== Debug meta ====================
+def _dump_debug_meta(path: str, obj: dict):
+    try:
+        pathlib.Path(path).write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
