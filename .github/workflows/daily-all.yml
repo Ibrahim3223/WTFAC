@@ -2,8 +2,12 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "30 16 * * *"  # 19:30 TRT
-    - cron: "30 0 * * *"   # 03:30 TRT
+    # US/Eastern 12:30 & 20:30 için hem EDT (UTC-4) hem EST (UTC-5) slotları.
+    # Gate job yanlış slotları kapatır, böylece çift çalışmaz.
+    - cron: "30 16 * * *"  # 12:30 ET (EDT dönemi)
+    - cron: "30 0 * * *"   # 20:30 ET (EDT dönemi)
+    - cron: "30 17 * * *"  # 12:30 ET (EST dönemi)
+    - cron: "30 1 * * *"   # 20:30 ET (EST dönemi)
   workflow_dispatch: {}
 
 permissions:
@@ -17,8 +21,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ---- Time gate: sadece US/Eastern 12:30 veya 20:30 ise devam ----
+  time-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.chk.outputs.should_run }}
+    steps:
+      - name: Check US/Eastern time window
+        id: chk
+        shell: bash
+        run: |
+          set -euo pipefail
+          ET_NOW=$(TZ=America/New_York date +'%H:%M')
+          echo "US/Eastern now: ${ET_NOW}"
+          if [ "$ET_NOW" = "12:30" ] || [ "$ET_NOW" = "20:30" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   make-matrix:
     runs-on: ubuntu-latest
+    needs: time-gate
+    if: ${{ needs.time-gate.outputs.should_run == 'true' || github.event_name == 'workflow_dispatch' }}
     outputs:
       matrix: ${{ steps.mk.outputs.matrix }}
     steps:
@@ -47,7 +72,8 @@ jobs:
           echo "matrix=$(cat mx.json)" >> "$GITHUB_OUTPUT"
 
   build-upload:
-    needs: make-matrix
+    needs: [make-matrix, time-gate]
+    if: ${{ needs.time-gate.outputs.should_run == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -112,8 +138,6 @@ jobs:
           KARAOKE_SPEED: "1.35"
         run: |
           set -euo pipefail
-
-          # Fallback'ları shell tarafında yap
           CHANNEL_NAME="$MATRIX_NAME"
           LANG_VAL="${VARS_LANG:-$DEFAULT_LANG}"
           MODE_VAL="${VARS_MODE:-$DEFAULT_MODE}"
@@ -121,7 +145,6 @@ jobs:
           SEED_VAL="${VARS_ROTATION_SEED:-$DEFAULT_SEED}"
 
           wenv () {
-            # usage: wenv VAR_NAME "value..."
             local __name="$1"; shift
             local __val="$*"
             local __delim="EOF_${__name}_$$"
@@ -161,14 +184,28 @@ jobs:
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER:   "1"
           KARAOKE_MODE:     "fill"
-          KARAOKE_INACTIVE: "#FFD700"  # sarı taban
-          KARAOKE_ACTIVE:   "#3EA6FF"  # mavi vurgu
+          KARAOKE_INACTIVE: "#FFD700"
+          KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
-                    # ==== SYNC FIX ====
-          KARAOKE_SPEEDUP_PCT: "5.0"   # genel hızlandırma (yüzde)
-          KARAOKE_RAMP_PCT:    "2.0"   # sona doğru kademeli hızlanma (yüzde)
-          KARAOKE_EARLY_END_MS: "120"   # vurguyu cümle bitmeden biraz erken bitir (ms)
-          CAPTION_LEAD_MS:     "80"    # başlangıcı hafifçe öne çek (ms)
+
+          # ==== SYNC FIX ====
+          KARAOKE_SPEEDUP_PCT: "5.0"
+          KARAOKE_RAMP_PCT:    "2.0"
+          KARAOKE_EARLY_END_MS: "120"
+          CAPTION_LEAD_MS:     "80"
+
+          # ==== BGM (Background Music) ====
+          BGM_ENABLE:   "1"        # 0: kapalı, 1: açık
+          BGM_DIR:      "bgm"      # repo kökünde bgm/ klasörü
+          BGM_GAIN_DB:  "-20"      # genel müzik seviyesi
+          BGM_DUCK_DB:  "-6"       # konuşma sırasında ekstra kıs
+          BGM_SHUFFLE:  "1"        # birden çok parça varsa karıştır
+          BGM_START_AT_SEC: "0"
+          BGM_FADE_IN_MS:  "600"
+          BGM_FADE_OUT_MS: "800"
+          # BGM_URLS: |           # yerel parça yoksa URL'den çekmek için aç
+          #   https://example.com/music1.mp3
+          #   https://example.com/music2.wav
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=${TOPIC}"
