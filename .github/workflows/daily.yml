@@ -145,7 +145,7 @@ jobs:
           NOVELTY_RETRIES: "4"
 
           # optional BGM
-          BGM_ENABLE: "0"      # müzik istiyorsan "1" yap
+          BGM_ENABLE: "1"      # müzik istiyorsan "1" yap
           BGM_DB: "-26"
           BGM_DUCK_DB: "-12"
           BGM_FADE: "0.8"
