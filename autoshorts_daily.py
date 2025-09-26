@@ -1424,14 +1424,46 @@ def _make_bgm_looped(src: str, dur: float, out_wav: str):
         out_wav
     ])
 
+# === FIXED: sidechain ducking/mix ===
 def _duck_and_mix(voice_wav: str, bgm_wav: str, out_wav: str):
-    # sidechaincompress: voice, müziği konuştukça kısmak için tetikler
+    """
+    Voice (0:a) konuşurken BGM (1:a) sidechain-compress ile kısılır, sonra amix ile birleştirilir.
+    - BGM_GAIN_DB:   BGM temel seviyesi (örn. -20)
+    - BGM_DUCK_DB:   İstenen "ekstra duck" dB değeri; ratio'ya map edilir (örn. -6 => ratio ~ 4)
+    - BGM_ATTACK_MS / BGM_RELEASE_MS: kompresör tepkisi
+    - BGM_START_AT_SEC / BGM_FADE_IN_MS: BGM başlangıç/fade-in
+    """
+    bgm_gain_db   = _env_float("BGM_GAIN_DB",  -20.0)
+    duck_db       = _env_float("BGM_DUCK_DB",   -6.0)   # daha pozitif mutlak değer => daha fazla duck
+    attack_ms     = _env_int("BGM_ATTACK_MS",      5)
+    release_ms    = _env_int("BGM_RELEASE_MS",   200)
+    sc_threshold  = _env_float("BGM_SC_THRESHOLD", 0.015)  # linear (küçük => daha fazla tetiklenir)
+    start_at_sec  = max(0.0, _env_float("BGM_START_AT_SEC", 0.0))
+    fade_in_ms    = max(0, _env_int("BGM_FADE_IN_MS", 0))
+
+    # Duck dB'yi kabaca ratio'ya çevir (yeterince agresif ama taşırmaz)
+    # -6 dB ≈ 4:1, -9 dB ≈ 5.5:1, -12 dB ≈ 7:1 ... üst sınır 20:1
+    ratio = max(1.0, min(20.0, 1.0 + (abs(duck_db) / 2.0)))
+
+    # BGM zinciri: trim -> temel gain -> opsiyonel fade-in
+    bgm_chain = f"atrim=start={start_at_sec},asetpts=N/SR/TB,volume={bgm_gain_db}dB"
+    if fade_in_ms > 0:
+        bgm_chain += f",afade=t=in:st=0:d={fade_in_ms/1000.0:.3f}"
+
+    # sidechaincompress: [BGM][VOICE] (BGM'yi voice tetikler), makeup=1 (unity)
+    # sonra voice ile karıştır; dynaudnorm hafif toparlar; çıkış 48k mono pcm
+    fc = (
+        f"[1:a]{bgm_chain}[bgm];"
+        f"[bgm][0:a]sidechaincompress="
+        f"threshold={sc_threshold}:ratio={ratio}:attack={attack_ms}:release={release_ms}:makeup=1[duck];"
+        f"[0:a][duck]amix=inputs=2:duration=shortest:dropout_transition=0,"
+        f"dynaudnorm=g=7:f=200,aresample=48000"
+    )
+
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", bgm_wav, "-i", voice_wav,
-        "-filter_complex",
-        "[0:a][1:a]sidechaincompress=threshold=0.015:ratio=12:attack=5:release=200:makeup=0[duck];"
-        "[duck][1:a]amix=inputs=2:weights=1 6:duration=shortest,aresample=48000",
+        "-i", voice_wav, "-i", bgm_wav,
+        "-filter_complex", fc,
         "-ar","48000","-ac","1","-c:a","pcm_s16le",
         out_wav
     ])
@@ -1715,3 +1747,4 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
