@@ -21,24 +21,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ---- Time gate: sadece US/Eastern 12:30 veya 20:30 ise devam ----
+  # ---- Time gate: US/Eastern 12:30 veya 20:30 ±7dk ise devam ----
   time-gate:
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.chk.outputs.should_run }}
     steps:
-      - name: Check US/Eastern time window
+      - name: Check US/Eastern window (±7 min)
         id: chk
         shell: bash
         run: |
           set -euo pipefail
-          ET_NOW=$(TZ=America/New_York date +'%H:%M')
-          echo "US/Eastern now: ${ET_NOW}"
-          if [ "$ET_NOW" = "12:30" ] || [ "$ET_NOW" = "20:30" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
+
+          # Şu anki ET saati
+          ET_H=$(TZ=America/New_York date +%H)
+          ET_M=$(TZ=America/New_York date +%M)
+          # Öndeki 0'lar için 10# kullan (bash arithmetic)
+          ET_MIN=$((10#$ET_H*60 + 10#$ET_M))
+          echo "US/Eastern now: ${ET_H}:${ET_M} (minutes=${ET_MIN})"
+
+          in_window () {
+            local target_min="$1"   # örn: 12:30 => 750, 20:30 => 1230
+            local WIN="${2:-7}"
+            local low=$((target_min - WIN))
+            local high=$((target_min + WIN))
+            [[ $ET_MIN -ge $low && $ET_MIN -le $high ]]
+          }
+
+          ok=false
+          if in_window $((12*60+30)) 7 || in_window $((20*60+30)) 7; then
+            ok=true
           fi
+
+          echo "should_run=${ok}" >> "$GITHUB_OUTPUT"
+          echo "Gate result: ${ok}"
 
   make-matrix:
     runs-on: ubuntu-latest
@@ -144,12 +160,10 @@ jobs:
           VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
 
-          # karaoke timing
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.35"
         run: |
           set -euo pipefail
-
           CHANNEL_NAME="$MATRIX_NAME"
           LANG_VAL="${VARS_LANG:-$DEFAULT_LANG}"
           MODE_VAL="${VARS_MODE:-$DEFAULT_MODE}"
@@ -207,14 +221,14 @@ jobs:
           CAPTION_LEAD_MS:      "80"
 
           # ==== BGM (Background Music) ====
-          BGM_ENABLE:         "1"     # <— BGM açık
-          BGM_SIDECHAIN:      "1"     # 1: ducking açık, 0: düz karışım
-          BGM_GAIN_DB:        "-10"   # genel arka plan seviyesi; gerekirse -8 / -6
+          BGM_ENABLE:         "1"
+          BGM_SIDECHAIN:      "1"
+          BGM_GAIN_DB:        "-10"
           BGM_DUCK_THRESH:    "0.03"
           BGM_DUCK_RATIO:     "10"
           BGM_DUCK_ATTACK_MS: "6"
-          BGM_DUCK_RELEASE_MS: "180"
-          BGM_URLS:           ${{ vars.BGM_URLS }}  # opsiyonel (http linkleri, boşsa bgm/ klasörü taranır)
+          BGM_DUCK_RELEASE_MS:"180"
+          BGM_URLS:           ${{ vars.BGM_URLS }}  # opsiyonel; boşsa bgm/ klasörü taranır
         run: |
           echo "== ${CHANNEL_NAME} =="
           echo "TOPIC=${TOPIC}"
