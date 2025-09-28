@@ -181,6 +181,12 @@ jobs:
           NOVELTY_JACCARD_MAX: "0.55"
           NOVELTY_RETRIES: "4"
 
+                    # ==== Contextual CTA ====
+          CTA_ENABLE: "1"
+          CTA_SHOW_SEC: "2.8"    # son kaç saniye görünsün
+          CTA_MAX_CHARS: "64"
+          # CTA_TEXT: ""         # boş değilse bu metni aynen kullanır (override)
+
           # ==== BGM (arkaplan müzik) ====
           BGM_ENABLE:   "1"        # bgm/ varsa açabiliriz
           BGM_DIR:      "bgm"      # repo kökünde bgm/
