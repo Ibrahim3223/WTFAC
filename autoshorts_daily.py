@@ -78,6 +78,12 @@ GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 GEMINI_PROMPT  = (os.getenv("GEMINI_PROMPT") or "").strip()
 GEMINI_TEMP    = _env_float("GEMINI_TEMP", 0.85)
 
+# ---- Contextual CTA (comments-focused) ----
+CTA_ENABLE      = os.getenv("CTA_ENABLE", "1") == "1"
+CTA_SHOW_SEC    = _env_float("CTA_SHOW_SEC", 2.8)     # CTA sadece son X sn görünsün
+CTA_MAX_CHARS   = _env_int("CTA_MAX_CHARS", 64)       # overlay kısalığı
+CTA_TEXT_FORCE  = (os.getenv("CTA_TEXT") or "").strip()  # elle override istersek
+
 # ---- Topic & user seed terms ----
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
@@ -214,6 +220,76 @@ def normalize_sentence(raw: str) -> str:
     s = s.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'")
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
+
+# ---------- CTA keyword helpers ----------
+_STOP_EN = set("the a an and or but if while of to in on at from by with for about into over after before between during under above across around through this that these those is are was were be been being have has had do does did can could should would may might will your you we our they their he she it its as than then so very more most many much just also only even still yet".split())
+_STOP_TR = set("ve ya ama eğer iken ile için üzerine altında üzerinde arasında boyunca sonra önce boyunca altında üstünde hakkında üzerinden arasında bu şu o bir birisi şunlar bunlar biz siz onlar var yok çok daha en ise çünkü gibi kadar zaten sadece yine hâlâ".split())
+
+def _kw_tokens(text: str, lang: str) -> list[str]:
+    t = re.sub(r"[^A-Za-zçğıöşüÇĞİÖŞÜ0-9 ]+", " ", (text or "")).lower()
+    ws = [w for w in t.split() if len(w) >= 4 and w not in (_STOP_TR if lang.startswith("tr") else _STOP_EN)]
+    return ws
+
+def _top_keywords(topic: str, sentences: list[str], lang: str, k: int = 6) -> list[str]:
+    from collections import Counter
+    cnt = Counter()
+    for s in [topic] + list(sentences or []):
+        for w in _kw_tokens(s, lang):
+            cnt[w] += 1
+    # iki kelimelik öbekleri de dene
+    bigr = Counter()
+    toks_all = _kw_tokens(" ".join([topic] + sentences), lang)
+    for i in range(len(toks_all)-1):
+        bigr[toks_all[i] + " " + toks_all[i+1]] += 1
+    # skoru: (bigr*2) + unigram
+    scored = []
+    for w,c in cnt.items():
+        scored.append((c, w))
+    for bg,c in bigr.items():
+        scored.append((c*2, bg))
+    scored.sort(reverse=True)
+    out=[]
+    for _,w in scored:
+        if w not in out:
+            out.append(w)
+        if len(out) >= k: break
+    return out
+
+def build_contextual_cta(topic: str, sentences: list[str], lang: str) -> str:
+    """Return short, video-specific, comments-oriented CTA (no 'subscribe/like')."""
+    if CTA_TEXT_FORCE:
+        return CTA_TEXT_FORCE.strip()
+
+    kws = _top_keywords(topic or "", sentences or [], lang)
+    # En az bir/iki aday
+    a = (kws[0] if kws else (topic or "").lower())
+    b = (kws[1] if len(kws) > 1 else "")
+    rng = random.Random((ROTATION_SEED or int(time.time())) + len("".join(sentences)))
+
+    if lang.startswith("tr"):
+        templates = [
+            lambda a,b: f"Sence en şaşırtan neydi: {a} mı {b} mi?" if b else f"Sence en şaşırtan neydi: {a}?",
+            lambda a,b: f"{a} için daha iyi bir fikir var mı? Yorumla!",
+            lambda a,b: f"İlk hangisini denerdin: {a} mı {b} mi?" if b else f"{a} sence işe yarar mı?",
+            lambda a,b: f"3 kelimeyle yorumla: {a}",
+            lambda a,b: f"Detayı yakaladın mı? Nerede? Yaz 📝"
+        ]
+    else:
+        templates = [
+            lambda a,b: f"Which surprised you more: {a} or {b}?" if b else f"What surprised you most about {a}?",
+            lambda a,b: f"Got a smarter fix for {a}? Drop it below!",
+            lambda a,b: f"First pick: {a} or {b}?" if b else f"Would you try {a} first?",
+            lambda a,b: f"Sum it up in 3 words: {a}",
+            lambda a,b: f"Spot the tiny clue? Where? Comment!"
+        ]
+
+    # Seç, kısalt, biçimle
+    for _ in range(10):
+        t = templates[rng.randrange(len(templates))](a, b).strip()
+        t = re.sub(r"\s+", " ", t)
+        if len(t) <= CTA_MAX_CHARS:
+            return t
+    return (templates[0](a,b))[:CTA_MAX_CHARS]
 
 # ==================== State ====================
 def _load_json(path, default):
@@ -820,6 +896,30 @@ def concat_videos_filter(files: List[str], outp: str):
         "-pix_fmt","yuv420p","-movflags","+faststart",
         outp
     ])
+
+def overlay_cta_tail(video_in: str, text: str, outp: str, show_sec: float, font: str):
+    """Video süresini değiştirmez; sadece son 'show_sec' boyunca CTA metni bindirir."""
+    vdur = ffprobe_dur(video_in)
+    if vdur <= 0.1 or not text.strip():
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
+        return
+    t0 = max(0.0, vdur - max(0.8, show_sec))
+    tf = str(pathlib.Path(outp).with_suffix(".cta.txt"))
+    wrapped = wrap_mobile_lines(text.upper(), max_line_length=26, max_lines=3)
+    pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
+    font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
+    common = f"textfile='{tf}':fontsize=52:x=(w-text_w)/2:y=h*0.18:line_spacing=10"
+    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55:enable='gte(t,{t0:.3f})'"
+    main   = f"drawtext={common}{font_arg}:fontcolor={_ff_color('#3EA6FF')}:borderw=5:bordercolor=black@0.9:enable='gte(t,{t0:.3f})'"
+    vf     = f"{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
+    run([
+        "ffmpeg","-y","-hide_banner","-loglevel","error",
+        "-i", video_in, "-vf", vf,
+        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-an","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+        "-pix_fmt","yuv420p","-movflags","+faststart", outp
+    ])
+    pathlib.Path(tf).unlink(missing_ok=True)
 
 # ==================== Audio concat (lossless) ====================
 def concat_audios(files: List[str], outp: str):
@@ -1718,6 +1818,22 @@ def main():
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
+        # 7.1) Contextual CTA (overlay only at tail)
+    cta_text = ""
+    try:
+        if CTA_ENABLE:
+            cta_text = build_contextual_cta(tpc, [m[0] for m in metas], LANG)
+            if cta_text:
+                print(f"💬 CTA: {cta_text}")
+                vcat_cta = str(pathlib.Path(tmp) / "video_cta.mp4")
+                overlay_cta_tail(vcat, cta_text, vcat_cta, CTA_SHOW_SEC, font)
+                # aynı kare sayısını koru:
+                vcat_exact2 = str(pathlib.Path(tmp) / "video_exact_cta.mp4")
+                enforce_video_exact_frames(vcat_cta, a_frames, vcat_exact2)
+                vcat = vcat_exact2
+    except Exception as e:
+        print(f"⚠️ CTA overlay skipped: {e}")
+
     # 7.5) BGM mix (opsiyonel)
     if BGM_ENABLE:
         bgm_src = _pick_bgm_source(tmp)
@@ -1776,6 +1892,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
