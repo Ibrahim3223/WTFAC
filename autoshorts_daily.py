@@ -858,19 +858,26 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     _ = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
     kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(n)]).strip()
 
-    ass = f"""[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},{_to_ass(KARAOKE_ACTIVE)},{_to_ass(KARAOKE_OUTLINE)},&H7F000000,1,0,0,0,100,100,0,0,1,{outline},0,2,50,50,{margin_v},0
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad0}}{kline}
-"""
+    ass = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        "PlayResX: 1080\n"
+        "PlayResY: 1920\n"
+        "\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},"
+        f"{_to_ass(KARAOKE_ACTIVE)},{_to_ass(KARAOKE_OUTLINE)},&H7F000000,1,0,0,0,100,100,0,0,1,"
+        f"{outline},0,2,50,50,{margin_v},0\n"
+        "\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        # DİKKAT: Effect alanını boş bırakmak için margin_v’den sonra ÇİFT virgül var.
+        f"Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,"
+        f"{style_lit}{kline}\n"
+    )
     return ass
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
@@ -1585,22 +1592,23 @@ CTA_STYLE      = os.getenv("CTA_STYLE", "soft_comment")
 LOOP_HINT      = os.getenv("LOOP_HINT", "1") == "1"
 
 def _polish_hook_cta(sentences: List[str]) -> List[str]:
-    if not sentences: return sentences
+    """Hook'u sıkılaştır, CTA'yı metne ekleme; son cümlenin noktalaması düzgün kapansın."""
+    if not sentences:
+        return sentences
     ss = sentences[:]
 
-    # HOOK: ilk cümle ≤ 10 kelime ve vurucu olsun
-    hook = clean_caption_text(ss[0])
-    words = hook.split()
-    if len(words) > HOOK_MAX_WORDS:
-        hook = " ".join(words[:HOOK_MAX_WORDS])
-    if not re.search(r"[?!]$", hook):
-        if hook.split()[0:1] and hook.split()[0].lower() not in {"why","how","did","are","is","can"}:
-            hook = hook.rstrip(".") + "?"
+    # Hook'u kısa/tok yap (en çok ~11 kelime); soru işareti uygula
+    hook = (ss[0] or "").strip()
+    words = re.findall(r"\S+", hook)
+    if len(words) > 11:
+        hook = " ".join(words[:11]).rstrip(",.;:") + "?"
+    elif not hook.endswith(("?", "!", ".")):
+        hook = hook.rstrip(",.;:") + "?"
     ss[0] = hook
 
-    # CTA: narration temiz; son cümleyi düzgün noktalayalım
-    if ss and not re.search(r'[.!?]$', ss[-1].strip()):
-        ss[-1] = ss[-1].strip() + '.'
+    # Son cümle düzgün bitsin
+    if ss and not re.search(r"[.!?]$", ss[-1].strip()):
+        ss[-1] = ss[-1].strip() + "."
     return ss
 
 # ==================== BGM helpers (download, loop, duck, mix) ====================
@@ -2044,4 +2052,5 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
