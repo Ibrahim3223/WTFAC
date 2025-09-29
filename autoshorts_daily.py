@@ -134,6 +134,13 @@ NOVELTY_WINDOW        = _env_int("NOVELTY_WINDOW", 40)
 NOVELTY_JACCARD_MAX   = _env_float("NOVELTY_JACCARD_MAX", 0.55)
 NOVELTY_RETRIES       = _env_int("NOVELTY_RETRIES", 4)
 
+
+# === Run/Topic cooldowns ===
+TOPIC_COOLDOWN_DAYS   = _env_int('TOPIC_COOLDOWN_DAYS', 30)
+RUN_COOLDOWN_MIN      = _env_int('RUN_COOLDOWN_MIN', 90)   # Min minutes between uploads per channel
+UPLOAD_DUP_GUARD_HOURS= _env_int('UPLOAD_DUP_GUARD_HOURS', 12)
+CTA_BANNED_PHRASES    = [s.strip().lower() for s in (os.getenv('CTA_BANNED_PHRASES','spot a better twist').split('|')) if s.strip()]
+
 # === BGM (arka müzik) — ENV ===
 BGM_ENABLE  = os.getenv("BGM_ENABLE", "0") == "1"
 BGM_DB      = _env_float("BGM_DB", -26.0)          # temel müzik seviyesi (dB)
@@ -310,23 +317,33 @@ def _save_json(path, data):
 
 def _state_load() -> dict:
     # Önce modern dosya, yoksa legacy'den yükleyip promote et
+    default = {"recent": [], "used_pexels_ids": [], "last_upload_ts": 0, "recent_ctas": [], "topic_last_ts": {}}
     if pathlib.Path(STATE_FILE).exists():
-        return _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
+        st = _load_json(STATE_FILE, default)
+        # defaults merge
+        for k,v in default.items():
+            st.setdefault(k, v if not isinstance(v, dict) else {})
+        return st
     if pathlib.Path(LEGACY_STATE_FILE).exists():
-        st = _load_json(LEGACY_STATE_FILE, {"recent": [], "used_pexels_ids": []})
+        st = _load_json(LEGACY_STATE_FILE, default)
         _save_json(STATE_FILE, st)
         return st
-    return {"recent": [], "used_pexels_ids": []}
+    return default
 
 def _state_save(st: dict):
     st["recent"] = st.get("recent", [])[-1200:]
     st["used_pexels_ids"] = st.get("used_pexels_ids", [])[-5000:]
+    st["recent_ctas"] = st.get("recent_ctas", [])[-100:]
+    # keep topic_last_ts dict as-is
     _save_json(STATE_FILE, st)
 
 def _global_topics_load() -> dict:
-    default = {"recent_topics": []}
+    default = {"recent_topics": [], "topic_last_ts": {}}
     if pathlib.Path(GLOBAL_TOPIC_STATE).exists():
-        return _load_json(GLOBAL_TOPIC_STATE, default)
+        gst = _load_json(GLOBAL_TOPIC_STATE, default)
+        gst.setdefault("recent_topics", [])
+        gst.setdefault("topic_last_ts", {})
+        return gst
     if pathlib.Path(LEGACY_GLOBAL_STATE).exists():
         gst = _load_json(LEGACY_GLOBAL_STATE, default)
         _save_json(GLOBAL_TOPIC_STATE, gst)
@@ -335,6 +352,12 @@ def _global_topics_load() -> dict:
 
 def _global_topics_save(gst: dict):
     gst["recent_topics"] = gst.get("recent_topics", [])[-4000:]
+    # trim topic_last_ts to last ~2000 items by recency
+    tlt = gst.get("topic_last_ts", {})
+    if isinstance(tlt, dict) and len(tlt) > 2000:
+        # keep most recent 2000 by ts
+        items = sorted(tlt.items(), key=lambda kv: kv[1], reverse=True)[:2000]
+        gst["topic_last_ts"] = {k:v for k,v in items}
     _save_json(GLOBAL_TOPIC_STATE, gst)
 
 def _hash12(s: str) -> str:
@@ -346,11 +369,93 @@ def _record_recent(h: str, mode: str, topic: str, fp: Optional[List[str]] = None
     if fp: rec["fp"] = list(fp)
     st.setdefault("recent", []).append(rec)
     _state_save(st)
+    # global topic mark
+    _mark_topic_used(topic)
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
         gst["recent_topics"].append(topic)
         _global_topics_save(gst)
 
+def _canonical_topic_key(s: str) -> str:
+    s = (s or '').lower()
+    s = re.sub(r'[^a-z0-9]+', ' ', s)
+    # crude stems for frequent entities
+    s = s.replace('japanese','japan')
+    s = s.replace('octopuses','octopus').replace('octopi','octopus')
+    s = s.replace('chameleons','chameleon')
+    s = s.strip()
+    # prefer last token if it's strong (country/animal/keyword)
+    toks = s.split()
+    if not toks: return ''
+    if len(toks) <= 3:
+        return ' '.join(toks)
+    # pick top-2 longest tokens to normalize keys
+    toks = sorted(toks, key=len, reverse=True)[:2]
+    return ' '.join(sorted(toks))
+
+def _topic_recent_keys(days: int = 30) -> set:
+    gst = _global_topics_load()
+    now = int(time.time()); cutoff = now - days*86400
+    out=set()
+    tlt = gst.get('topic_last_ts', {})
+    if isinstance(tlt, dict):
+        for k,ts in tlt.items():
+            if isinstance(ts,(int,float)) and ts >= cutoff:
+                out.add(k)
+    return out
+
+def _mark_topic_used(topic: str):
+    key = _canonical_topic_key(topic)
+    if not key: return
+    gst = _global_topics_load(); now = int(time.time())
+    gst.setdefault('recent_topics', []).append(topic)
+    tlt = gst.setdefault('topic_last_ts', {})
+    tlt[key] = now
+    _global_topics_save(gst)
+
+def _topic_in_cooldown(topic: str, days: int) -> bool:
+    key = _canonical_topic_key(topic)
+    if not key: return False
+    keys = _topic_recent_keys(days)
+    return key in keys
+
+def _register_upload_event(channel: str, hsig: str, title: str, topic: str):
+    st = _state_load(); st['last_upload_ts'] = int(time.time())
+    st.setdefault('last_title','')
+    st['last_title'] = title
+    _state_save(st)
+    _mark_topic_used(topic)
+    _record_recent(hsig, MODE, topic, None)
+
+def _too_soon_since_last_upload(min_minutes: int) -> bool:
+    st = _state_load()
+    last = int(st.get('last_upload_ts', 0) or 0)
+    if not last: return False
+    return (time.time() - last) < (min_minutes*60)
+
+def _upload_is_duplicate(signature: str, hours: int) -> bool:
+    st = _state_load(); now = time.time(); cutoff = now - hours*3600
+    for rec in reversed(st.get('recent', [])):
+        if rec.get('h') == signature and rec.get('ts',0) >= cutoff:
+            return True
+    return False
+
+def _cta_dedupe(cta: str) -> str:
+    s = (cta or '').strip()
+    low = s.lower()
+    for ban in CTA_BANNED_PHRASES:
+        if ban and ban in low:
+            s = ''
+            break
+    if not s:
+        return s
+    st = _state_load(); recent = st.get('recent_ctas', [])
+    if s in recent:
+        # add a gentle variation if duplicate
+        s = s + ' ✍️'
+    recent.append(s); st['recent_ctas'] = recent[-100:]
+    _state_save(st)
+    return s
 def _blocklist_add_pexels(ids: List[int], days=30):
     st = _state_load()
     now = int(time.time())
@@ -1465,12 +1570,10 @@ def _polish_hook_cta(sentences: List[str]) -> List[str]:
     ss[0] = hook
 
     # CTA (yumuşak yorum teşviki)
-    if CTA_STYLE == "soft_comment":
-        cta = "Spot a better twist? Drop it in 3 words below."
-        if LANG.startswith("tr"):
-            cta = "Daha iyi bir fikir mi var? 3 kelimeyle yoruma bırak."
-    else:
-        cta = "What would you add? Tell me below."
+    cta = build_contextual_cta('', ss, LANG)
+    cta = _cta_dedupe(cta)
+    if not cta:
+        cta = 'What would you add? Tell me below.'
 
     # SON cümle – loop ipucu: ilk 3 kelimeyi aynala
     if LOOP_HINT and len(ss) >= 2:
@@ -1607,6 +1710,10 @@ def main():
 
     random.seed(ROTATION_SEED or int(time.time()))
     topic_lock = TOPIC or "Interesting Visual Explainers"
+    if _topic_in_cooldown(topic_lock, TOPIC_COOLDOWN_DAYS):
+        raise RuntimeError(f"Topic cooldown: '{topic_lock}' used within {TOPIC_COOLDOWN_DAYS} days.")
+    if _too_soon_since_last_upload(RUN_COOLDOWN_MIN):
+        raise RuntimeError(f"Run cooldown: last upload was less than {RUN_COOLDOWN_MIN} min ago.")
     user_terms = SEARCH_TERMS_ENV
 
     # 1) İçerik üretim (topic-locked) + kalite kontrol + NOVELTY
@@ -1866,8 +1973,14 @@ def main():
     try:
         if os.getenv("UPLOAD_TO_YT","1") == "1":
             print("📤 Uploading to YouTube…")
+            # guard against duplicate uploads
+            sig = _hash12(meta['title'] + '|' + tpc)
+            if _upload_is_duplicate(sig, UPLOAD_DUP_GUARD_HOURS):
+                raise RuntimeError('Duplicate upload detected in recent history; skipping.')
             vid_id = upload_youtube(outp, meta)
-            print(f"🎉 YouTube Video ID: {vid_id}\n🔗 https://youtube.com/watch?v={vid_id}")
+            print(f"🎉 YouTube Video ID: {vid_id}
+🔗 https://youtube.com/watch?v={vid_id}")
+            _register_upload_event(CHANNEL_NAME, sig, meta['title'], tpc)
         else:
             print("⏭️ Upload disabled (UPLOAD_TO_YT != 1)")
     except Exception as e:
