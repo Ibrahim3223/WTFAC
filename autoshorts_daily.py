@@ -4,6 +4,95 @@
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
 
+# ---- focus-entity cooldown (stronger anti-repeat) ----
+ENTITY_COOLDOWN_DAYS = int(os.getenv("ENTITY_COOLDOWN_DAYS", os.getenv("NOVELTY_WINDOW", "30")))
+
+_GENERIC_SKIP = {
+    # very common generic words to ignore for entity extraction
+    "country","countries","people","history","stories","story","facts","fact","amazing","weird","random","culture","cultural",
+    "animal","animals","nature","wild","pattern","patterns","science","eco","habit","habits","waste","tip","tips","daily","news",
+    "world","today","minute","short","video","watch","more","better","twist","comment","voice","narration","hook","topic",
+    "secret","secrets","unknown","things","life","lived","modern","time","times","explained","guide","quick","fix","fixes"
+}
+
+def _tok_words_loose(s: str) -> list[str]:
+    s = re.sub(r"[^a-z0-9 ]+", " ", (s or "").lower())
+    return [w for w in s.split() if len(w) >= 3]
+
+def _derive_focus_entity(topic: str, mode: str, sentences: list[str]) -> str:
+    """
+    Heuristic entity pick used for cooldown:
+      - For 'country_' modes: prefer proper nouns / frequent tokens (e.g., 'japan')
+      - For animal/nature modes: frequent concrete noun (e.g., 'octopus','chameleon')
+      - Else: most frequent non-generic keyword (e.g., 'food waste' -> 'waste')
+    """
+    txt = " ".join(sentences or []) + " " + (topic or "")
+    words = _tok_words_loose(txt)
+    from collections import Counter as _C
+    cnt = _C([w for w in words if w not in _GENERIC_SKIP])
+    if not cnt:
+        return ""
+    # try bigrams first for eco patterns like 'food waste'
+    bigrams = _C([" ".join(words[i:i+2]) for i in range(len(words)-1)])
+    for bg,_ in bigrams.most_common(10):
+        if all(w not in _GENERIC_SKIP for w in bg.split()) and len(bg) >= 7:
+            parts = [w for w in bg.split() if w not in _GENERIC_SKIP]
+            if parts:
+                return parts[-1]
+    # fallback to unigram
+    for w,_ in cnt.most_common(20):
+        if len(w) >= 4:
+            return w
+    return next(iter(cnt.keys())) if cnt else ""
+
+def _entity_key(mode: str, ent: str) -> str:
+    ent = re.sub(r"[^a-z0-9]+","-", (ent or "").lower()).strip("-")
+    mode = (mode or "").lower()
+    return f"{mode}:{ent}" if ent else ""
+
+def _entities_state_load() -> dict:
+    try:
+        gst = _global_topics_load()
+    except Exception:
+        gst = {}
+    ents = (gst.get("entities") if isinstance(gst, dict) else None) or {}
+    if not isinstance(ents, dict): ents = {}
+    return ents
+
+def _entities_state_save(ents: dict):
+    try:
+        gst = _global_topics_load()
+    except Exception:
+        gst = {}
+    if isinstance(gst, dict):
+        gst["entities"] = ents
+        # cap total to avoid unbounded growth
+        if len(ents) > 12000:
+            oldest = sorted(ents.items(), key=lambda kv: kv[1])[:2000]
+            for k,_ in oldest: ents.pop(k, None)
+            gst["entities"] = ents
+        _global_topics_save(gst)
+
+def _entity_in_cooldown(key: str, days: int) -> bool:
+    if not key or days <= 0: 
+        return False
+    ents = _entities_state_load()
+    ts = ents.get(key)
+    if not ts: 
+        return False
+    try:
+        age = time.time() - float(ts)
+    except Exception:
+        return False
+    return age < days * 86400
+
+def _entity_touch(key: str):
+    if not key: 
+        return
+    ents = _entities_state_load()
+    ents[key] = time.time()
+    _entities_state_save(ents)
+
 # ---------- helpers (ÖNCE gelmeli) ----------
 def _env_int(name: str, default: int) -> int:
     s = os.getenv(name)
@@ -1464,22 +1553,13 @@ def _polish_hook_cta(sentences: List[str]) -> List[str]:
             hook = hook.rstrip(".") + "?"
     ss[0] = hook
 
-    # CTA (yumuşak yorum teşviki)
-    if CTA_STYLE == "soft_comment":
-        cta = "Spot a better twist? Drop it in 3 words below."
-        if LANG.startswith("tr"):
-            cta = "Daha iyi bir fikir mi var? 3 kelimeyle yoruma bırak."
-    else:
-        cta = "What would you add? Tell me below."
+    
+# CTA: narration now stays clean; no spoken CTA here.
+# Keep the last sentence as-is; ensure it ends properly.
+if ss and not re.search(r'[.!?]$', ss[-1].strip()):
+    ss[-1] = ss[-1].strip() + '.'
+return ss
 
-    # SON cümle – loop ipucu: ilk 3 kelimeyi aynala
-    if LOOP_HINT and len(ss) >= 2:
-        start3 = " ".join(ss[0].split()[:3]).rstrip(",.?!").lower()
-        end = f"{cta} {start3}…"
-        ss[-1] = end
-    else:
-        ss[-1] = cta
-    return ss
 
 # ==================== BGM helpers (download, loop, duck, mix) ====================
 def _pick_bgm_source(tmpdir: str) -> Optional[str]:
@@ -1650,6 +1730,16 @@ def main():
             banlist = avoid_terms + banlist
             continue
 
+        # Focus-entity cooldown (stronger anti-repeat)
+        if ENTITY_COOLDOWN_DAYS > 0:
+            ent = _derive_focus_entity(tpc, MODE, sents)
+            ek = _entity_key(MODE, ent)
+            if ent and _entity_in_cooldown(ek, ENTITY_COOLDOWN_DAYS):
+                novelty_tries += 1
+                print(f"⚠️ Focus entity in cooldown: '{ent}' ({ENTITY_COOLDOWN_DAYS}d) → rebuilding… (try {novelty_tries}/{NOVELTY_RETRIES})")
+                banlist = [ent] + banlist
+                continue
+
         score = _content_score(sents)
         print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
         if score > best_score:
@@ -1666,6 +1756,14 @@ def main():
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
     fp = sorted(list(_sentences_fp(sentences)))[:500]
     _record_recent(_hash12(sig), MODE, tpc, fp=fp)
+
+    # Record focus entity cooldown
+    try:
+        __ent = _derive_focus_entity(tpc, MODE, sentences)
+        __ek = _entity_key(MODE, __ent)
+        _entity_touch(__ek)
+    except Exception:
+        pass
 
     # debug meta
     _dump_debug_meta(f"{OUT_DIR}/meta_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json", {
