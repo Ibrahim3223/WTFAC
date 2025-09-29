@@ -177,6 +177,8 @@ CTA_TEXT_FORCE  = (os.getenv("CTA_TEXT") or "").strip()  # elle override isterse
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
+AUDIO_TAIL_PAD_MS = int(os.getenv("AUDIO_TAIL_PAD_MS", "180"))  # sonuna +ms sessizlik
+
 def _parse_terms(s: str) -> List[str]:
     s = (s or "").strip()
     if not s: return []
@@ -987,28 +989,71 @@ def concat_videos_filter(files: List[str], outp: str):
     ])
 
 def overlay_cta_tail(video_in: str, text: str, outp: str, show_sec: float, font: str):
-    """Video süresini değiştirmez; sadece son 'show_sec' boyunca CTA metni bindirir."""
+    """Video süresini değiştirmez; sadece son 'show_sec' boyunca CTA bindirir.
+       drawtext yoksa ASS (subtitles) fallback kullanır."""
     vdur = ffprobe_dur(video_in)
-    if vdur <= 0.1 or not text.strip():
+    if vdur <= 0.1 or not (text or "").strip():
         pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
         return
+
     t0 = max(0.0, vdur - max(0.8, show_sec))
-    tf = str(pathlib.Path(outp).with_suffix(".cta.txt"))
-    wrapped = wrap_mobile_lines(text.upper(), max_line_length=26, max_lines=3)
-    pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
-    font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
-    common = f"textfile='{tf}':fontsize=52:x=(w-text_w)/2:y=h*0.18:line_spacing=10"
-    box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55:enable='gte(t,{t0:.3f})'"
-    main   = f"drawtext={common}{font_arg}:fontcolor={_ff_color('#3EA6FF')}:borderw=5:bordercolor=black@0.9:enable='gte(t,{t0:.3f})'"
-    vf     = f"{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", video_in, "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-an","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart", outp
-    ])
-    pathlib.Path(tf).unlink(missing_ok=True)
+    wrapped = wrap_mobile_lines((text or "").upper(), max_line_length=26, max_lines=3)
+
+    if _HAS_DRAWTEXT:
+        tf = str(pathlib.Path(outp).with_suffix(".cta.txt"))
+        pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
+        font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
+        common = f"textfile='{tf}':fontsize=52:x=(w-text_w)/2:y=h*0.18:line_spacing=10"
+        box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55:enable='gte(t,{t0:.3f})'"
+        main   = f"drawtext={common}{font_arg}:fontcolor={_ff_color('#3EA6FF')}:borderw=5:bordercolor=black@0.9:enable='gte(t,{t0:.3f})'"
+        vf     = f"{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
+        try:
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", video_in, "-vf", vf,
+                "-r", str(TARGET_FPS), "-vsync","cfr",
+                "-an","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+                "-pix_fmt","yuv420p","-movflags","+faststart", outp
+            ])
+            return
+        finally:
+            pathlib.Path(tf).unlink(missing_ok=True)
+
+    if _HAS_SUBTITLES:
+        # ASS fallback (drawtext yoksa)
+        def _ass(s):  # #RRGGBB veya 0xRRGGBB -> &HAABBGGRR
+            c = _ff_color("#3EA6FF").replace("0x","")
+            rr,gg,bb = c[0:2], c[2:4], c[4:6]
+            return f"&H00{bb}{gg}{rr}"
+
+        ass = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: CTA,DejaVu Sans,52,{_ass('#3EA6FF')},&H000000FF,&H00000000,&H7F000000,1,0,0,0,100,100,0,0,1,5,0,8,50,50,250,0
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:{t0:05.2f},{_ass_time(vdur)},CTA,,0,0,250,,{wrapped.replace('\n','\\N')}
+"""
+        ap = str(pathlib.Path(outp).with_suffix(".cta.ass"))
+        pathlib.Path(ap).write_text(ass, encoding="utf-8")
+        try:
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", video_in, "-vf", f"subtitles='{ap}'",
+                "-r", str(TARGET_FPS), "-vsync","cfr",
+                "-an","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+                "-pix_fmt","yuv420p","-movflags","+faststart", outp
+            ])
+        finally:
+            pathlib.Path(ap).unlink(missing_ok=True)
+    else:
+        # Hiçbiri yoksa (çok nadir): videoyu aynen kopyala
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
 
 # ==================== Audio concat (lossless) ====================
 def concat_audios(files: List[str], outp: str):
@@ -1637,31 +1682,32 @@ def _loop_to_duration(bgm_in: str, target_sec: float, outp: str):
 
 def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
     """
-    Seslendirme + BGM karışımı:
-      1) BGM'i önce istediğimiz dB'e çekeriz.
-      2) BGM'i, seslendirmeyi sidechain olarak kullanarak bastırırız (duck).
-      3) Sonra VOICE + DUCKED_BGM'i karıştırırız.
+    VOICE + BGM karışımı:
+      - BGM'i sabit bir seviyeye çeker
+      - VOICE'u sidechain olarak kullanıp BGM'i bastırır
+      - Sonra amix=duration=longest ile birleştirir (erken kesmez)
     """
-    bgm_gain_db   = float(os.getenv("BGM_GAIN_DB", "-10"))     # daha yüksek için -8 / -6 deneyebilirsiniz
+    bgm_gain_db   = float(os.getenv("BGM_GAIN_DB", "-10"))
     thr           = float(os.getenv("BGM_DUCK_THRESH", "0.03"))
     ratio         = float(os.getenv("BGM_DUCK_RATIO",  "10"))
     attack_ms     = int(os.getenv("BGM_DUCK_ATTACK_MS","6"))
     release_ms    = int(os.getenv("BGM_DUCK_RELEASE_MS","180"))
+    makeup_gain   = float(os.getenv("BGM_MAKEUP", "1.0"))  # min 1.0
 
-    # ÖNEMLİ: sidechaincompress SIRASI [PROGRAM][SIDECHAIN] → [BGM][VOICE]
-    # Ayrıca makeup en az 1 olmalı (0 hatası alıyordunuz).
     sc = (
         f"sidechaincompress="
         f"threshold={thr}:ratio={ratio}:attack={attack_ms}:release={release_ms}:"
-        f"makeup=1.0:level_in=1.0:level_sc=1.0"
+        f"makeup={max(1.0, makeup_gain)}:level_in=1.0:level_sc=1.0"
     )
 
     # 0:a = VOICE, 1:a = BGM
-    # BGM'i önce volume ile kıs, sonra VOICE ile duck et, sonra VOICE ile amix
+    # BGM -> volume -> sidechaincompress(VOICE ile) -> 'duck'
+    # VOICE ve duck edilmiş BGM -> amix duration=longest
     filter_complex = (
         f"[1:a]volume={bgm_gain_db}dB[b];"
         f"[b][0:a]{sc}[duck];"
-        f"[0:a][duck]amix=inputs=2:duration=shortest,aresample=48000"
+        f"[0:a][duck]amix=inputs=2:duration=longest:dropout_transition=0,"
+        f"aresample=48000"
     )
 
     run([
@@ -1901,6 +1947,18 @@ def main():
     vcat = str(pathlib.Path(tmp) / "video_concat.mp4"); concat_videos_filter(segs, vcat)
     acat = str(pathlib.Path(tmp) / "audio_concat.wav"); concat_audios(wavs, acat)
 
+       if AUDIO_TAIL_PAD_MS > 0:
+        acat_pad = str(pathlib.Path(tmp) / "audio_concat_pad.wav")
+        pad = max(0, AUDIO_TAIL_PAD_MS) / 1000.0
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", acat,
+            "-af", f"apad=pad_dur={pad:.3f},aresample=48000",
+            "-ar","48000","-ac","1","-c:a","pcm_s16le",
+            acat_pad
+        ])
+        acat = acat_pad
+
     # 7) Süre & kare kilitleme
     adur = ffprobe_dur(acat); vdur = ffprobe_dur(vcat)
     if vdur + 0.02 < adur:
@@ -1986,3 +2044,4 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
