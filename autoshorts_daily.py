@@ -4,6 +4,104 @@
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
 
+# === PATCH-A: state, run-lock, topic history, YT dedup ==========
+import difflib
+import hashlib
+import datetime as _dt
+
+STATE_DIR = pathlib.Path(".state"); STATE_DIR.mkdir(parents=True, exist_ok=True)
+RUNLOCK_DIR = STATE_DIR / "runlocks"; RUNLOCK_DIR.mkdir(parents=True, exist_ok=True)
+TOPIC_DB = STATE_DIR / "topic_memory.json"
+UPLOAD_DB = STATE_DIR / "uploads.json"
+
+# Ayarlar (ENV ile override edilebilir)
+DEDUP_WINDOW_HOURS = int(os.getenv("DEDUP_WINDOW_HOURS", "6"))     # kısa aralık çift koşu engeli
+TOPIC_COOLDOWN_DAYS = int(os.getenv("TOPIC_COOLDOWN_DAYS", "30"))  # 30 gün aynı konu yok
+YT_CHECK_LAST_N = int(os.getenv("YT_CHECK_LAST_N", "50"))          # son N video kontrol
+
+def _now():
+    return _dt.datetime.now(_dt.timezone.utc)
+
+def _read_json(p: pathlib.Path, default):
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return default
+    except Exception:
+        return default
+
+def _write_json(p: pathlib.Path, obj):
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+    tmp.replace(p)
+
+def _slug(s: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", s.lower())
+    return re.sub(r"-+", "-", s).strip("-")
+
+def run_lock_guard(channel: str):
+    """Aynı kanalda kısa sürede ikinci run'u keser."""
+    f = RUNLOCK_DIR / f"{_slug(channel)}.lock"
+    if f.exists():
+        last = _dt.datetime.fromisoformat(f.read_text().strip())
+        if (_now() - last) < _dt.timedelta(hours=DEDUP_WINDOW_HOURS):
+            print(f"⏭️ Guard: {channel} {(_now()-last)} önce koşmuş. Çıkıyorum.")
+            sys.exit(0)
+    f.write_text(_now().isoformat())
+
+def topic_seen_recently(channel: str, topic: str) -> bool:
+    db = _read_json(TOPIC_DB, {})
+    ch = db.get(channel, {})
+    ts = ch.get(_slug(topic))
+    if not ts: return False
+    return (_now() - _dt.datetime.fromisoformat(ts)) < _dt.timedelta(days=TOPIC_COOLDOWN_DAYS)
+
+def record_topic(channel: str, topic: str):
+    db = _read_json(TOPIC_DB, {})
+    db.setdefault(channel, {})[_slug(topic)] = _now().isoformat()
+    _write_json(TOPIC_DB, db)
+
+def build_unique_key(channel: str, title: str, basis: list[str]) -> str:
+    raw = f"{channel}||{title}||{'|'.join(basis)}".encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:12]
+
+def already_uploaded_local(channel: str, unik: str) -> bool:
+    db = _read_json(UPLOAD_DB, {})
+    ch = db.get(channel, {})
+    ts = ch.get(unik)
+    return bool(ts and (_now() - _dt.datetime.fromisoformat(ts)) < _dt.timedelta(hours=DEDUP_WINDOW_HOURS))
+
+def record_upload_local(channel: str, unik: str):
+    db = _read_json(UPLOAD_DB, {})
+    db.setdefault(channel, {})[unik] = _now().isoformat()
+    _write_json(UPLOAD_DB, db)
+
+def yt_has_duplicate_uid_or_similar_title(yt, unik: str, title: str) -> bool:
+    """
+    Açıklamada #uid:xxx geçiyorsa veya başlık %60+ benzer ve 30 gün içindeyse True.
+    """
+    try:
+        ch = yt.channels().list(part="id", mine=True).execute()
+        channel_id = ch["items"][0]["id"]
+        search = yt.search().list(part="id", channelId=channel_id, order="date",
+                                  maxResults=min(50, YT_CHECK_LAST_N), type="video").execute()
+        ids = [it["id"]["videoId"] for it in search.get("items", [])]
+        if not ids: return False
+        vids = yt.videos().list(part="snippet", id=",".join(ids)).execute()
+        for v in vids.get("items", []):
+            sn = v["snippet"]; desc = sn.get("description","") or ""; ttl = sn.get("title","") or ""
+            if f"#uid:{unik}" in desc: return True
+            if difflib.SequenceMatcher(None, ttl.lower(), title.lower()).ratio() >= 0.60:
+                published = _dt.datetime.fromisoformat(sn["publishedAt"].replace("Z","+00:00"))
+                if (_now() - published) < _dt.timedelta(days=TOPIC_COOLDOWN_DAYS): return True
+        return False
+    except Exception as e:
+        print("⚠️ YT duplicate check atlandı:", e)
+        return False
+# === /PATCH-A ====================================================
+
 # ---------- helpers (ÖNCE gelmeli) ----------
 def _env_int(name: str, default: int) -> int:
     s = os.getenv(name)
@@ -1392,24 +1490,67 @@ def yt_service():
     creds.refresh(Request())
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
-def upload_youtube(video_path: str, meta: dict) -> str:
-    y = yt_service()
+# === PATCH-D: upload_to_youtube (dedup + #uid + kayıt) ==========
+def upload_to_youtube(youtube, video_path: str, title: str, yt_description: str,
+                      tags: list[str], visibility: str):
+    """
+    - Başlık benzerliği ve #uid ile kopya kontrolü
+    - Açıklamaya #uid ekleme
+    - Yerel upload hafızası
+    """
+    # unik: title + description tabanlı (sentences paslanmadan da stabil)
+    unik = build_unique_key(CHANNEL_NAME, title, [yt_description or ""])
+
+    # Yerel dedup
+    if already_uploaded_local(CHANNEL_NAME, unik):
+        print("⏭️ Local dedup: aynı içerik kısa aralıkta üretildi. Yükleme iptal.")
+        return None
+
+    # YouTube dedup
+    if yt_has_duplicate_uid_or_similar_title(youtube, unik, title):
+        print("⏭️ YT dedup: kanalda aynı/benzer başlık tespit edildi. Yükleme iptal.")
+        return None
+
+    # Açıklamaya benzersiz id'yi göm
+    yt_description = (yt_description or "") + f"\n\n#uid:{unik}"
+
     body = {
         "snippet": {
-            "title": meta["title"], "description": meta["description"], "tags": meta.get("tags", []),
-            "categoryId": "27",
-            "defaultLanguage": meta.get("defaultLanguage", LANG),
-            "defaultAudioLanguage": meta.get("defaultAudioLanguage", LANG)
+            "title": title[:100],
+            "description": yt_description[:4900],
+            "tags": tags[:20] if tags else [],
+            "categoryId": "22"
         },
-        "status": {"privacyStatus": meta.get("privacy", VISIBILITY), "selfDeclaredMadeForKids": False}
+        "status": {
+            "privacyStatus": visibility or "public",
+            "selfDeclaredMadeForKids": False
+        }
     }
-    media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
-    try:
-        req = y.videos().insert(part="snippet,status", body=body, media_body=media)
-        resp = req.execute()
-        return resp.get("id", "")
-    except HttpError as e:
-        raise RuntimeError(f"YouTube upload error: {e}")
+
+    media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
+
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media
+    )
+
+    response = request.execute()
+    video_id = response.get("id")
+    print("✅ Uploaded:", video_id)
+
+    # Konu & upload hafızasına yaz
+    record_topic(CHANNEL_NAME, title)
+    record_upload_local(CHANNEL_NAME, unik)
+
+    return video_id
+
+# Uyum için: eski adı `upload_video` ise aşağıdaki alias'ı açık bırak
+try:
+    upload_video
+except NameError:
+    upload_video = upload_to_youtube
+# === /PATCH-D ====================================================
 
 # ==================== Long SEO Description ====================
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
@@ -1599,6 +1740,10 @@ def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
 
 # ==================== Main ====================
 def main():
+    # === PATCH-B: run-lock =======================================
+    # Aynı kanalda kısa sürede ikinci koşuyu tamamen kes.
+    run_lock_guard(CHANNEL_NAME)
+    # === /PATCH-B =================================================
     print(f"==> {CHANNEL_NAME} | MODE={MODE} | topic-first build")
     if not (_HAS_DRAWTEXT or _HAS_SUBTITLES):
         msg = "⚠️ UYARI: ffmpeg'te ne 'drawtext' ne 'subtitles' var. Altyazılar üretilemez."
@@ -1651,35 +1796,38 @@ def main():
             continue
 
         score = _content_score(sents)
-        print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
-        if score > best_score:
-            best = (tpc, sents, search_terms, ttl, desc, tags)
-            best_score = score
-        if score >= 7.2 and ok:
-            break
-        else:
-            print("⚠️ Low content score → rebuilding…")
-            banlist = [tpc] + banlist
-            time.sleep(0.5)
+    # === PATCH-C: content -> CTA policy -> topic cooldown ===========
+    print(f"📝 Content: {title} | {len(sentences)} lines | score={score:.2f}")
+    
+    # --- sabit kötü CTA'yı temizle + %40 olasılıkla çeşit CTA ekle
+    _BAD_CTA = re.compile(r"(?i)spot a better twist.*3 words", re.S)
+    CTA_BY_MODE_EN = {
+        "daily_news": ["Your 3-word headline?", "Missed angle? Name it in 3.",
+                       "What should we cover next?", "Follow for smarter briefings."],
+        "country_facts": ["Which country next?", "Your 3-word fun fact?", "Drop a flag we should cover."],
+        "horror_story": ["Dare for Part 2?", "Scariest detail in 3 words.", "Which legend next?"],
+        "animals": ["Which animal next?", "Your wild fact in 3 words.", "Follow for daily zoology."]
+    }
+    def _apply_cta(sentences: list[str], mode: str, lang: str) -> list[str]:
+        sentences = [s for s in sentences if not _BAD_CTA.search(s)]
+        if random.random() < 0.40:
+            ctas = CTA_BY_MODE_EN.get(MODE, ["Your take in 3 words.", "What should we do next?"])
+            sentences.append(random.choice(ctas))
+        return sentences
 
-    tpc, sentences, search_terms, ttl, desc, tags = best
-    sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
-    fp = sorted(list(_sentences_fp(sentences)))[:500]
-    _record_recent(_hash12(sig), MODE, tpc, fp=fp)
-
-    # debug meta
-    _dump_debug_meta(f"{OUT_DIR}/meta_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json", {
-        "channel": CHANNEL_NAME, "topic": tpc, "sentences": sentences, "search_terms": search_terms,
-        "lang": LANG, "model": GEMINI_MODEL, "ts": time.time()
-    })
-
-    print(f"📊 Sentences: {len(sentences)}")
-
-    # 2) TTS (kelime zamanları ile)
-    tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
-    font = font_path()
-    wavs, metas = [], []
+    sentences = _apply_cta(sentences, MODE, LANG)
+    
+    # --- 30 gün aynı konuyu tekrar etme
+    topic_title = title
+    if topic_seen_recently(CHANNEL_NAME, topic_title):
+        print(f"⏭️ Topic cooldown: '{topic_title}' son {TOPIC_COOLDOWN_DAYS} günde işlendi. Çıkıyorum.")
+        sys.exit(0)
+    
+    print("📊 Sentences (final):", sentences)
+    
     print("🎤 TTS…")
+    # === /PATCH-C ====================================================
+
     for i, s in enumerate(sentences):
         base = normalize_sentence(s)
         w = str(pathlib.Path(tmp) / f"sent_{i:02d}.wav")
@@ -1892,6 +2040,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
