@@ -187,6 +187,9 @@ jobs:
           CTA_SHOW_SEC: "2.8"
           CTA_MAX_CHARS: "64"
 
+          AUDIO_TAIL_PAD_MS: "200"
+          BGM_MAKEUP: "8"
+
           # ==== BGM (arkaplan müzik) ====
           BGM_ENABLE:   "1"
           BGM_DIR:      "bgm"
