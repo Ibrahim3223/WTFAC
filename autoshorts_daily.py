@@ -15,7 +15,7 @@ _GENERIC_SKIP = {
     "secret","secrets","unknown","things","life","lived","modern","time","times","explained","guide","quick","fix","fixes"
 }
 
-def _tok_words_loose(s: str) -> list[str]:
+def _tok_words_loose(s: str) -> List[str]:
     s = re.sub(r"[^a-z0-9 ]+", " ", (s or "").lower())
     return [w for w in s.split() if len(w) >= 3]
 
@@ -1553,13 +1553,10 @@ def _polish_hook_cta(sentences: List[str]) -> List[str]:
             hook = hook.rstrip(".") + "?"
     ss[0] = hook
 
-    
-# CTA: narration now stays clean; no spoken CTA here.
-# Keep the last sentence as-is; ensure it ends properly.
-if ss and not re.search(r'[.!?]$', ss[-1].strip()):
-    ss[-1] = ss[-1].strip() + '.'
-return ss
-
+    # CTA: narration temiz; son cümleyi düzgün noktalayalım
+    if ss and not re.search(r'[.!?]$', ss[-1].strip()):
+        ss[-1] = ss[-1].strip() + '.'
+    return ss
 
 # ==================== BGM helpers (download, loop, duck, mix) ====================
 def _pick_bgm_source(tmpdir: str) -> Optional[str]:
@@ -1664,8 +1661,7 @@ def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
     filter_complex = (
         f"[1:a]volume={bgm_gain_db}dB[b];"
         f"[b][0:a]{sc}[duck];"
-        f"[0:a][duck]amix=inputs=2:weights=1 1:duration=shortest,"
-        f"aresample=48000"
+        f"[0:a][duck]amix=inputs=2:duration=shortest,aresample=48000"
     )
 
     run([
@@ -1916,7 +1912,7 @@ def main():
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
-        # 7.1) Contextual CTA (overlay only at tail)
+    # 7.1) Contextual CTA (overlay only at tail)
     cta_text = ""
     try:
         if CTA_ENABLE:
@@ -1990,6 +1986,3 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
-
-
-
