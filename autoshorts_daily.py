@@ -854,8 +854,6 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         else:
             ds[-1] += removed
 
-    cap = " ".join([w for w, _ in words_upper])
-    _ = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
     kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(n)]).strip()
 
     ass = (
@@ -874,9 +872,7 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-        # DİKKAT: Effect alanını boş bırakmak için margin_v’den sonra ÇİFT virgül var.
-        f"Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,"
-        f"{style_lit}{kline}\n"
+        f"Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{kline}\n"
     )
     return ass
 
@@ -1028,11 +1024,12 @@ def overlay_cta_tail(video_in: str, text: str, outp: str, show_sec: float, font:
 
     if _HAS_SUBTITLES:
         # ASS fallback (drawtext yoksa)
-        def _ass(s):  # #RRGGBB veya 0xRRGGBB -> &HAABBGGRR
+        def _ass_blue():  # #RRGGBB veya 0xRRGGBB -> &HAABBGGRR
             c = _ff_color("#3EA6FF").replace("0x","")
             rr,gg,bb = c[0:2], c[2:4], c[4:6]
             return f"&H00{bb}{gg}{rr}"
 
+        wrapped_ass = wrapped.replace("\n", r"\N")  # <-- f-string içinde backslash yok
         ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -1040,11 +1037,11 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CTA,DejaVu Sans,52,{_ass('#3EA6FF')},&H000000FF,&H00000000,&H7F000000,1,0,0,0,100,100,0,0,1,5,0,8,50,50,250,0
+Style: CTA,DejaVu Sans,52,{_ass_blue()},&H000000FF,&H00000000,&H7F000000,1,0,0,0,100,100,0,0,1,5,0,8,50,50,250,0
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:{t0:05.2f},{_ass_time(vdur)},CTA,,0,0,250,,{wrapped.replace('\n','\\N')}
+Dialogue: 0,0:00:{t0:05.2f},{_ass_time(vdur)},CTA,,0,0,250,,{wrapped_ass}
 """
         ap = str(pathlib.Path(outp).with_suffix(".cta.ass"))
         pathlib.Path(ap).write_text(ass, encoding="utf-8")
@@ -1654,8 +1651,6 @@ def _make_bgm_looped(src: str, dur: float, out_wav: str):
         out_wav
     ])
 
-# --- BGM helpers (ekleyin / değiştirin) ---
-
 def _find_bgm_candidates() -> List[str]:
     """repo kökünde bgm/ klasöründen veya BGM_URLS (virgül/boşlukla ayrılmış http linkleri) listesinden adayları döndürür."""
     out = []
@@ -1708,14 +1703,10 @@ def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
         f"makeup={max(1.0, makeup_gain)}:level_in=1.0:level_sc=1.0"
     )
 
-    # 0:a = VOICE, 1:a = BGM
-    # BGM -> volume -> sidechaincompress(VOICE ile) -> 'duck'
-    # VOICE ve duck edilmiş BGM -> amix duration=longest
     filter_complex = (
         f"[1:a]volume={bgm_gain_db}dB[b];"
         f"[b][0:a]{sc}[duck];"
-        f"[0:a][duck]amix=inputs=2:duration=longest:dropout_transition=0,"
-        f"aresample=48000"
+        f"[0:a][duck]amix=inputs=2:duration=longest:dropout_transition=0,aresample=48000"
     )
 
     run([
@@ -2052,5 +2043,6 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
