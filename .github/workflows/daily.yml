@@ -138,6 +138,9 @@ jobs:
           KARAOKE_EARLY_END_MS: "120"
           CAPTION_LEAD_MS:     "80"
 
+          AUDIO_TAIL_PAD_MS: "200"
+          BGM_MAKEUP: "8"
+
           # novelty & cooldown
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
