@@ -2,11 +2,12 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    # US/Eastern 12:00 & 20:00 — hem EDT (UTC-4) hem EST (UTC-5) için ayrı cronlar
-    - cron: "0 16 * * *"  # 12:00 ET (EDT dönemi)
-    - cron: "0 0 * * *"   # 20:00 ET (EDT dönemi, ertesi gün 00:00 UTC)
-    - cron: "0 17 * * *"  # 12:00 ET (EST dönemi)
-    - cron: "0 1 * * *"   # 20:00 ET (EST dönemi, ertesi gün 01:00 UTC)
+    # 12:00 US/Eastern
+    - cron: "0 16 3-10 * *"  # Mart–Ekim (EDT, UTC-4)
+    - cron: "0 17 11-2 * *"  # Kasım–Şubat (EST, UTC-5)
+    # 20:00 US/Eastern (ertesi gün UTC)
+    - cron: "0 0 3-10 * *"   # Mart–Ekim (EDT)
+    - cron: "0 1 11-2 * *"   # Kasım–Şubat (EST)
   workflow_dispatch: {}
 
 permissions:
