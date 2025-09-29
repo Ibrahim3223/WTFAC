@@ -15,8 +15,6 @@ permissions:
   id-token: none
 
 concurrency:
-env:
-  ENTITY_COOLDOWN_DAYS: '30'
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
