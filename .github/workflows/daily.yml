@@ -56,6 +56,8 @@ jobs:
           VARS_TTS_RATE:        ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:       ${{ vars.TTS_VOICE }}
           VARS_BGM_URLS:        ${{ vars.BGM_URLS }}   # optional JSON list
+
+          # karaoke offset/speed (opsiyonel ince ayar)
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.20"
         run: |
@@ -127,35 +129,40 @@ jobs:
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER:   "1"
-          KARAOKE_MODE:     "fill"
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
-          # ==== SYNC FIX ====
+          # ==== KARAOKE SYNC TUNE ====
           KARAOKE_SPEEDUP_PCT: "5.0"
           KARAOKE_RAMP_PCT:    "2.0"
           KARAOKE_EARLY_END_MS: "120"
           CAPTION_LEAD_MS:     "80"
 
-          # novelty gate (opsiyonel)
+          # novelty & cooldown
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
           NOVELTY_JACCARD_MAX: "0.55"
           NOVELTY_RETRIES: "4"
+          ENTITY_COOLDOWN_DAYS: "30"
 
-                    # ==== Contextual CTA ====
+          # ==== Contextual CTA ====
           CTA_ENABLE: "1"
           CTA_SHOW_SEC: "2.8"    # son kaç saniye görünsün
           CTA_MAX_CHARS: "64"
           # CTA_TEXT: ""         # boş değilse bu metni aynen kullanır (override)
 
-          # optional BGM
-          BGM_ENABLE: "1"      # bgm klasörünü kullanmak istiyorsan açık bırak
-          BGM_DB: "-26"
-          BGM_DUCK_DB: "-12"
-          BGM_MAKEUP: "8"
-          BGM_FADE: "0.8"
+          # ==== BGM (arkaplan müzik) ====
+          BGM_ENABLE: "1"
           BGM_DIR: "bgm"
+          # loop loudness / fade (loop oluştururken)
+          BGM_DB: "-26"
+          BGM_FADE: "0.8"
+          # sidechain ducking (autoshorts_daily.py ile uyumlu)
+          BGM_GAIN_DB: "-12"
+          BGM_DUCK_THRESH: "0.03"
+          BGM_DUCK_RATIO: "10"
+          BGM_DUCK_ATTACK_MS: "6"
+          BGM_DUCK_RELEASE_MS: "180"
         run: |
           set -e
           echo "== ${CHANNEL_NAME} =="
