@@ -88,9 +88,6 @@ CTA_TEXT_FORCE  = (os.getenv("CTA_TEXT") or "").strip()  # elle override isterse
 TOPIC_RAW = os.getenv("TOPIC", "").strip()
 TOPIC = re.sub(r'^[\'"]|[\'"]$', '', TOPIC_RAW).strip()
 
-# ---- TOPIC REUSE PREVENTION ----
-TOPIC_REUSE_DAYS = _env_int("TOPIC_REUSE_DAYS", 30)  # Minimum X gün sonra aynı konu tekrar işlenebilir
-
 def _parse_terms(s: str) -> List[str]:
     s = (s or "").strip()
     if not s: return []
@@ -220,7 +217,7 @@ def normalize_sentence(raw: str) -> str:
     s = (raw or "").strip()
     s = s.replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
     s = "\n".join(re.sub(r"\s+", " ", ln).strip() for ln in s.split("\n"))
-    s = s.replace("—", "-").replace("–", "-").replace(""", '"').replace(""", '"').replace("'", "'")
+    s = s.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'")
     s = re.sub(r"[\u200B-\u200D\uFEFF]", "", s)
     return s
 
@@ -314,17 +311,16 @@ def _save_json(path, data):
 def _state_load() -> dict:
     # Önce modern dosya, yoksa legacy'den yükleyip promote et
     if pathlib.Path(STATE_FILE).exists():
-        return _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": [], "channel_topics": []})
+        return _load_json(STATE_FILE, {"recent": [], "used_pexels_ids": []})
     if pathlib.Path(LEGACY_STATE_FILE).exists():
-        st = _load_json(LEGACY_STATE_FILE, {"recent": [], "used_pexels_ids": [], "channel_topics": []})
+        st = _load_json(LEGACY_STATE_FILE, {"recent": [], "used_pexels_ids": []})
         _save_json(STATE_FILE, st)
         return st
-    return {"recent": [], "used_pexels_ids": [], "channel_topics": []}
+    return {"recent": [], "used_pexels_ids": []}
 
 def _state_save(st: dict):
     st["recent"] = st.get("recent", [])[-1200:]
     st["used_pexels_ids"] = st.get("used_pexels_ids", [])[-5000:]
-    st["channel_topics"] = st.get("channel_topics", [])[-500:]
     _save_json(STATE_FILE, st)
 
 def _global_topics_load() -> dict:
@@ -349,50 +345,11 @@ def _record_recent(h: str, mode: str, topic: str, fp: Optional[List[str]] = None
     rec = {"h":h,"mode":mode,"topic":topic,"ts":time.time()}
     if fp: rec["fp"] = list(fp)
     st.setdefault("recent", []).append(rec)
-    
-    # Kanal bazlı topic kaydı (timestamp ile)
-    topic_norm = _normalize_topic_for_comparison(topic)
-    st.setdefault("channel_topics", []).append({
-        "topic": topic,
-        "topic_norm": topic_norm,
-        "ts": time.time()
-    })
-    
     _state_save(st)
     gst = _global_topics_load()
     if topic and topic not in gst["recent_topics"]:
         gst["recent_topics"].append(topic)
         _global_topics_save(gst)
-
-def _normalize_topic_for_comparison(topic: str) -> str:
-    """Topic'i karşılaştırma için normalize et (lowercase, noktalama temizle)"""
-    t = (topic or "").lower()
-    t = re.sub(r"[^a-z0-9 ]+", " ", t)
-    t = " ".join(t.split())
-    return t
-
-def _recent_channel_topics(days: int = None) -> List[str]:
-    """Bu kanalın son X gün içinde işlediği topic'leri döndür"""
-    if days is None:
-        days = TOPIC_REUSE_DAYS
-    
-    st = _state_load()
-    cutoff = time.time() - (days * 86400)
-    
-    recent_topics = []
-    for item in st.get("channel_topics", []):
-        if item.get("ts", 0) >= cutoff:
-            topic_norm = item.get("topic_norm", "")
-            if topic_norm and topic_norm not in recent_topics:
-                recent_topics.append(topic_norm)
-    
-    return recent_topics
-
-def _is_topic_too_recent(topic: str, days: int = None) -> bool:
-    """Bu topic son X gün içinde işlendi mi?"""
-    topic_norm = _normalize_topic_for_comparison(topic)
-    recent = _recent_channel_topics(days)
-    return topic_norm in recent
 
 def _blocklist_add_pexels(ids: List[int], days=30):
     st = _state_load()
@@ -474,7 +431,7 @@ def _ff_color(c: str) -> str:
 
 def clean_caption_text(s: str) -> str:
     t = (s or "").strip()
-    t = (t.replace("—", "-").replace("–", "-").replace(""", '"').replace(""", '"').replace("'", "'").replace("`",""))
+    t = (t.replace("—", "-").replace("–", "-").replace("“", '"').replace("”", '"').replace("’", "'").replace("`",""))
     t = re.sub(r"\s+", " ", t).strip()
     if t and t[0].islower():
         t = t[0].upper() + t[1:]
@@ -1019,19 +976,16 @@ Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), t
 CONTENT RULES:
 - Stay laser-focused on the provided TOPIC (no pivoting).
 - Sentence 1 = a punchy HOOK (≤10 words, question or bold claim).
-- Sentences 2-7 = concrete, visual facts that advance the story.
-- Sentence 8 = a contextual, comment-focused CTA that relates directly to the video content (NO generic "subscribe/like" phrases).
+- Sentence 8 = a SOFT CTA that nudges comments (no 'subscribe/like' words).
 - Aim for a seamless loop: let the last line mirror the first line idea.
 - Coherent, visually anchorable beats; each sentence advances one concrete idea.
-- Avoid vague fillers and meta-talk. No numbering. 6–12 words per sentence.
-- The CTA should be specific to this video's content and encourage thoughtful comments.""",
+- Avoid vague fillers and meta-talk. No numbering. 6–12 words per sentence.""",
 
     "country_facts": """Create amazing country/city facts.
 Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
 Rules:
 - Sentence 1 is a short HOOK (≤10 words, question/claim).
-- Sentences 2-7 are specific visual facts about the location.
-- Sentence 8 is a contextual CTA related to the content (no 'subscribe/like').
+- Sentence 8 is a soft CTA for comments (no 'subscribe/like').
 - Each fact must be specific & visual. 6–12 words per sentence."""
 }
 
@@ -1091,25 +1045,17 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
     base=list(pool); random.shuffle(base)
     return _terms_normalize(base)[:8]
 
-def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str], recent_channel_topics: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
+def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
     tpl_key = _select_template_key(topic_lock)
     template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
-    
-    # Hem global hem kanal-spesifik topic'leri avoid listesine ekle
-    all_avoid = list(set(banlist + recent_channel_topics))
-    avoid = "\n".join(f"- {b}" for b in all_avoid[:25]) if all_avoid else "(none)"
-    
+    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
     terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
     extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
 
-    guardrails = f"""
+    guardrails = """
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
-- DO NOT repeat these recently covered topics: {', '.join(all_avoid[:10])}
-- The final sentence (sentence 8) MUST be a contextual CTA specific to this video's content.
-- NO generic phrases like "subscribe", "like", "hit the bell", "don't forget", etc.
 - Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
-    
     jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
     temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
 
@@ -1119,7 +1065,7 @@ Channel: {channel_name}
 Language: {LANG}
 TOPIC (hard lock): {topic_lock}
 Seed search terms (use and expand): {terms_hint}
-Recently covered topics to AVOID (do NOT repeat these):
+Avoid overlap for 180 days:
 {avoid}{extra}
 {guardrails}
 """
@@ -1472,8 +1418,8 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
     para = " ".join(sentences)
     explainer = (
         f"{para} "
-        f"This short explores "{topic}" with clear, visual steps so you can grasp it at a glance. "
-        f"Rewatch to catch tiny details, save for later, and share with someone who'll enjoy it."
+        f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
+        f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
     )
     tagset = []
     base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
@@ -1487,7 +1433,7 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
         f"{explainer}\n\n— Key takeaways —\n"
         + "\n".join([f"• {s}" for s in sentences[:8]]) +
         "\n\n— Why it matters —\nThis topic sticks because it ties a vivid visual to a single idea per scene. "
-        f"That's how your brain remembers faster and better.\n\n— Watch next —\n"
+        f"That’s how your brain remembers faster and better.\n\n— Watch next —\n"
         f"Subscribe for more {topic.lower()} in clear, repeatable visuals.\n\n"
         + " ".join(tagset)
     )
@@ -1499,11 +1445,12 @@ def build_long_description(channel: str, topic: str, sentences: List[str], tags:
         if len(yt_tags) >= 15: break
     return title, body, yt_tags
 
-# ==================== HOOK cilası (CTA artık Gemini'den geliyor) ====================
+# ==================== HOOK/CTA cilası ====================
 HOOK_MAX_WORDS = _env_int("HOOK_MAX_WORDS", 10)
+CTA_STYLE      = os.getenv("CTA_STYLE", "soft_comment")
+LOOP_HINT      = os.getenv("LOOP_HINT", "1") == "1"
 
-def _polish_hook(sentences: List[str]) -> List[str]:
-    """Sadece hook'u (ilk cümleyi) cilalar. CTA zaten Gemini'den geliyor."""
+def _polish_hook_cta(sentences: List[str]) -> List[str]:
     if not sentences: return sentences
     ss = sentences[:]
 
@@ -1516,7 +1463,22 @@ def _polish_hook(sentences: List[str]) -> List[str]:
         if hook.split()[0:1] and hook.split()[0].lower() not in {"why","how","did","are","is","can"}:
             hook = hook.rstrip(".") + "?"
     ss[0] = hook
-    
+
+    # CTA (yumuşak yorum teşviki)
+    if CTA_STYLE == "soft_comment":
+        cta = "Spot a better twist? Drop it in 3 words below."
+        if LANG.startswith("tr"):
+            cta = "Daha iyi bir fikir mi var? 3 kelimeyle yoruma bırak."
+    else:
+        cta = "What would you add? Tell me below."
+
+    # SON cümle – loop ipucu: ilk 3 kelimeyi aynala
+    if LOOP_HINT and len(ss) >= 2:
+        start3 = " ".join(ss[0].split()[:3]).rstrip(",.?!").lower()
+        end = f"{cta} {start3}…"
+        ss[-1] = end
+    else:
+        ss[-1] = cta
     return ss
 
 # ==================== BGM helpers (download, loop, duck, mix) ====================
@@ -1532,8 +1494,7 @@ def _pick_bgm_source(tmpdir: str) -> Optional[str]:
     except Exception:
         pass
     # 2) URL listesinden indir
-    urls = list(
-    BGM_URLS or [])
+    urls = list(BGM_URLS or [])
     random.shuffle(urls)
     for u in urls:
         try:
@@ -1562,6 +1523,8 @@ def _make_bgm_looped(src: str, dur: float, out_wav: str):
         "-ar","48000","-ac","1","-c:a","pcm_s16le",
         out_wav
     ])
+
+# --- BGM helpers (ekleyin / değiştirin) ---
 
 def _find_bgm_candidates() -> List[str]:
     """repo kökünde bgm/ klasöründen veya BGM_URLS (virgül/boşlukla ayrılmış http linkleri) listesinden adayları döndürür."""
@@ -1602,18 +1565,22 @@ def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
       2) BGM'i, seslendirmeyi sidechain olarak kullanarak bastırırız (duck).
       3) Sonra VOICE + DUCKED_BGM'i karıştırırız.
     """
-    bgm_gain_db   = float(os.getenv("BGM_GAIN_DB", "-10"))
+    bgm_gain_db   = float(os.getenv("BGM_GAIN_DB", "-10"))     # daha yüksek için -8 / -6 deneyebilirsiniz
     thr           = float(os.getenv("BGM_DUCK_THRESH", "0.03"))
     ratio         = float(os.getenv("BGM_DUCK_RATIO",  "10"))
     attack_ms     = int(os.getenv("BGM_DUCK_ATTACK_MS","6"))
     release_ms    = int(os.getenv("BGM_DUCK_RELEASE_MS","180"))
 
+    # ÖNEMLİ: sidechaincompress SIRASI [PROGRAM][SIDECHAIN] → [BGM][VOICE]
+    # Ayrıca makeup en az 1 olmalı (0 hatası alıyordunuz).
     sc = (
         f"sidechaincompress="
         f"threshold={thr}:ratio={ratio}:attack={attack_ms}:release={release_ms}:"
         f"makeup=1.0:level_in=1.0:level_sc=1.0"
     )
 
+    # 0:a = VOICE, 1:a = BGM
+    # BGM'i önce volume ile kıs, sonra VOICE ile duck et, sonra VOICE ile amix
     filter_complex = (
         f"[1:a]volume={bgm_gain_db}dB[b];"
         f"[b][0:a]{sc}[duck];"
@@ -1642,12 +1609,6 @@ def main():
     topic_lock = TOPIC or "Interesting Visual Explainers"
     user_terms = SEARCH_TERMS_ENV
 
-    # Bu kanalın son X gün içinde işlediği topic'leri çek
-    recent_channel_topics = _recent_channel_topics(TOPIC_REUSE_DAYS)
-    print(f"🚫 Topic reuse prevention: {len(recent_channel_topics)} topics blocked for {TOPIC_REUSE_DAYS} days")
-    if recent_channel_topics:
-        print(f"   Recent topics: {', '.join(recent_channel_topics[:5])}...")
-
     # 1) İçerik üretim (topic-locked) + kalite kontrol + NOVELTY
     attempts = 0
     best = None; best_score = -1.0
@@ -1656,21 +1617,9 @@ def main():
 
     while attempts < max(3, NOVELTY_RETRIES):
         attempts += 1
-        
-        # Topic'in çok yakın zamanda işlenip işlenmediğini kontrol et
-        if _is_topic_too_recent(topic_lock, TOPIC_REUSE_DAYS):
-            print(f"⚠️ Topic '{topic_lock}' was recently covered (within {TOPIC_REUSE_DAYS} days)")
-            # Eğer TOPIC env'den geliyorsa ve çok yakın zamanda işlendiyse, uyar ama devam et
-            if TOPIC_RAW:
-                print(f"   → Continuing anyway because TOPIC is explicitly set in ENV")
-            else:
-                raise RuntimeError(f"Topic '{topic_lock}' was covered within {TOPIC_REUSE_DAYS} days. Change TOPIC or wait.")
-        
         if USE_GEMINI and GEMINI_API_KEY:
             try:
-                tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(
-                    CHANNEL_NAME, topic_lock, user_terms, banlist, recent_channel_topics
-                )
+                tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(CHANNEL_NAME, topic_lock, user_terms, banlist)
             except Exception as e:
                 print(f"Gemini error: {str(e)[:200]}")
                 tpc = topic_lock; sents=[]; search_terms=user_terms or []
@@ -1690,8 +1639,8 @@ def main():
             search_terms = _terms_normalize(user_terms or ["macro detail","timelapse","clean b-roll"])
             ttl = ""; desc=""; tags=[]
 
-        # Hook cilası (CTA artık Gemini'den geliyor, sadece hook'u düzelt)
-        sents = _polish_hook(sents)
+        # Hook + CTA cilası
+        sents = _polish_hook_cta(sents)
 
         # NOVELTY kontrolü
         ok, avoid_terms = _novelty_ok(sents)
@@ -1725,7 +1674,6 @@ def main():
     })
 
     print(f"📊 Sentences: {len(sentences)}")
-    print(f"💬 CTA (from Gemini): {sentences[-1] if sentences else 'N/A'}")
 
     # 2) TTS (kelime zamanları ile)
     tmp = tempfile.mkdtemp(prefix="enhanced_shorts_")
@@ -1870,19 +1818,19 @@ def main():
     vdur2 = ffprobe_dur(vcat); adur2 = ffprobe_dur(acat)
     print(f"🔒 Locked A/V: video={vdur2:.3f}s | audio={adur2:.3f}s | fps={TARGET_FPS}")
 
-    # 7.1) Contextual CTA overlay - ARTIK KULLANILMIYOR (CTA zaten Gemini'den geliyor)
-    # Eğer yine de overlay istiyorsanız CTA_ENABLE=1 yapabilirsiniz
+        # 7.1) Contextual CTA (overlay only at tail)
     cta_text = ""
     try:
-        if CTA_ENABLE and CTA_TEXT_FORCE:
-            # Sadece manuel override varsa overlay ekle
-            cta_text = CTA_TEXT_FORCE
-            print(f"💬 CTA overlay (forced): {cta_text}")
-            vcat_cta = str(pathlib.Path(tmp) / "video_cta.mp4")
-            overlay_cta_tail(vcat, cta_text, vcat_cta, CTA_SHOW_SEC, font)
-            vcat_exact2 = str(pathlib.Path(tmp) / "video_exact_cta.mp4")
-            enforce_video_exact_frames(vcat_cta, a_frames, vcat_exact2)
-            vcat = vcat_exact2
+        if CTA_ENABLE:
+            cta_text = build_contextual_cta(tpc, [m[0] for m in metas], LANG)
+            if cta_text:
+                print(f"💬 CTA: {cta_text}")
+                vcat_cta = str(pathlib.Path(tmp) / "video_cta.mp4")
+                overlay_cta_tail(vcat, cta_text, vcat_cta, CTA_SHOW_SEC, font)
+                # aynı kare sayısını koru:
+                vcat_exact2 = str(pathlib.Path(tmp) / "video_exact_cta.mp4")
+                enforce_video_exact_frames(vcat_cta, a_frames, vcat_exact2)
+                vcat = vcat_exact2
     except Exception as e:
         print(f"⚠️ CTA overlay skipped: {e}")
 
@@ -1895,6 +1843,7 @@ def main():
             _make_bgm_looped(bgm_src, adur2, bgm_loop)
             a_mix = str(pathlib.Path(tmp) / "audio_with_bgm.wav")
             _duck_and_mix(acat, bgm_loop, a_mix)
+            # yeniden tam kare süreye kilitle
             a_mix_exact = str(pathlib.Path(tmp) / "audio_with_bgm_exact.wav")
             lock_audio_duration(a_mix, max(2, int(round(adur2 * TARGET_FPS))), a_mix_exact)
             acat = a_mix_exact
@@ -1943,3 +1892,6 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
+
+
