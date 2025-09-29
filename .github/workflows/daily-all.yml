@@ -94,9 +94,7 @@ jobs:
           VARS_GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
           VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
-          VARS_BGM_URLS:         ${{ vars.BGM_URLS }}   # optional JSON (["https://.../track.mp3"])
-
-          # karaoke offset/speed (opsiyonel)
+          VARS_BGM_URLS:         ${{ vars.BGM_URLS }}
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.35"
         run: |
@@ -165,43 +163,38 @@ jobs:
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER:   "1"
+          KARAOKE_MODE:     "fill"
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
 
-          # ==== KARAOKE SYNC TUNE ====
+          # ==== CAPTCHA / SYNC TUNE ====
           KARAOKE_SPEEDUP_PCT: "5.0"
           KARAOKE_RAMP_PCT:    "2.0"
-          KARAOKE_EARLY_END_MS: "120"
+          KARAOKE_EARLY_END_MS: "80"
           CAPTION_LEAD_MS:     "80"
 
-          # ==== NOVELTY & COOLDOWN ====
+          # ==== NOVELTY ====
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
           NOVELTY_JACCARD_MAX: "0.55"
           NOVELTY_RETRIES: "4"
-          ENTITY_COOLDOWN_DAYS: "30"
 
           # ==== Contextual CTA ====
           CTA_ENABLE: "1"
           CTA_SHOW_SEC: "2.8"
           CTA_MAX_CHARS: "64"
 
-          AUDIO_TAIL_PAD_MS: "200"
-          BGM_MAKEUP: "8"
-
-          # ==== BGM (arkaplan müzik) ====
+          # ==== BGM ====
           BGM_ENABLE:   "1"
           BGM_DIR:      "bgm"
-          # loop loudness / fade
-          BGM_DB: "-26"
-          BGM_FADE: "0.8"
-          # sidechain ducking (autoshorts_daily.py ile uyumlu)
-          BGM_GAIN_DB:  "-20"
-          BGM_DUCK_THRESH: "0.03"
-          BGM_DUCK_RATIO:  "10"
-          BGM_DUCK_ATTACK_MS: "6"
-          BGM_DUCK_RELEASE_MS: "180"
+          BGM_DB:       "-20"
+          BGM_DUCK_DB:  "-6"
+          BGM_MAKEUP:   "8"
+          BGM_SHUFFLE:  "1"
+          BGM_START_AT_SEC: "0"
+          BGM_FADE_IN_MS:  "600"
+          BGM_FADE_OUT_MS: "800"
         run: |
           set -e
           echo "== ${CHANNEL_NAME} =="
