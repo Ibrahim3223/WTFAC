@@ -1594,9 +1594,10 @@ def _make_bgm_looped(src: str, dur: float, out_wav: str):
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-stream_loop","-1","-i", src,
         "-t", f"{dur:.3f}",
-        "-af", f"loudnorm=I=-23:TP=-2.0:LRA=11,volume={BGM_DB}dB,"
+        "-af", f"loudnorm=I=-21:TP=-2.0:LRA=11,"
                f"afade=t=in:st=0:d={fade:.2f},afade=t=out:st={endst:.2f}:d={fade:.2f},"
                "aresample=48000,pan=mono|c0=0.5*FL+0.5*FR",
+
         "-ar","48000","-ac","1","-c:a","pcm_s16le",
         out_wav
     ])
@@ -1661,13 +1662,14 @@ def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
     filter_complex = (
         f"[1:a]volume={bgm_gain_db}dB[b];"
         f"[b][0:a]{sc}[duck];"
-        f"[0:a][duck]amix=inputs=2:duration=shortest,aresample=48000"
+        f"[0:a][duck]amix=inputs=2:duration=shortest,aresample=48000,alimiter=limit=0.98[mix]"
     )
-
+    
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", voice_in, "-i", bgm_in,
         "-filter_complex", filter_complex,
+        "-map","[mix]",
         "-ar","48000","-ac","1",
         "-c:a","pcm_s16le",
         outp
@@ -1986,3 +1988,4 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
