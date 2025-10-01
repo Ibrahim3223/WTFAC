@@ -155,11 +155,11 @@ jobs:
           BGM_ENABLE: "1"
           BGM_DIR: "bgm"
           # loop loudness / fade (loop oluştururken)
-          BGM_DB: "-26"
+          BGM_DB: "0"
           BGM_FADE: "0.8"
           # sidechain ducking (autoshorts_daily.py ile uyumlu)
-          BGM_GAIN_DB: "-12"
-          BGM_DUCK_THRESH: "0.03"
+          BGM_GAIN_DB: "-11"
+          BGM_DUCK_THRESH: "0.035"
           BGM_DUCK_RATIO: "10"
           BGM_DUCK_ATTACK_MS: "6"
           BGM_DUCK_RELEASE_MS: "180"
