@@ -4,6 +4,10 @@
 import os, sys, re, json, time, random, datetime, tempfile, pathlib, subprocess, hashlib, math, shutil
 from typing import List, Optional, Tuple, Dict, Any, Set
 
+# ---- novelty guard (30g anti-repeat + semantic) ----
+from novelty_guard import NoveltyGuard  # novelty_guard.py eklendiğine göre direkt içeri alıyoruz
+STATE_DIR = os.getenv("STATE_DIR", ".state")
+
 # ---- focus-entity cooldown (stronger anti-repeat) ----
 ENTITY_COOLDOWN_DAYS = int(os.getenv("ENTITY_COOLDOWN_DAYS", os.getenv("NOVELTY_WINDOW", "30")))
 
@@ -1176,6 +1180,16 @@ Avoid overlap for 180 days:
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
     return topic, sentences, terms, title, desc, tags
 
+# --- Regenerate helper (novelty guard önerilerine göre) ---
+def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
+    seed_user_terms = list(base_user_terms or [])
+    if seed_term:
+        seed_user_terms = [seed_term] + seed_user_terms
+    extended_ban = list((avoid_list or [])) + list((banlist or []))
+    tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(CHANNEL_NAME, topic_lock, seed_user_terms, extended_ban)
+    sents = _polish_hook_cta(sents)
+    return tpc, sents, search_terms, ttl, desc, tags
+
 # ==================== Per-scene queries ====================
 _STOP = set("""
 a an the and or but if while of to in on at from by with for about into over after before between during under above across around through
@@ -1687,11 +1701,15 @@ def main():
     topic_lock = TOPIC or "Interesting Visual Explainers"
     user_terms = SEARCH_TERMS_ENV
 
+    # NoveltyGuard'ı kanal + pencere ile başlat
+    GUARD = NoveltyGuard(state_dir=STATE_DIR, window_days=ENTITY_COOLDOWN_DAYS)
+
     # 1) İçerik üretim (topic-locked) + kalite kontrol + NOVELTY
     attempts = 0
     best = None; best_score = -1.0
     banlist = _recent_topics_for_prompt()
     novelty_tries = 0
+    selected_search_term_final = None  # kayda geçeceğimiz seçim
 
     while attempts < max(3, NOVELTY_RETRIES):
         attempts += 1
@@ -1720,12 +1738,58 @@ def main():
         # Hook + CTA cilası
         sents = _polish_hook_cta(sents)
 
-        # NOVELTY kontrolü
+        # ---- NoveltyGuard: LRU term seçimi + semantik kontrol ----
+        selected_term = None
+        try:
+            if search_terms:
+                selected_term = GUARD.pick_search_term(channel=CHANNEL_NAME, candidates=search_terms)
+        except Exception as e:
+            print(f"⚠️ pick_search_term warn: {e}")
+
+        def _guard_recent_titles(n=10):
+            try:
+                return [it["title"] for it in GUARD.recent_items(CHANNEL_NAME, ENTITY_COOLDOWN_DAYS)[:n] if it.get("title")]
+            except Exception:
+                return []
+
+        # 1.a Semantik benzerlik + cooldown kontrolü
+        try:
+            title_for_check = (ttl or "").strip() or (sents[0] if sents else tpc)
+            script_for_check = " ".join(sents or [])
+            decision = GUARD.check_novelty(
+                channel=CHANNEL_NAME,
+                title=title_for_check,
+                script=script_for_check,
+                search_term=selected_term,
+                category=MODE, mode=MODE, lang=LANG
+            )
+            if not decision.ok:
+                novelty_tries += 1
+                print(f"🚫 NoveltyGuard block ({novelty_tries}/{NOVELTY_RETRIES}): {decision.reason}")
+                # Alternatif term ve avoid list ile yeniden üret
+                alt_terms = (decision.suggestions or {}).get("alt_terms", [])
+                avoid_list = _guard_recent_titles(12)
+                seed_alt = (alt_terms[0] if alt_terms else None)
+                tpc, sents, search_terms, ttl, desc, tags = regenerate_with_llm(topic_lock, seed_alt, avoid_list, (user_terms or []), banlist)
+                # Bir sonraki döngüye bırak
+                banlist = avoid_list + banlist
+                # devam → döngü başına
+                continue
+            else:
+                selected_search_term_final = selected_term or (search_terms[0] if search_terms else None)
+        except Exception as e:
+            print(f"⚠️ NoveltyGuard check skipped: {e}")
+            selected_search_term_final = (search_terms[0] if search_terms else None)
+
+        # NOVELTY (yerel jaccard) kontrolü
         ok, avoid_terms = _novelty_ok(sents)
         if not ok and novelty_tries < NOVELTY_RETRIES:
             novelty_tries += 1
             print(f"⚠️ Similar to recent videos (try {novelty_tries}/{NOVELTY_RETRIES}) → rebuilding with bans: {avoid_terms[:8]}")
             banlist = avoid_terms + banlist
+            # Ayrıca GUARD önerilerini tohuma ekle:
+            if selected_search_term_final:
+                user_terms = [selected_search_term_final] + (user_terms or [])
             continue
 
         # Focus-entity cooldown (stronger anti-repeat)
@@ -1741,7 +1805,7 @@ def main():
         score = _content_score(sents)
         print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
         if score > best_score:
-            best = (tpc, sents, search_terms, ttl, desc, tags)
+            best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final)
             best_score = score
         if score >= 7.2 and ok:
             break
@@ -1750,7 +1814,8 @@ def main():
             banlist = [tpc] + banlist
             time.sleep(0.5)
 
-    tpc, sentences, search_terms, ttl, desc, tags = best
+    # Final seçilen içerik
+    tpc, sentences, search_terms, ttl, desc, tags, selected_search_term_final = best
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
     fp = sorted(list(_sentences_fp(sentences)))[:500]
     _record_recent(_hash12(sig), MODE, tpc, fp=fp)
@@ -1766,7 +1831,7 @@ def main():
     # debug meta
     _dump_debug_meta(f"{OUT_DIR}/meta_{re.sub(r'[^A-Za-z0-9]+','_',CHANNEL_NAME)}.json", {
         "channel": CHANNEL_NAME, "topic": tpc, "sentences": sentences, "search_terms": search_terms,
-        "lang": LANG, "model": GEMINI_MODEL, "ts": time.time()
+        "lang": LANG, "model": GEMINI_MODEL, "ts": time.time(), "selected_search_term": selected_search_term_final
     })
 
     print(f"📊 Sentences: {len(sentences)}")
@@ -1797,6 +1862,19 @@ def main():
         rotation_seed=ROTATION_SEED
     )
     if not pool: raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
+
+    # NoveltyGuard PEXELS tekrar filtresi (SQLite state)
+    try:
+        cand_ids = [vid for (vid, _) in pool]
+        fresh_ids = GUARD.filter_new_pexels(channel=CHANNEL_NAME, candidate_ids=cand_ids, days=ENTITY_COOLDOWN_DAYS)
+        if fresh_ids:
+            fresh_set = set(map(int, fresh_ids))
+            pool = [(vid, link) for (vid, link) in pool if int(vid) in fresh_set]
+            print(f"🧹 NoveltyGuard Pexels filter → {len(pool)} fresh candidates")
+        if not pool:
+            raise RuntimeError("Pexels: no suitable NEW clips (all seen in last 30 days).")
+    except Exception as e:
+        print(f"⚠️ NoveltyGuard Pexels filter skipped: {e}")
 
     # 4) İndir ve dağıt
     downloads: Dict[int,str] = {}
@@ -1975,6 +2053,22 @@ def main():
     except Exception as e:
         print(f"⚠️ Blocklist save warn: {e}")
 
+    # 11.5) NoveltyGuard'a final kayıt (başlık + script + pexels)
+    try:
+        GUARD.register_item(
+            channel=CHANNEL_NAME,
+            title=title,
+            script=" ".join([m[0] for m in metas]),
+            search_term=(selected_search_term_final or (search_terms[0] if search_terms else "")),
+            category=MODE,
+            mode=MODE,
+            lang=LANG,
+            topic=tpc,
+            pexels_ids=list(map(int, chosen_ids or []))
+        )
+    except Exception as e:
+        print(f"⚠️ NoveltyGuard register warn: {e}")
+
     # 12) Temizlik
     try: shutil.rmtree(tmp); print("🧹 Cleaned temp files")
     except: pass
@@ -1988,4 +2082,3 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
-
