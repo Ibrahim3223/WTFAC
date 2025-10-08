@@ -176,9 +176,14 @@ jobs:
           # ==== NOVELTY & COOLDOWN ====
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
-          NOVELTY_JACCARD_MAX: "0.55"
-          NOVELTY_RETRIES: "4"
-          ENTITY_COOLDOWN_DAYS: "30"
+          NOVELTY_JACCARD_MAX: "0.45"
+          NOVELTY_RETRIES: "6"
+          ENTITY_COOLDOWN_DAYS: "45"
+
+          NOVELTY_SIMHASH_MAX: "6"
+          NOVELTY_ENTITY_JACCARD: "0.50"
+
+          GEMINI_TEMP: "0.95"
 
           # ==== Contextual CTA ====
           CTA_ENABLE: "1"
