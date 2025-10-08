@@ -259,64 +259,6 @@ except ImportError:
     from google.auth.transport.requests import Request
 from googleapiclient.errors import HttpError
 
-# ==================== TOPIC ROTATION & SUB-TOPICS ====================
-def _load_topic_history(channel: str) -> List[Dict[str,Any]]:
-    """Son 60 günlük topic geçmişini yükle"""
-    try:
-        gst = _global_topics_load()
-        hist = gst.get(f"topic_history_{channel}", [])
-        cutoff = time.time() - 60*86400
-        return [h for h in hist if h.get("ts", 0) > cutoff]
-    except:
-        return []
-
-def _save_topic_to_history(channel: str, topic: str, angle: str):
-    """Topic + angle kombinasyonunu kaydet"""
-    try:
-        gst = _global_topics_load()
-        key = f"topic_history_{channel}"
-        hist = gst.get(key, [])
-        hist.append({
-            "topic": topic,
-            "angle": angle,
-            "ts": time.time(),
-            "hash": hashlib.md5(f"{topic}|{angle}".encode()).hexdigest()[:12]
-        })
-        gst[key] = hist[-200:]  # son 200 kayıt
-        _global_topics_save(gst)
-    except Exception as e:
-        print(f"⚠️ Topic history save warn: {e}")
-
-def _generate_unique_angle(base_topic: str, channel: str) -> Tuple[str, str]:
-    """
-    Ana topic'ten unique bir açı/perspektif üret.
-    Returns: (sub_topic, angle_description)
-    """
-    history = _load_topic_history(channel)
-    used_hashes = {h.get("hash") for h in history}
-    
-    # Açı kategorileri - her video farklı lens'ten bakmalı
-    angle_templates = [
-        "hidden_fact", "counterintuitive", "historical_context", 
-        "modern_application", "scientific_explanation", "cultural_comparison",
-        "economic_impact", "environmental_angle", "technological_aspect",
-        "human_story", "future_prediction", "myth_debunking",
-        "rare_exception", "extreme_case", "everyday_impact"
-    ]
-    
-    # Kullanılmamış açı seç
-    for _ in range(20):
-        angle = random.choice(angle_templates)
-        test_hash = hashlib.md5(f"{base_topic}|{angle}".encode()).hexdigest()[:12]
-        if test_hash not in used_hashes:
-            # Sub-topic prompt oluştur
-            sub_prompt = f"{base_topic} - Focus on {angle.replace('_', ' ')} aspect"
-            return sub_prompt, angle
-    
-    # Fallback: timestamp-based unique suffix
-    ts_suffix = int(time.time()) % 10000
-    return f"{base_topic} (variant {ts_suffix})", "unique_variant"
-
 # ==================== Voices ====================
 VOICE_OPTIONS = {
     "en": [
@@ -1120,161 +1062,31 @@ def _select_template_key(topic: str) -> str:
     return "_default"
 
 # ==================== Gemini (topic-locked) ====================
+ENHANCED_GEMINI_TEMPLATES = {
+    "_default": """Create a 25–40s YouTube Short.
+Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
+
+CONTENT RULES:
+- Stay laser-focused on the provided TOPIC (no pivoting).
+- Sentence 1 = a punchy HOOK (≤10 words, question or bold claim).
+- Sentence 8 = a SOFT CTA that nudges comments (no 'subscribe/like' words).
+- Aim for a seamless loop: let the last line mirror the first line idea.
+- Coherent, visually anchorable beats; each sentence advances one concrete idea.
+- Avoid vague fillers and meta-talk. No numbering. 6–12 words per sentence.""",
+
+    "country_facts": """Create amazing country/city facts.
+Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
+Rules:
+- Sentence 1 is a short HOOK (≤10 words, question/claim).
+- Sentence 8 is a soft CTA for comments (no 'subscribe/like').
+- Each fact must be specific & visual. 6–12 words per sentence."""
+}
+
 BANNED_PHRASES = [
     "one clear tip", "see it", "learn it", "plot twist",
     "soap-opera narration", "repeat once", "takeaway action",
     "in 60 seconds", "just the point", "crisp beats"
 ]
-
-# ==================== Gemini (topic-locked) ====================
-ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """Create a VIRAL 25-40s YouTube Short that STOPS THE SCROLL.
-
-CRITICAL FIRST 3 SECONDS (Hook):
-- Start with a SHOCKING question, bold claim, or "Did you know...?" that creates curiosity gap
-- Use power words: "Never", "Always", "Secret", "Banned", "Illegal", "Hidden", "Forbidden"
-- Make it IMPOSSIBLE to scroll past
-- Example: "This country BANNED this common food - here's why..."
-
-Return STRICT JSON with keys: topic, sentences (7-8), search_terms (4-10), title, description, tags
-
-CONTENT RULES:
-- Sentence 1 = EXPLOSIVE HOOK (≤10 words, creates massive curiosity)
-- Sentences 2-6 = Build tension, reveal surprising facts, use "But here's the twist..."
-- Sentence 7 = Mind-blowing climax/payoff
-- Sentence 8 = Engagement CTA (ask polarizing question to spark comments)
-
-AVOID THESE COMPLETELY:
-{avoid_topics_list}
-
-VIRAL FORMULA:
-- Each sentence must create a "Wait, what?" moment
-- Use pattern interrupts: "But that's not the crazy part..."
-- Include specific numbers, dates, or statistics for credibility
-- Create emotional reaction: surprise, shock, or awe
-- NEVER be generic or boring
-
-VIDEO STRUCTURE:
-- 0-3s: Hook that stops scrolling
-- 4-15s: Build curiosity with surprising facts
-- 16-25s: Reveal the "twist" or main insight
-- 26-35s: Final wow moment
-- 36-40s: Call-to-action for engagement
-
-Each sentence must be:
-- 6-12 words (short punchy)
-- Visually anchorable (clear scene)
-- Emotionally engaging
-- NO filler words like "basically", "actually", "so"
-""",
-
-    "country_facts": """Create a VIRAL country fact video that makes people say "I had NO idea!"
-
-HOOK FORMULA (Sentence 1):
-- "In [COUNTRY], it's ILLEGAL to..."
-- "[COUNTRY] has a SECRET law that..."
-- "You can't [ACTION] in [COUNTRY] - here's why..."
-- "This is BANNED in [COUNTRY] but legal everywhere else..."
-
-Return STRICT JSON with keys: topic, sentences (7-8), search_terms (4-10), title, description, tags
-
-AVOID THESE COUNTRIES/TOPICS:
-{avoid_topics_list}
-
-CONTENT PATTERN:
-1. Shocking hook about unusual law/custom
-2. Context (when/why it started)
-3. Specific example that makes it real
-4. Comparison to other countries
-5. The surprising twist/exception
-6. Modern day impact
-7. Final wow fact
-8. Polarizing question: "Should other countries do this? 👇"
-
-MAKE IT VIRAL:
-- Use SPECIFIC examples: "In 2019, a tourist was fined $500 for..."
-- Include shocking statistics: "73% of locals think..."
-- Create controversy: Compare to what viewers expect
-- Use power words: forbidden, secret, banned, hidden, extreme
-
-NO generic facts like "France has the Eiffel Tower" - ONLY surprising, lesser-known facts.
-"""
-}
-
-def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
-    # Unique angle üret
-    sub_topic, angle = _generate_unique_angle(topic_lock, channel_name)
-    
-    tpl_key = _select_template_key(topic_lock)
-    template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
-    
-    # Avoid list formatla
-    avoid_formatted = "\n".join([f"❌ {b}" for b in banlist[:20]]) if banlist else "None"
-    template = template.replace("{avoid_topics_list}", avoid_formatted)
-    
-    terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
-    extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
-
-    guardrails = f"""
-MANDATORY RULES:
-- Topic MUST be: {sub_topic} (angle: {angle})
-- Hook MUST stop scrolling in first 3 seconds
-- NEVER repeat these avoided topics: {", ".join(banlist[:10])}
-- Every sentence needs a "Wait, what?" moment
-- Return ONLY valid JSON, no markdown
-- Keys: topic, sentences, search_terms, title, description, tags
-"""
-    
-    jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
-    temp = max(0.85, min(1.15, GEMINI_TEMP + (jitter - 0.06)))  # Daha yüksek creativity
-
-    prompt = f"""{template}
-
-Channel: {channel_name}
-Language: {LANG}
-MAIN TOPIC: {topic_lock}
-UNIQUE ANGLE THIS VIDEO: {sub_topic}
-Perspective: {angle.replace('_', ' ')}
-
-Seed search terms: {terms_hint}
-
-RECENTLY COVERED (NEVER repeat these):
-{avoid_formatted}
-
-{extra}
-{guardrails}
-"""
-    
-    data = _gemini_call(prompt, GEMINI_MODEL, temp)
-    
-    # Parse response
-    topic = topic_lock  # Always use the locked topic
-    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
-    sentences = [s for s in sentences if s][:8]
-    
-    terms = data.get("search_terms") or []
-    if isinstance(terms, str): 
-        terms = [terms]
-    terms = _terms_normalize(terms)
-    
-    if not terms: 
-        terms = _derive_terms_from_text(topic, sentences)
-    
-    if user_terms:
-        seed = _terms_normalize(user_terms)
-        terms = _terms_normalize(seed + terms)
-
-    title = (data.get("title") or "").strip()
-    desc  = (data.get("description") or "").strip()
-    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t, str) and t.strip()]
-    
-    # Save angle to history
-    try:
-        _save_topic_to_history(channel_name, topic_lock, angle)
-    except Exception as e:
-        print(f"⚠️ Topic history save warn: {e}")
-    
-    return topic, sentences, terms, title, desc, tags
 
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
@@ -1325,6 +1137,48 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
             pool.add(ws[i]+" "+ws[i+1])
     base=list(pool); random.shuffle(base)
     return _terms_normalize(base)[:8]
+
+def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
+    tpl_key = _select_template_key(topic_lock)
+    template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
+    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
+    terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
+    extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
+
+    guardrails = """
+RULES (MANDATORY):
+- STAY ON TOPIC exactly as provided.
+- Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
+    jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
+    temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
+
+    prompt = f"""{template}
+
+Channel: {channel_name}
+Language: {LANG}
+TOPIC (hard lock): {topic_lock}
+Seed search terms (use and expand): {terms_hint}
+Avoid overlap for 180 days:
+{avoid}{extra}
+{guardrails}
+"""
+    data = _gemini_call(prompt, GEMINI_MODEL, temp)
+
+    topic   = topic_lock
+    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
+    sentences = [s for s in sentences if s][:8]
+    terms = data.get("search_terms") or []
+    if isinstance(terms, str): terms=[terms]
+    terms = _terms_normalize(terms)
+    if not terms: terms = _derive_terms_from_text(topic, sentences)
+    if user_terms:
+        seed = _terms_normalize(user_terms)
+        terms = _terms_normalize(seed + terms)
+
+    title = (data.get("title") or "").strip()
+    desc  = (data.get("description") or "").strip()
+    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
+    return topic, sentences, terms, title, desc, tags
 
 # --- Regenerate helper (novelty guard önerilerine göre) ---
 def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
@@ -1662,66 +1516,36 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 # ==================== Long SEO Description ====================
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
-    """SEO-optimized viral title + description"""
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
-    
-    # VIRAL TITLE FORMULAS
-    title_templates = [
-        f"Why {hook}? 😱",
-        f"{hook} (You Won't Believe This)",
-        f"The Truth About {hook}",
-        f"{hook} - Here's What They Don't Tell You",
-        f"This is Why {hook} 🤯",
-        f"{hook} Explained in 30 Seconds",
-        f"The Secret Behind {hook}",
-    ]
-    
-    # En kısa ve çekici olan seç
-    title = min(title_templates, key=len)
-    title = (title[:97] + "...") if len(title) > 100 else title
-    
-    # Emotional trigger words for description
+    title = (hook[:1].upper() + hook[1:])[:95]
     para = " ".join(sentences)
     explainer = (
-        f"🔥 {para}\n\n"
-        f"This is one of those facts that makes you go 'Wait, WHAT?!' "
-        f"The story behind '{topic}' is way more interesting than you think.\n\n"
-        f"🎯 Hit LIKE if this blew your mind!\n"
-        f"💬 Drop your thoughts in the comments - I read them all!\n"
-        f"🔔 Subscribe for more mind-blowing facts daily!\n\n"
+        f"{para} "
+        f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
+        f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
     )
-    
-    # Enhanced hashtags
-    tagset = ["#shorts", "#viral", "#mindblown", "#didyouknow", "#facts"]
-    
-    # Topic-specific tags
-    topic_words = [w for w in re.findall(r"[A-Za-z]{4,}", topic.lower())][:3]
-    for w in topic_words:
-        tag = f"#{w}"
-        if tag not in tagset:
-            tagset.append(tag)
-    
-    # Trending tags
-    trending = ["#fyp", "#foryou", "#educational", "#interesting", "#wtf"]
-    tagset.extend([t for t in trending if t not in tagset][:3])
-    
-    # Rest of description
+    tagset = []
+    base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
+    for t in base_terms: tagset.append("#" + t.lower())
+    tagset += ["#shorts", "#learn", "#visual", "#broll", "#education"]
+    if tags:
+        for t in tags[:10]:
+            tclean = re.sub(r"[^A-Za-z0-9]+","", t).lower()
+            if tclean and ("#"+tclean) not in tagset: tagset.append("#"+tclean)
     body = (
-        f"{explainer}"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"📌 KEY POINTS:\n" +
-        "\n".join([f"  • {s}" for s in sentences[:6]]) +
-        f"\n━━━━━━━━━━━━━━━━\n\n"
-        f"❓ What do YOU think? Let me know below! 👇\n\n"
-        + " ".join(tagset[:15])
+        f"{explainer}\n\n— Key takeaways —\n"
+        + "\n".join([f"• {s}" for s in sentences[:8]]) +
+        "\n\n— Why it matters —\nThis topic sticks because it ties a vivid visual to a single idea per scene. "
+        f"That’s how your brain remembers faster and better.\n\n— Watch next —\n"
+        f"Subscribe for more {topic.lower()} in clear, repeatable visuals.\n\n"
+        + " ".join(tagset)
     )
-    
-    if len(body) > 4950:
-        body = body[:4950] + "..."
-    
-    # YouTube tags (no # prefix)
-    yt_tags = [h[1:] for h in tagset if h.startswith("#")][:15]
-    
+    if len(body) > 4900: body = body[:4900]
+    yt_tags = []
+    for h in tagset:
+        k = h[1:]
+        if k and k not in yt_tags: yt_tags.append(k)
+        if len(yt_tags) >= 15: break
     return title, body, yt_tags
 
 # ==================== HOOK/CTA cilası ====================
@@ -1730,61 +1554,22 @@ CTA_STYLE      = os.getenv("CTA_STYLE", "soft_comment")
 LOOP_HINT      = os.getenv("LOOP_HINT", "1") == "1"
 
 def _polish_hook_cta(sentences: List[str]) -> List[str]:
-    """Optimize hook for maximum retention"""
-    if not sentences:
-        return sentences
+    if not sentences: return sentences
     ss = sentences[:]
 
-    # HOOK OPTIMIZATION - İlk 3 saniye kritik!
+    # HOOK: ilk cümle ≤ 10 kelime ve vurucu olsun
     hook = clean_caption_text(ss[0])
-    
-    # Power words that increase retention
-    power_starters = [
-        "Never", "Always", "Why", "How", "What if", "You won't believe",
-        "This is why", "The truth about", "Did you know", "Here's why",
-        "Nobody tells you", "They don't want you to know", "This is illegal in"
-    ]
-    
-    # Hook şu kalıplara uymalı:
     words = hook.split()
-    if len(words) > 10:
-        # Çok uzun - kısalt ve question mark ekle
-        hook = " ".join(words[:8])
-        if not any(hook.lower().startswith(pw.lower()) for pw in power_starters):
-            hook = f"Did you know {hook.lower()}"
-    
-    # Her zaman soru işareti veya ünlem ile bitir (engagement için)
+    if len(words) > HOOK_MAX_WORDS:
+        hook = " ".join(words[:HOOK_MAX_WORDS])
     if not re.search(r"[?!]$", hook):
-        if any(hook.lower().startswith(w.lower()) for w in ["why", "how", "what", "where", "when", "who"]):
+        if hook.split()[0:1] and hook.split()[0].lower() not in {"why","how","did","are","is","can"}:
             hook = hook.rstrip(".") + "?"
-        else:
-            hook = hook.rstrip(".") + "!"
-    
-    ss[0] = hook.upper() if len(hook.split()) <= 6 else hook  # Çok kısa hook'ları CAPS yap
+    ss[0] = hook
 
-    # MID-ROLL PATTERN INTERRUPT (Retention için)
-    if len(ss) >= 5:
-        # 4. cümleye twist ekle
-        if not any(phrase in ss[3].lower() for phrase in ["but", "however", "twist", "here's the crazy part"]):
-            ss[3] = "But here's the twist: " + ss[3]
-
-    # CTA OPTIMIZATION - Polarizing soru sor
-    if len(ss) >= 2:
-        # Son cümle engagement-focused olmalı
-        last = ss[-1].strip()
-        
-        cta_templates = [
-            "Would YOU do this? Drop a 👍 or 👎",
-            "Agree or disagree? Comment below! 👇",
-            "Is this crazy or genius? Let me know! 💬",
-            "Should this be banned? Your thoughts? 🤔",
-            "Would this work in your country? 🌍",
-        ]
-        
-        # Generic CTA'yı değiştir
-        if not any(word in last.lower() for word in ["comment", "think", "agree", "would you"]):
-            ss[-1] = random.choice(cta_templates)
-    
+    # CTA: narration temiz; son cümleyi düzgün noktalayalım
+    if ss and not re.search(r'[.!?]$', ss[-1].strip()):
+        ss[-1] = ss[-1].strip() + '.'
     return ss
 
 # ==================== BGM helpers (download, loop, duck, mix) ====================
@@ -1903,73 +1688,6 @@ def _duck_and_mix(voice_in: str, bgm_in: str, outp: str):
         "-c:a","pcm_s16le",
         outp
     ])
-
-# ==================== THUMBNAIL GENERATION ====================
-def generate_thumbnail(title: str, topic: str, output_path: str):
-    """Generate eye-catching thumbnail for the video"""
-    try:
-        from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
-        
-        # 1080x1920 (vertical) thumbnail
-        img = Image.new('RGB', (1080, 1920), color=(10, 10, 20))
-        draw = ImageDraw.Draw(img)
-        
-        # Gradient background
-        for y in range(1920):
-            r = int(10 + (y / 1920) * 30)
-            g = int(10 + (y / 1920) * 40)  
-            b = int(20 + (y / 1920) * 60)
-            draw.rectangle([(0, y), (1080, y+1)], fill=(r, g, b))
-        
-        # Title text - wrap and center
-        title_text = title.upper()[:50]  # Limit length
-        
-        try:
-            # Try to use bold font
-            title_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
-            subtitle_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 50)
-        except:
-            title_font = ImageFont.load_default()
-            subtitle_font = ImageFont.load_default()
-        
-        # Text shadow for readability
-        shadow_offset = 8
-        draw.text((540 + shadow_offset, 960 + shadow_offset), title_text, 
-                 fill=(0, 0, 0), font=title_font, anchor="mm")
-        
-        # Main text - bright yellow for attention
-        draw.text((540, 960), title_text, fill=(255, 215, 0), 
-                 font=title_font, anchor="mm", stroke_width=4, stroke_fill=(0, 0, 0))
-        
-        # Emoji/icon based on topic (simple text emojis)
-        emoji_map = {
-            "country": "🌍", "space": "🚀", "animal": "🦁", "tech": "💻",
-            "history": "📜", "science": "🔬", "food": "🍔", "sport": "⚽"
-        }
-        
-        emoji = "🤯"  # Default
-        for key, em in emoji_map.items():
-            if key in topic.lower():
-                emoji = em
-                break
-        
-        # Add emoji
-        draw.text((540, 700), emoji, fill=(255, 255, 255), 
-                 font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 200), 
-                 anchor="mm")
-        
-        # Red circle with text for urgency
-        draw.ellipse([(100, 100), (400, 400)], fill=(220, 20, 60), outline=(255, 255, 255), width=8)
-        draw.text((250, 250), "NEW!", fill=(255, 255, 255), 
-                 font=title_font, anchor="mm")
-        
-        img.save(output_path, quality=95)
-        print(f"✅ Thumbnail generated: {output_path}")
-        return output_path
-        
-    except Exception as e:
-        print(f"⚠️ Thumbnail generation failed: {e}")
-        return None
 
 # ==================== Main ====================
 def main():
@@ -2313,15 +2031,6 @@ def main():
     print("🔄 Mux…"); mux(vcat, acat, outp)
     final = ffprobe_dur(outp); print(f"✅ Saved: {outp} ({final:.2f}s)")
 
-    # 8.5) Generate thumbnail
-    try:
-        thumb_path = f"{OUT_DIR}/{CHANNEL_NAME}_{safe_topic}_{ts}_thumb.jpg"
-        generate_thumbnail(title, tpc, thumb_path)
-        # Note: YouTube API ile thumbnail upload için ayrı bir API call gerekir
-        # Şimdilik sadece artifact olarak kaydet
-    except Exception as e:
-        print(f"⚠️ Thumbnail skip: {e}")
-
     # 9) Metadata (long SEO)
     title, description, yt_tags = build_long_description(CHANNEL_NAME, tpc, [m[0] for m in metas], tags)
     meta = {"title": title,"description": description,"tags": yt_tags,"privacy": VISIBILITY,
@@ -2373,6 +2082,3 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
-
-
-
