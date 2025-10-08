@@ -1126,10 +1126,6 @@ BANNED_PHRASES = [
     "in 60 seconds", "just the point", "crisp beats"
 ]
 
-ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """Create a VIRAL 25-40s YouTube Short that STOPS THE SCROLL.
-# ... (rest stays same)
-
 # ==================== Gemini (topic-locked) ====================
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a VIRAL 25-40s YouTube Short that STOPS THE SCROLL.
@@ -2377,5 +2373,6 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
