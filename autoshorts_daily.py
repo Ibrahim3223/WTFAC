@@ -1120,6 +1120,17 @@ def _select_template_key(topic: str) -> str:
     return "_default"
 
 # ==================== Gemini (topic-locked) ====================
+BANNED_PHRASES = [
+    "one clear tip", "see it", "learn it", "plot twist",
+    "soap-opera narration", "repeat once", "takeaway action",
+    "in 60 seconds", "just the point", "crisp beats"
+]
+
+ENHANCED_GEMINI_TEMPLATES = {
+    "_default": """Create a VIRAL 25-40s YouTube Short that STOPS THE SCROLL.
+# ... (rest stays same)
+
+# ==================== Gemini (topic-locked) ====================
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a VIRAL 25-40s YouTube Short that STOPS THE SCROLL.
 
@@ -1240,13 +1251,32 @@ RECENTLY COVERED (NEVER repeat these):
     
     data = _gemini_call(prompt, GEMINI_MODEL, temp)
     
-    # ... rest of existing code ...
+    # Parse response
+    topic = topic_lock  # Always use the locked topic
+    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
+    sentences = [s for s in sentences if s][:8]
+    
+    terms = data.get("search_terms") or []
+    if isinstance(terms, str): 
+        terms = [terms]
+    terms = _terms_normalize(terms)
+    
+    if not terms: 
+        terms = _derive_terms_from_text(topic, sentences)
+    
+    if user_terms:
+        seed = _terms_normalize(user_terms)
+        terms = _terms_normalize(seed + terms)
+
+    title = (data.get("title") or "").strip()
+    desc  = (data.get("description") or "").strip()
+    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t, str) and t.strip()]
     
     # Save angle to history
     try:
         _save_topic_to_history(channel_name, topic_lock, angle)
-    except:
-        pass
+    except Exception as e:
+        print(f"⚠️ Topic history save warn: {e}")
     
     return topic, sentences, terms, title, desc, tags
 
@@ -1299,48 +1329,6 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
             pool.add(ws[i]+" "+ws[i+1])
     base=list(pool); random.shuffle(base)
     return _terms_normalize(base)[:8]
-
-def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
-    tpl_key = _select_template_key(topic_lock)
-    template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
-    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
-    terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
-    extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
-
-    guardrails = """
-RULES (MANDATORY):
-- STAY ON TOPIC exactly as provided.
-- Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
-    jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
-    temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
-
-    prompt = f"""{template}
-
-Channel: {channel_name}
-Language: {LANG}
-TOPIC (hard lock): {topic_lock}
-Seed search terms (use and expand): {terms_hint}
-Avoid overlap for 180 days:
-{avoid}{extra}
-{guardrails}
-"""
-    data = _gemini_call(prompt, GEMINI_MODEL, temp)
-
-    topic   = topic_lock
-    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
-    sentences = [s for s in sentences if s][:8]
-    terms = data.get("search_terms") or []
-    if isinstance(terms, str): terms=[terms]
-    terms = _terms_normalize(terms)
-    if not terms: terms = _derive_terms_from_text(topic, sentences)
-    if user_terms:
-        seed = _terms_normalize(user_terms)
-        terms = _terms_normalize(seed + terms)
-
-    title = (data.get("title") or "").strip()
-    desc  = (data.get("description") or "").strip()
-    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-    return topic, sentences, terms, title, desc, tags
 
 # --- Regenerate helper (novelty guard önerilerine göre) ---
 def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
@@ -2389,4 +2377,5 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
