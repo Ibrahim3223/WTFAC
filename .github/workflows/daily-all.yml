@@ -2,16 +2,17 @@ name: Daily Shorts (all channels)
 
 on:
   schedule:
-    - cron: "0 16 * * *"
+    - cron: "0 16 * * *"   # 19:00 Europe/Istanbul (kış/yaz farkına dikkat)
     - cron: "0 0 * * *"
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
   actions: read
   checks: read
   id-token: none
 
+# Aynı ref üzerinde paralel run'ları iptal eder; matrix içi job'lar devam
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,8 +25,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Build matrix from channels.yml (no ::set-output)
+      - name: Build matrix from channels.yml
         id: mk
         shell: bash
         run: |
@@ -40,7 +43,7 @@ jobs:
                   "mode": ch.get("mode","freeform"),
                   "lang": ch.get("lang","en"),
                   "visibility": ch.get("visibility","public"),
-                  "seed": ch.get("seed","0"),
+                  "seed": str(ch.get("seed","0")),
               })
           open("mx.json","w",encoding="utf-8").write(json.dumps({"include": chs}))
           PY
@@ -60,6 +63,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -73,7 +79,25 @@ jobs:
         with:
           ffmpeg-version: release
 
-      # ---------- SAFE ENV EXPORT ----------
+      # ---------- PRE: .state'i 'state' branch'inden geri yükle ----------
+      - name: Restore .state from 'state' branch
+        shell: bash
+        run: |
+          set -e
+          git fetch origin state:state || true
+          if git rev-parse --verify state >/dev/null 2>&1; then
+            git checkout state
+            mkdir -p .state
+            cp -r .state ../_remote_state || true
+            git checkout -
+            rm -rf .state
+            mkdir -p .state
+            cp -r ../_remote_state/. .state/ || true
+          else
+            mkdir -p .state
+          fi
+
+      # ---------- Kanal ENV'lerini güvenli export ----------
       - name: Export channel variables (safe)
         shell: bash
         env:
@@ -92,14 +116,13 @@ jobs:
           VARS_GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
           VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
           VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
-          VARS_BGM_URLS:         ${{ vars.BGM_URLS }}   # optional JSON (["https://.../track.mp3"])
+          VARS_BGM_URLS:         ${{ vars.BGM_URLS }}
 
-          # karaoke offset/speed (opsiyonel)
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.35"
         run: |
           set -euo pipefail
-          CHANNEL_NAME="$MATRIX_NAME"
+          CHANNEL_NAME="${MATRIX_NAME}"
           LANG_VAL="${VARS_LANG:-$DEFAULT_LANG}"
           MODE_VAL="${VARS_MODE:-$DEFAULT_MODE}"
           VIS_VAL="${VARS_VISIBILITY:-$DEFAULT_VISIBILITY}"
@@ -142,10 +165,10 @@ jobs:
       - name: Restore channel state cache
         uses: actions/cache/restore@v4
         with:
-          path: state_${{ matrix.name }}.json
-          key: chstate-${{ matrix.name }}-${{ github.run_id }}
+          path: state_${{ env.CHANNEL_NAME }}.json
+          key: chstate-${{ env.CHANNEL_NAME }}-${{ github.run_id }}
           restore-keys: |
-            chstate-${{ matrix.name }}-
+            chstate-${{ env.CHANNEL_NAME }}-
 
       - name: Install deps
         run: |
@@ -166,42 +189,35 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
-
-          # ==== KARAOKE SYNC TUNE ====
           KARAOKE_SPEEDUP_PCT: "5.0"
           KARAOKE_RAMP_PCT:    "2.0"
           KARAOKE_EARLY_END_MS: "120"
           CAPTION_LEAD_MS:     "80"
 
-          # ==== NOVELTY & COOLDOWN ====
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
-          NOVELTY_JACCARD_MAX: "0.45"
-          NOVELTY_RETRIES: "6"
-          ENTITY_COOLDOWN_DAYS: "45"
+          NOVELTY_JACCARD_MAX: "0.55"
+          NOVELTY_RETRIES: "4"
+          ENTITY_COOLDOWN_DAYS: "30"
 
-          NOVELTY_SIMHASH_MAX: "6"
-          NOVELTY_ENTITY_JACCARD: "0.50"
-
-          GEMINI_TEMP: "0.95"
-
-          # ==== Contextual CTA ====
           CTA_ENABLE: "1"
           CTA_SHOW_SEC: "2.8"
           CTA_MAX_CHARS: "64"
 
-          # ==== BGM (arkaplan müzik) ====
-          BGM_ENABLE:   "1"
-          BGM_DIR:      "bgm"
-          # loop loudness / fade
-          BGM_DB: "-26"
+          BGM_ENABLE: "1"
+          BGM_DIR: "bgm"
+          BGM_DB: "0"
           BGM_FADE: "0.8"
-          # sidechain ducking (autoshorts_daily.py ile uyumlu)
-          BGM_GAIN_DB:  "-20"
-          BGM_DUCK_THRESH: "0.03"
-          BGM_DUCK_RATIO:  "10"
+          BGM_GAIN_DB: "-11"
+          BGM_DUCK_THRESH: "0.035"
+          BGM_DUCK_RATIO: "10"
           BGM_DUCK_ATTACK_MS: "6"
           BGM_DUCK_RELEASE_MS: "180"
+
+          # ---- StateGuard ----
+          STATE_DIR: ".state"
+          SIM_TH_SCRIPT: "0.90"
+          SIM_TH_ENTITY: "0.92"
         run: |
           set -e
           echo "== ${CHANNEL_NAME} =="
@@ -214,7 +230,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}-short
+          name: ${{ env.CHANNEL_NAME }}-short
           path: |
             out/**/*.mp4
             out/*.mp4
@@ -225,7 +241,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}-logs
+          name: ${{ env.CHANNEL_NAME }}-logs
           path: |
             build_${{ env.CHANNEL_NAME }}.log
             out/**/*.json
@@ -246,5 +262,35 @@ jobs:
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: state_${{ matrix.name }}.json
-          key: chstate-${{ matrix.name }}-${{ github.run_id }}
+          path: state_${{ env.CHANNEL_NAME }}.json
+          key: chstate-${{ env.CHANNEL_NAME }}-${{ github.run_id }}
+
+      # ---------- POST: .state'i 'state' branch'ine merge ederek kaydet ----------
+      - name: Persist .state to 'state' branch (merge-safe)
+        if: always()
+        shell: bash
+        env:
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+          GIT_COMMITTER_NAME: "github-actions[bot]"
+          GIT_COMMITTER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -e
+          mkdir -p _remote_state _merged_state
+          git fetch origin state:state || true
+          if git rev-parse --verify state >/dev/null 2>&1; then
+            git checkout state
+            cp -r .state/. "$GITHUB_WORKSPACE/_remote_state/" || true
+            git checkout -
+          fi
+          cp -r _remote_state/. _merged_state/ || true
+          cp -r .state/. _merged_state/ || true
+
+          git checkout state || git checkout --orphan state
+          rm -rf .state
+          mkdir -p .state
+          cp -r "$GITHUB_WORKSPACE/_merged_state/." .state/ || true
+          git add .state
+          git commit -m "update .state $(date -u +%F_%T) [${{ env.CHANNEL_NAME }}]" || true
+          git push origin state
+          git checkout -
