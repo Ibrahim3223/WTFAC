@@ -93,7 +93,7 @@ jobs:
             mkdir -p .state
           fi
 
-      # ---------- Kanal ENV'lerini güvenli export ----------
+      # ---------- ENV export ----------
       - name: Export channel variables (safe)
         shell: bash
         env:
@@ -178,6 +178,7 @@ jobs:
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PIXABAY_API_KEY:  ${{ secrets.PIXABAY_API_KEY }}
 
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
@@ -194,7 +195,17 @@ jobs:
           NOVELTY_WINDOW: "40"
           NOVELTY_JACCARD_MAX: "0.55"
           NOVELTY_RETRIES: "4"
-          ENTITY_COOLDOWN_DAYS: "30"
+          ENTITY_COOLDOWN_DAYS: "45"
+          SIM_TH_SCRIPT: "0.92"
+          SIM_TH_ENTITY: "0.94"
+          STATE_DIR: ".state"
+
+          # ---- Stock kaynak & filtreler ----
+          PEXELS_STRICT_VERTICAL: "0"
+          PEXELS_MIN_HEIGHT: "720"
+          PEXELS_PER_PAGE: "60"
+          PEXELS_ALLOW_REUSE: "0"
+          ALLOW_PIXABAY_FALLBACK: "1"
 
           CTA_ENABLE: "1"
           CTA_SHOW_SEC: "2.8"
@@ -209,11 +220,6 @@ jobs:
           BGM_DUCK_RATIO: "10"
           BGM_DUCK_ATTACK_MS: "6"
           BGM_DUCK_RELEASE_MS: "180"
-
-          # ---- StateGuard ----
-          STATE_DIR: ".state"
-          SIM_TH_SCRIPT: "0.90"
-          SIM_TH_ENTITY: "0.92"
         run: |
           set -e
           echo "== ${CHANNEL_NAME} =="
