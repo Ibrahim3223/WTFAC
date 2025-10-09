@@ -9,6 +9,14 @@ from novelty_guard import NoveltyGuard  # novelty_guard.py eklendiğine göre di
 STATE_DIR = os.getenv("STATE_DIR", ".state")
 from state_guard import StateGuard  # <-- YENİ
 
+# state_guard.py (en üst)
+try:
+    import numpy as np  # type: ignore
+except Exception:
+    import sys, subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "numpy>=1.26,<2"], check=True)
+    import numpy as np  # type: ignore
+
 # ---- focus-entity cooldown (stronger anti-repeat) ----
 ENTITY_COOLDOWN_DAYS = int(os.getenv("ENTITY_COOLDOWN_DAYS", os.getenv("NOVELTY_WINDOW", "30")))
 
@@ -2121,4 +2129,5 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
