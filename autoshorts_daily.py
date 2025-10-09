@@ -17,7 +17,8 @@ _GENERIC_SKIP = {
     "country","countries","people","history","stories","story","facts","fact","amazing","weird","random","culture","cultural",
     "animal","animals","nature","wild","pattern","patterns","science","eco","habit","habits","waste","tip","tips","daily","news",
     "world","today","minute","short","video","watch","more","better","twist","comment","voice","narration","hook","topic",
-    "secret","secrets","unknown","things","life","lived","modern","time","times","explained","guide","quick","fix","fixes"
+    "secret","secrets","unknown","things","life","lived","modern","time","times","explained","guide","quick","fix","fixes",
+    "color","colors","skin","cells","cell","temperature","light","lights","effect","effects"
 }
 
 def _tok_words_loose(s: str) -> List[str]:
@@ -33,6 +34,7 @@ def _derive_focus_entity(topic: str, mode: str, sentences: list[str]) -> str:
     """
     txt = " ".join(sentences or []) + " " + (topic or "")
     words = _tok_words_loose(txt)
+    words = [w[:-1] if w.endswith("s") and len(w) >= 5 else w for w in words]
     from collections import Counter as _C
     cnt = _C([w for w in words if w not in _GENERIC_SKIP])
     if not cnt:
@@ -210,8 +212,8 @@ PEXELS_ALLOW_REUSE         = os.getenv("PEXELS_ALLOW_REUSE", "0") == "1"
 PEXELS_ALLOW_LANDSCAPE     = os.getenv("PEXELS_ALLOW_LANDSCAPE", "1") == "1"
 PEXELS_MIN_DURATION        = int(os.getenv("PEXELS_MIN_DURATION", "3"))
 PEXELS_MAX_DURATION        = int(os.getenv("PEXELS_MAX_DURATION", "13"))
-PEXELS_MIN_HEIGHT          = int(os.getenv("PEXELS_MIN_HEIGHT",   "1280"))
-PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "1") == "1"
+PEXELS_MIN_HEIGHT          = int(os.getenv("PEXELS_MIN_HEIGHT",   "720"))
+PEXELS_STRICT_VERTICAL     = os.getenv("PEXELS_STRICT_VERTICAL", "0") == "1"
 
 ALLOW_PIXABAY_FALLBACK     = os.getenv("ALLOW_PIXABAY_FALLBACK", "1") == "1"
 PIXABAY_API_KEY            = os.getenv("PIXABAY_API_KEY", "").strip()
@@ -1224,6 +1226,16 @@ def _domain_synonyms(all_text: str) -> List[str]:
         s.update(["city timelapse","plant growth","melting ice","cloud timelapse"])
     if any(k in t for k in ["mechanism","gears","pulley","cam"]):
         s.update(["macro gears","belt pulley","cam follower","robotic arm macro"])
+    if any(k in t for k in ["chameleon","bukalemun","lizard","kertenkele","reptile","renk","color"]):
+        s.update([
+            "chameleon close up",
+            "lizard macro",
+            "gecko close up",
+            "iguana macro",
+            "reptile skin texture",
+            "animal scales macro",
+            "reptile eye close up"
+        ])
     return list(s)
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
@@ -1457,19 +1469,33 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
         ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
         pool += ranked[:max(3, need//2)]
         if len(pool) >= need*2: break
+                    # Per-sorgu: Pexels zayıfsa hemen Pixabay ile takviye
+        if len(ranked) < 2:
+            pix = _pixabay_fallback(q, 3, locale)
+            pool += [(vid, link) for (vid, link) in pix]
 
     if len(pool) < need:
+        # önce Pexels "popular" ile doldur
         merged=[]
         for page in (1,2,3):
             merged += _pexels_popular(locale, page=page, per_page=40)
             if len(merged) >= need*3: break
         pop_rank = _rank_and_dedup(merged, set(), block)
-        pool += pop_rank[:need*2 - len(pool)]
+        pool += pop_rank[:max(0, need*2 - len(pool))]
 
     if len(pool) < need:
-        fallback_q = (queries[-1] if queries else _simplify_query(topic, keep=1)) or "city"
-        pix = _pixabay_fallback(fallback_q, need - len(pool), locale)
-        pool += pix
+        # kalan boşluğu daha alakalı doldurmak için, son 3 sorguyu Pixabay'den tek tek dene
+        left = need - len(pool)
+        for q in queries[-3:]:
+            if left <= 0: break
+            pix = _pixabay_fallback(q, left, locale)
+            pool += [(vid, link) for (vid, link) in pix]
+            left = need - len(pool)
+        # hâlâ eksikse genel fallback
+        if left > 0:
+            fallback_q = (queries[-1] if queries else _simplify_query(topic, keep=1)) or "animal macro"
+            pix = _pixabay_fallback(fallback_q, left, locale)
+            pool += [(vid, link) for (vid, link) in pix]
 
     seen=set(); dedup=[]
     for vid, link in pool:
@@ -2121,6 +2147,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
