@@ -18,7 +18,9 @@ _GENERIC_SKIP = {
     "animal","animals","nature","wild","pattern","patterns","science","eco","habit","habits","waste","tip","tips","daily","news",
     "world","today","minute","short","video","watch","more","better","twist","comment","voice","narration","hook","topic",
     "secret","secrets","unknown","things","life","lived","modern","time","times","explained","guide","quick","fix","fixes",
-    "color","colors","skin","cells","cell","temperature","light","lights","effect","effects"
+    "color","colors","skin","cells","cell","temperature","light","lights","effect","effects",
+    "land","nation","state","city","capital","border","flag","heritage",
+    "travel","tourism","planet","earth","place","region","area"
 }
 
 def _tok_words_loose(s: str) -> List[str]:
@@ -1146,6 +1148,12 @@ Rules:
 - Sentence 1 is a short HOOK (≤10 words).
 - Sentence 8 is a soft CTA (no 'subscribe/like').
 - Each fact must be specific & visual. 6–12 words per sentence."""
+    
+BANNED_PHRASES = [
+    "one clear tip", "see it", "learn it", "plot twist",
+    "soap-opera narration", "repeat once", "takeaway action",
+    "in 60 seconds", "just the point", "crisp beats",
+    "sum it up", "watch till the end", "mind-blowing fact",
 }
 
 def _content_score(sentences: List[str]) -> float:
@@ -2535,6 +2543,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
