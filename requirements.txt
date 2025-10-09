@@ -1,0 +1,7 @@
+edge-tts
+google-api-python-client
+google-auth-oauthlib
+requests
+nest-asyncio
+feedparser
+Pillow>=10.0.0

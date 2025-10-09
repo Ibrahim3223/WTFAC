@@ -1,0 +1,296 @@
+name: Daily Shorts (all channels)
+
+on:
+  schedule:
+    - cron: "0 16 * * *"   # 19:00 Europe/Istanbul (kış/yaz farkına dikkat)
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: read
+  checks: read
+  id-token: none
+
+# Aynı ref üzerinde paralel run'ları iptal eder; matrix içi job'lar devam
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  make-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.mk.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build matrix from channels.yml
+        id: mk
+        shell: bash
+        run: |
+          python - <<'PY'
+          import yaml, json
+          data = yaml.safe_load(open("channels.yml","r",encoding="utf-8")) or {}
+          chs = []
+          for ch in data.get("channels", []):
+              chs.append({
+                  "name": ch.get("name"),
+                  "env": ch.get("env", ch.get("name")),
+                  "mode": ch.get("mode","freeform"),
+                  "lang": ch.get("lang","en"),
+                  "visibility": ch.get("visibility","public"),
+                  "seed": str(ch.get("seed","0")),
+              })
+          open("mx.json","w",encoding="utf-8").write(json.dumps({"include": chs}))
+          PY
+          echo "matrix=$(cat mx.json)" >> "$GITHUB_OUTPUT"
+
+  build-upload:
+    needs: make-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
+
+    environment: ${{ matrix.env }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Setup FFmpeg (fast + cached)
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+
+      # ---------- PRE: .state'i 'state' branch'inden geri yükle ----------
+      - name: Restore .state from 'state' branch
+        shell: bash
+        run: |
+          set -e
+          git fetch origin state:state || true
+          if git rev-parse --verify state >/dev/null 2>&1; then
+            git checkout state
+            mkdir -p .state
+            cp -r .state ../_remote_state || true
+            git checkout -
+            rm -rf .state
+            mkdir -p .state
+            cp -r ../_remote_state/. .state/ || true
+          else
+            mkdir -p .state
+          fi
+
+      # ---------- Kanal ENV'lerini güvenli export ----------
+      - name: Export channel variables (safe)
+        shell: bash
+        env:
+          MATRIX_NAME:           ${{ matrix.name }}
+          DEFAULT_LANG:          ${{ matrix.lang }}
+          DEFAULT_MODE:          ${{ matrix.mode }}
+          DEFAULT_VISIBILITY:    ${{ matrix.visibility }}
+          DEFAULT_SEED:          ${{ matrix.seed }}
+
+          VARS_TOPIC:            ${{ vars.TOPIC }}
+          VARS_LANG:             ${{ vars.LANG }}
+          VARS_MODE:             ${{ vars.MODE }}
+          VARS_VISIBILITY:       ${{ vars.VISIBILITY }}
+          VARS_ROTATION_SEED:    ${{ vars.ROTATION_SEED }}
+          VARS_SEARCH_TERMS:     ${{ vars.SEARCH_TERMS }}
+          VARS_GEMINI_PROMPT:    ${{ vars.GEMINI_PROMPT }}
+          VARS_TTS_RATE:         ${{ vars.TTS_RATE }}
+          VARS_TTS_VOICE:        ${{ vars.TTS_VOICE }}
+          VARS_BGM_URLS:         ${{ vars.BGM_URLS }}
+
+          KARAOKE_OFFSET_MS: "-200"
+          KARAOKE_SPEED: "1.35"
+        run: |
+          set -euo pipefail
+          CHANNEL_NAME="${MATRIX_NAME}"
+          LANG_VAL="${VARS_LANG:-$DEFAULT_LANG}"
+          MODE_VAL="${VARS_MODE:-$DEFAULT_MODE}"
+          VIS_VAL="${VARS_VISIBILITY:-$DEFAULT_VISIBILITY}"
+          SEED_VAL="${VARS_ROTATION_SEED:-$DEFAULT_SEED}"
+
+          wenv () {
+            local __name="$1"; shift
+            local __val="$*"
+            local __delim="EOF_${__name}_$$"
+            {
+              echo "${__name}<<${__delim}"
+              printf '%s\n' "${__val}"
+              echo "${__delim}"
+            } >> "$GITHUB_ENV"
+          }
+
+          wenv CHANNEL_NAME        "${CHANNEL_NAME}"
+          wenv TOPIC               "${VARS_TOPIC}"
+          wenv LANG                "${LANG_VAL}"
+          wenv MODE                "${MODE_VAL}"
+          wenv VISIBILITY          "${VIS_VAL:-public}"
+          wenv ROTATION_SEED       "${SEED_VAL}"
+          wenv SEARCH_TERMS        "${VARS_SEARCH_TERMS}"
+          wenv GEMINI_PROMPT       "${VARS_GEMINI_PROMPT}"
+          wenv TTS_RATE            "${VARS_TTS_RATE}"
+          wenv TTS_VOICE           "${VARS_TTS_VOICE}"
+          wenv BGM_URLS            "${VARS_BGM_URLS}"
+          wenv UPLOAD_TO_YT        "1"
+
+      - name: Restore global state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            state_global.json
+            state_global_topics.json
+          key: global-state-${{ github.run_id }}
+          restore-keys: |
+            global-state-
+
+      - name: Restore channel state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: state_${{ env.CHANNEL_NAME }}.json
+          key: chstate-${{ env.CHANNEL_NAME }}-${{ github.run_id }}
+          restore-keys: |
+            chstate-${{ env.CHANNEL_NAME }}-
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+
+      - name: Build video
+        env:
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+
+          REQUIRE_CAPTIONS: "1"
+          KARAOKE_CAPTIONS: "1"
+          CAPTIONS_UPPER:   "1"
+          KARAOKE_INACTIVE: "#FFD700"
+          KARAOKE_ACTIVE:   "#3EA6FF"
+          KARAOKE_OUTLINE:  "#000000"
+          KARAOKE_SPEEDUP_PCT: "5.0"
+          KARAOKE_RAMP_PCT:    "2.0"
+          KARAOKE_EARLY_END_MS: "120"
+          CAPTION_LEAD_MS:     "80"
+
+          NOVELTY_ENFORCE: "1"
+          NOVELTY_WINDOW: "40"
+          NOVELTY_JACCARD_MAX: "0.55"
+          NOVELTY_RETRIES: "4"
+          ENTITY_COOLDOWN_DAYS: "30"
+
+          CTA_ENABLE: "1"
+          CTA_SHOW_SEC: "2.8"
+          CTA_MAX_CHARS: "64"
+
+          BGM_ENABLE: "1"
+          BGM_DIR: "bgm"
+          BGM_DB: "0"
+          BGM_FADE: "0.8"
+          BGM_GAIN_DB: "-11"
+          BGM_DUCK_THRESH: "0.035"
+          BGM_DUCK_RATIO: "10"
+          BGM_DUCK_ATTACK_MS: "6"
+          BGM_DUCK_RELEASE_MS: "180"
+
+          # ---- StateGuard ----
+          STATE_DIR: ".state"
+          SIM_TH_SCRIPT: "0.90"
+          SIM_TH_ENTITY: "0.92"
+        run: |
+          set -e
+          echo "== ${CHANNEL_NAME} =="
+          echo "TOPIC=${TOPIC}"
+          echo "LANG=${LANG}"
+          echo "SEARCH_TERMS=${SEARCH_TERMS}"
+          python autoshorts_daily.py 2>&1 | tee "build_${CHANNEL_NAME}.log"
+
+      - name: Upload artifact (mp4)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CHANNEL_NAME }}-short
+          path: |
+            out/**/*.mp4
+            out/*.mp4
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload logs & meta
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CHANNEL_NAME }}-logs
+          path: |
+            build_${{ env.CHANNEL_NAME }}.log
+            out/**/*.json
+            out/*.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Save global state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            state_global.json
+            state_global_topics.json
+          key: global-state-${{ github.run_id }}
+
+      - name: Save channel state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state_${{ env.CHANNEL_NAME }}.json
+          key: chstate-${{ env.CHANNEL_NAME }}-${{ github.run_id }}
+
+      # ---------- POST: .state'i 'state' branch'ine merge ederek kaydet ----------
+      - name: Persist .state to 'state' branch (merge-safe)
+        if: always()
+        shell: bash
+        env:
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+          GIT_COMMITTER_NAME: "github-actions[bot]"
+          GIT_COMMITTER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -e
+          mkdir -p _remote_state _merged_state
+          git fetch origin state:state || true
+          if git rev-parse --verify state >/dev/null 2>&1; then
+            git checkout state
+            cp -r .state/. "$GITHUB_WORKSPACE/_remote_state/" || true
+            git checkout -
+          fi
+          cp -r _remote_state/. _merged_state/ || true
+          cp -r .state/. _merged_state/ || true
+
+          git checkout state || git checkout --orphan state
+          rm -rf .state
+          mkdir -p .state
+          cp -r "$GITHUB_WORKSPACE/_merged_state/." .state/ || true
+          git add .state
+          git commit -m "update .state $(date -u +%F_%T) [${{ env.CHANNEL_NAME }}]" || true
+          git push origin state
+          git checkout -

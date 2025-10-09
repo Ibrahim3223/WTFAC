@@ -1,0 +1,950 @@
+channels:
+  - env: "WT Facts About Countries"
+    name: "WT Facts About Countries"
+    mode: "country_facts"
+    lang: "en"
+    visibility: "public"
+    topic: "Underrated country facts that reveal culture, geography, and daily life; rotate continents and avoid over-covered nations."
+    search_terms: [
+      "country aerial drone 4k",
+      "traditional market crowd",
+      "rural village life",
+      "capital city skyline night",
+      "national festival parade",
+      "mountain valley panorama",
+      "coastline cliffs waves",
+      "border crossing sign",
+      "local street food stall",
+      "historic town center"
+    ]
+
+  - env: "Tales of The Forgotten Realms"
+    name: "Tales of The Forgotten Realms"
+    mode: "history_story"
+    lang: "en"
+    visibility: "public"
+    topic: "Obscure historical events and lost civilizations told cinematically with evidence-based narration."
+    search_terms: [
+      "ancient ruins sunrise 4k",
+      "desert archaeological site",
+      "old parchment manuscript",
+      "medieval fortress interior",
+      "mossy stone temple",
+      "museum artifacts showcase",
+      "archaeologist brushing bones",
+      "old map table",
+      "torchlight cave walls",
+      "foggy castle hill"
+    ]
+
+  - env: "Famous Quotes Explained"
+    name: "Famous Quotes Explained"
+    mode: "quotes"
+    lang: "en"
+    visibility: "public"
+    topic: "Break down iconic quotes—context, author, and modern relevance—in crisp, visual explainers."
+    search_terms: [
+      "library aisle depth",
+      "writing hand fountain pen",
+      "study desk lamp night",
+      "thinker silhouette window",
+      "typewriter close up",
+      "notebook scribble macro",
+      "lecture hall empty",
+      "book pages turning",
+      "chalkboard handwriting",
+      "coffee and book flatlay"
+    ]
+
+  - env: "TaxWise USA"
+    name: "TaxWise USA"
+    mode: "taxwise_usa"
+    lang: "en"
+    visibility: "public"
+    topic: "Practical U.S. tax tips, credits, deadlines, and legally safe savings in plain English."
+    search_terms: [
+      "home office desk paperwork",
+      "calculator hands close up",
+      "laptop budget spreadsheet",
+      "mailbox envelopes",
+      "financial documents flatlay",
+      "coffee cup desk morning",
+      "meeting handshake business",
+      "suburban home exterior",
+      "piggy bank coins",
+      "calendar deadline marker"
+    ]
+
+  - env: "Echo of the Unknown"
+    name: "Echo of the Unknown"
+    mode: "horror_story"
+    lang: "en"
+    visibility: "public"
+    topic: "Grounded, slow-burn horror tales—mystery first, jump-scare last—told like urban legends."
+    search_terms: [
+      "dark forest path fog",
+      "abandoned house corridor",
+      "single candle flicker",
+      "old radio static",
+      "empty playground night",
+      "rain on window night",
+      "flashlight beam woods",
+      "dusty attic stairs",
+      "empty road headlights",
+      "shadow silhouette wall"
+    ]
+
+  - env: "World Briefing"
+    name: "World Briefing"
+    mode: "daily_news"
+    lang: "en"
+    visibility: "public"
+    topic: "Concise, verified global news roundups prioritizing impact and clarity over hype."
+    search_terms: [
+      "city skyline timelapse",
+      "press conference podium",
+      "newsroom b roll",
+      "financial district morning",
+      "parliament exterior crowd",
+      "airport departures board",
+      "container port cranes",
+      "satellite earth view",
+      "traffic rush hour aerial",
+      "world map animation"
+    ]
+
+  - env: "Flashback Minute"
+    name: "Flashback Minute"
+    mode: "history_story"
+    lang: "en"
+    visibility: "public"
+    topic: "On-this-day historical moments with human stakes and crisp cause–effect arcs."
+    search_terms: [
+      "archival photos hands",
+      "vintage newspaper close up",
+      "old clock ticking",
+      "calendar page flip",
+      "black and white city",
+      "typewriter newsroom",
+      "historic monument detail",
+      "steam train station",
+      "vintage classroom",
+      "museum gallery walkthrough"
+    ]
+
+  - env: "Universe Jumper"
+    name: "Universe Jumper"
+    mode: "alt_universe"
+    lang: "en"
+    visibility: "public"
+    topic: "What-if crossovers—beloved characters thrown into unexpected worlds with internal logic."
+    search_terms: [
+      "cosmic nebula background",
+      "portal energy effect",
+      "city street night rain",
+      "retro sci fi corridor",
+      "desert planet dunes",
+      "cyberpunk alley neon",
+      "medieval village square",
+      "space station window",
+      "fantasy forest mist",
+      "dimension rift sky"
+    ]
+
+  - env: "If They Lived Today"
+    name: "If They Lived Today"
+    mode: "if_lived_today"
+    lang: "en"
+    visibility: "public"
+    topic: "Reimagine historical figures navigating modern tech, culture, and dilemmas with empathy."
+    search_terms: [
+      "modern city crosswalk",
+      "startup coworking office",
+      "smartphone scrolling hand",
+      "subway commute platform",
+      "newsstand magazines",
+      "university campus students",
+      "coffee shop laptop",
+      "press microphones crowd",
+      "social media feed phone",
+      "museum modern wing"
+    ]
+
+  - env: "Rewind Retro Media"
+    name: "Rewind Retro Media"
+    mode: "nostalgia_story"
+    lang: "en"
+    visibility: "public"
+    topic: "Feel-good nostalgia: late 70s–90s pop culture, formats, and everyday aesthetics."
+    search_terms: [
+      "crt tv static room",
+      "vhs tape eject",
+      "cassette walkman close up",
+      "arcade cabinet lights",
+      "polaroid camera flash",
+      "retro computer keyboard",
+      "neon sign flicker",
+      "roller rink crowd",
+      "boom box street",
+      "retro living room"
+    ]
+
+  - env: "Cricket Queens"
+    name: "Cricket Queens"
+    mode: "cricket_women"
+    lang: "en"
+    visibility: "public"
+    topic: "Women's cricket stories—skills, tactics, and pioneers—packed into energetic highlights."
+    search_terms: [
+      "women cricket match action",
+      "slow motion cricket swing",
+      "cricket stadium crowd",
+      "training nets practice",
+      "team huddle celebration",
+      "scoreboard close up",
+      "drone stadium sunset",
+      "kit bag locker room",
+      "coach talk sidelines",
+      "press conference sports"
+    ]
+
+  - env: "GalacticUpdate"
+    name: "GalacticUpdate"
+    mode: "space_news"
+    lang: "en"
+    visibility: "public"
+    topic: "Latest space missions, astronomy finds, and commercial launches distilled clearly."
+    search_terms: [
+      "rocket launch pad",
+      "mission control screens",
+      "astronaut training pool",
+      "satellite clean room",
+      "planet surface render",
+      "telescope dome opening",
+      "star field tracking",
+      "solar panels space station",
+      "radio telescope array",
+      "space industry factory"
+    ]
+
+  - env: "Cinematic Echo"
+    name: "Cinematic Echo"
+    mode: "movie_secrets"
+    lang: "en"
+    visibility: "public"
+    topic: "Behind-the-scenes tricks, practical effects, and storytelling craft—no spoilers needed."
+    search_terms: [
+      "film set behind the scenes",
+      "clapperboard close up",
+      "cinema projector beam",
+      "steadicam operator",
+      "sound stage lighting",
+      "makeup fx prosthetics",
+      "storyboard sketches table",
+      "editing timeline screen",
+      "costume rack wardrobe",
+      "camera lens change"
+    ]
+
+  - env: "CritterFact"
+    name: "CritterFact"
+    mode: "animal_facts"
+    lang: "en"
+    visibility: "public"
+    topic: "Wildlife facts that spotlight unusual behaviors beyond the usual lions and octopuses."
+    search_terms: [
+      "rainforest canopy wildlife",
+      "arctic tundra animals",
+      "savanna herd aerial",
+      "desert nocturnal creatures",
+      "wetland birds close up",
+      "insect macro leaf",
+      "coral reef fish school",
+      "mountain goat cliff",
+      "forest owl eyes",
+      "meerkat lookout"
+    ]
+
+  - env: "WildWonderCaps"
+    name: "WildWonderCaps"
+    mode: "animal_facts"
+    lang: "en"
+    visibility: "public"
+    topic: "Snackable animal wonders—adaptations, survival tricks, and adorable oddities."
+    search_terms: [
+      "wildlife reserve 4k",
+      "jungle trail camera",
+      "river crossing herd",
+      "bird courtship display",
+      "snowy forest deer",
+      "sea turtle underwater",
+      "bat flight cave",
+      "penguin colony",
+      "fox hunting snow",
+      "dolphin pod surface"
+    ]
+
+  - env: "NextGen Update"
+    name: "NextGen Update"
+    mode: "tech_news"
+    lang: "en"
+    visibility: "public"
+    topic: "Daily tech breakthroughs—AI, gadgets, chips, privacy—explained minus buzzword fluff."
+    search_terms: [
+      "tech conference keynote",
+      "robot arm factory",
+      "server rack data center",
+      "pcb soldering close up",
+      "smartphone macro camera",
+      "developer typing night",
+      "3d printer timelapse",
+      "drone flying test",
+      "vr headset demo",
+      "chip wafer cleanroom"
+    ]
+
+  - env: "BeyondAxis"
+    name: "BeyondAxis"
+    mode: "utopic_tech"
+    lang: "en"
+    visibility: "public"
+    topic: "Optimistic near-future tech solving real problems—energy, health, cities, learning."
+    search_terms: [
+      "futuristic city skyline",
+      "solar farm aerial",
+      "wind turbines coast",
+      "smart home interface",
+      "robot surgery demo",
+      "electric bus city",
+      "vertical farm greenhouse",
+      "drone delivery test",
+      "hologram presentation",
+      "clean battery factory"
+    ]
+
+  - env: "BehindTheFame"
+    name: "BehindTheFame"
+    mode: "fame_story"
+    lang: "en"
+    visibility: "public"
+    topic: "Honest origin stories of artists and athletes—grit, failure, breakout moment."
+    search_terms: [
+      "stage spotlight solo",
+      "recording studio mic",
+      "photo flash paparazzi",
+      "trophy ceremony crowd",
+      "red carpet arrival",
+      "locker room reflection",
+      "tour bus night",
+      "rehearsal dance studio",
+      "press wall interview",
+      "backstage corridor"
+    ]
+
+  - env: "One Day Inside"
+    name: "One Day Inside"
+    mode: "post_apoc"
+    lang: "en"
+    visibility: "public"
+    topic: "Grounded post‑apocalyptic vignettes—mundane survival, small wins, human bonds."
+    search_terms: [
+      "abandoned city overgrown",
+      "empty supermarket shelves",
+      "makeshift camp fire",
+      "gas mask stairwell",
+      "deserted highway car",
+      "rooftop garden diy",
+      "rusty factory hall",
+      "flashlight basement",
+      "bunker door open",
+      "map planning table"
+    ]
+
+  - env: "Gods Unleashed"
+    name: "Gods Unleashed"
+    mode: "mythology_battle"
+    lang: "en"
+    visibility: "public"
+    topic: "Mythic face‑offs and lore—contrast powers, symbols, and lessons across cultures."
+    search_terms: [
+      "ancient temple columns",
+      "mythology statue close up",
+      "storm sky lightning",
+      "volcanic landscape",
+      "sacred forest shrine",
+      "mountain peak clouds",
+      "ocean cliff waves",
+      "ritual fire night",
+      "sun rays through clouds",
+      "warrior silhouette"
+    ]
+
+  - env: "Microworld Stories"
+    name: "Microworld Stories"
+    mode: "kids_story"
+    lang: "en"
+    visibility: "public"
+    topic: "Gentle, educational micro‑stories for kids—curiosity, kindness, simple science."
+    search_terms: [
+      "colorful classroom art",
+      "kids drawing table",
+      "building blocks floor",
+      "teacher reading circle",
+      "park playground sunny",
+      "craft scissors glue",
+      "storybook pages",
+      "bubbles backyard",
+      "paper rocket launch",
+      "rainbow crayons"
+    ]
+
+  - env: "Bot Gone Wild"
+    name: "Bot Gone Wild"
+    mode: "ai_alt"
+    lang: "en"
+    visibility: "public"
+    topic: "Surreal but wholesome AI-in-life sketches—helpful, quirky, never dystopian."
+    search_terms: [
+      "home robot helper",
+      "smart kitchen screen",
+      "office assistant tablet",
+      "voice assistant waveform",
+      "delivery robot sidewalk",
+      "smart home dashboard",
+      "robot vacuum living room",
+      "coding on laptop",
+      "family using tablet",
+      "city smart sensors"
+    ]
+
+  - env: "SkySynthLab"
+    name: "SkySynthLab"
+    mode: "ai_future"
+    lang: "en"
+    visibility: "public"
+    topic: "Speculative AI futures grounded in present research; risks and safeguards explained."
+    search_terms: [
+      "ai research lab screens",
+      "neural network visualization",
+      "robotics lab arm",
+      "cloud server room",
+      "data visualization dashboard",
+      "ethics panel discussion",
+      "whiteboard math equations",
+      "drone swarm test",
+      "eye tracking interface",
+      "developer standup meeting"
+    ]
+
+  - env: "FixIt Fast"
+    name: "FixIt Fast"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "One-minute, step-by-step fixes for common home and gadget problems—safe and repeatable."
+    search_terms: [
+      "toolbox open table",
+      "screwdriver close up",
+      "phone settings screen",
+      "wifi router reset",
+      "laptop keyboard clean",
+      "door hinge repair",
+      "cable tidy desk",
+      "battery replace remote",
+      "light bulb change",
+      "drain unclog sink"
+    ]
+
+  - env: "GameDay 60"
+    name: "GameDay 60"
+    mode: "sports_news"
+    lang: "en"
+    visibility: "public"
+    topic: "Daily multi-sport headlines—results, transfers, injuries—in 60 seconds."
+    search_terms: [
+      "stadium crowd wave",
+      "training field drills",
+      "press conference sports",
+      "scoreboard close up",
+      "locker room tunnel",
+      "sports montage slow motion",
+      "referee whistle close",
+      "fans celebrate stands",
+      "aerial stadium night",
+      "media mixed zone"
+    ]
+
+  - env: "Planet Snapshot"
+    name: "Planet Snapshot"
+    mode: "country_facts"
+    lang: "en"
+    visibility: "public"
+    topic: "Fast geography bites—flags, borders, foods, and ‘only here’ quirks per country."
+    search_terms: [
+      "national flag close up",
+      "street market local food",
+      "coastal city promenade",
+      "mountain lake panorama",
+      "border checkpoint road",
+      "heritage UNESCO site",
+      "street festival dancers",
+      "old town square",
+      "railway station crowd",
+      "farm terrace fields"
+    ]
+
+  - env: "CityFrame Stories"
+    name: "CityFrame Stories"
+    mode: "urban_facts"
+    lang: "en"
+    visibility: "public"
+    topic: "Urban design facts—transit, public spaces, skyline logic—in snackable form."
+    search_terms: [
+      "city skyline drone",
+      "metro station platform",
+      "bicycle lane street",
+      "bridge steel structure",
+      "tram turning street",
+      "pedestrian plaza aerial",
+      "skyscraper facade pattern",
+      "street cafe morning",
+      "night traffic light trails",
+      "riverfront boardwalk"
+    ]
+
+  - env: "Eco Habit Hacks"
+    name: "Eco Habit Hacks"
+    mode: "eco_habits"
+    lang: "en"
+    visibility: "public"
+    topic: "Household sustainability—tiny actions with measurable impact; money- and waste‑saving."
+    search_terms: [
+      "kitchen glass jars pantry",
+      "reusable bottle sink",
+      "compost bin backyard",
+      "recycling sorting hands",
+      "sunlight indoor plants",
+      "line drying clothes",
+      "bike to work morning",
+      "smart thermostat app",
+      "farmers market produce",
+      "dishwasher eco mode"
+    ]
+
+  - env: "Pocket Tech Tricks"
+    name: "Pocket Tech Tricks"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "60‑second smartphone and PC fixes—settings, shortcuts, and hidden features."
+    search_terms: [
+      "phone screen settings",
+      "android ios gestures",
+      "wifi router app",
+      "laptop touchpad gestures",
+      "usb cable plug desk",
+      "screen recorder tutorial",
+      "browser extensions",
+      "bluetooth pairing phone",
+      "notification settings menu",
+      "battery saver toggle"
+    ]
+
+  - env: "SpaceVista 60"
+    name: "SpaceVista 60"
+    mode: "space_news"
+    lang: "en"
+    visibility: "public"
+    topic: "Fast & clear explainers on space events—what happened, why it matters, what’s next."
+    search_terms: [
+      "rocket liftoff slow motion",
+      "satellite deployment animation",
+      "mission patch close up",
+      "control room operators",
+      "observatory telescope night",
+      "planet flyby render",
+      "lunar surface rover",
+      "iss window earth",
+      "payload fairing open",
+      "aerospace factory assembly"
+    ]
+
+  - env: "MicroNature Minute"
+    name: "MicroNature Minute"
+    mode: "nature_micro"
+    lang: "en"
+    visibility: "public"
+    topic: "Macro nature and tiny ecosystems—textures, cycles, and hidden worlds."
+    search_terms: [
+      "dew drops macro leaf",
+      "mushroom gills close",
+      "insect wing macro",
+      "moss forest floor",
+      "ant trail close up",
+      "butterfly proboscis",
+      "seed sprouting timelapse",
+      "snail shell macro",
+      "spider web morning",
+      "river pebble macro"
+    ]
+
+  - env: "Kitchen Logic Lab"
+    name: "Kitchen Logic Lab"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "Cooking and food‑science micro‑tips—safer, faster, tastier—with everyday gear."
+    search_terms: [
+      "home kitchen sunlight",
+      "chopping board top down",
+      "simmering pot steam",
+      "oven preheat dial",
+      "spices jar rack",
+      "thermometer meat check",
+      "glass meal prep",
+      "knife honing steel",
+      "sous vide water bath",
+      "herbs wash sink"
+    ]
+
+  - env: "Weather Window 60"
+    name: "Weather Window 60"
+    mode: "weather_bits"
+    lang: "en"
+    visibility: "public"
+    topic: "Weather phenomena explained with visuals—cloud types, fronts, and microclimates."
+    search_terms: [
+      "time lapse storm clouds",
+      "cumulonimbus lightning",
+      "rain on city street",
+      "wind over wheat field",
+      "fog rolling hills",
+      "radar screen weather",
+      "snowfall close up",
+      "hailstones ground",
+      "sun halo sky",
+      "coastal storm waves"
+    ]
+
+  - env: "Focus Rituals"
+    name: "Focus Rituals"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "One practical routine per episode to boost focus—environment, timing, and tools."
+    search_terms: [
+      "minimal desk morning light",
+      "notebook checklist pen",
+      "pomodoro timer phone",
+      "noise cancelling headphones",
+      "meditation breathing app",
+      "closed door workspace",
+      "calendar time block",
+      "tea mug steam desk",
+      "plants on desk",
+      "screen do not disturb"
+    ]
+
+  - env: "TrailScape 60"
+    name: "TrailScape 60"
+    mode: "travel_spot"
+    lang: "en"
+    visibility: "public"
+    topic: "Short trail and landmark spotlights—how to see the best view quickly."
+    search_terms: [
+      "mountain ridge hike",
+      "waterfall plunge pool",
+      "forest boardwalk path",
+      "coastal cliff trail",
+      "lake viewpoint sunrise",
+      "canyon overlook",
+      "wooden footbridge stream",
+      "alpine meadow flowers",
+      "desert arch landmark",
+      "lighthouse cliff path"
+    ]
+
+  - env: "Ocean Pulse"
+    name: "Ocean Pulse"
+    mode: "coast_science"
+    lang: "en"
+    visibility: "public"
+    topic: "Coasts and oceans—waves, tides, ecosystems—explained with simple visuals."
+    search_terms: [
+      "ocean waves slow motion",
+      "tide pool close up",
+      "rocky coast aerial",
+      "lighthouse storm spray",
+      "kelp forest underwater",
+      "mangrove roots water",
+      "harbor fishing boats",
+      "seabird colony cliff",
+      "coral reef snorkel",
+      "beach dune grass wind"
+    ]
+
+  - env: "Timelapse Lab"
+    name: "Timelapse Lab"
+    mode: "timelapse_science"
+    lang: "en"
+    visibility: "public"
+    topic: "Science shown through time—growth, decay, motion, and cycles in timelapse."
+    search_terms: [
+      "plant growth timelapse",
+      "city skyline timelapse",
+      "ice melting macro",
+      "clouds rolling fast",
+      "stars rotation night",
+      "traffic light trails",
+      "construction crane timelapse",
+      "flower blooming close",
+      "shadow clock sundial",
+      "mold growth time"
+    ]
+
+  - env: "Orderly Home 60"
+    name: "Orderly Home 60"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "Declutter and organization micro‑wins—systems you can copy today."
+    search_terms: [
+      "drawer organizer top down",
+      "closet folding shirts",
+      "label maker pantry jars",
+      "cable management desk",
+      "bookshelf rainbow order",
+      "storage bins shelf",
+      "entryway shoe rack",
+      "laundry baskets sort",
+      "pegboard tools garage",
+      "weekly planner wall"
+    ]
+
+  - env: "RoadVista 60"
+    name: "RoadVista 60"
+    mode: "travel_spot"
+    lang: "en"
+    visibility: "public"
+    topic: "Scenic road mini‑guides—best stretch, safe stops, and photo pullouts."
+    search_terms: [
+      "coastal highway aerial",
+      "mountain pass switchbacks",
+      "desert road straight",
+      "forest road canopy",
+      "bridge crossing river",
+      "roadside lookout point",
+      "car POV windshield",
+      "motorcycle twisty road",
+      "tunnel light exit",
+      "sunset road flare"
+    ]
+
+  - env: "Wild Pattern Atlas"
+    name: "Wild Pattern Atlas"
+    mode: "animal_patterns"
+    lang: "en"
+    visibility: "public"
+    topic: "Visual taxonomy of natural textures—why patterns evolve and where to find them."
+    search_terms: [
+      "fur macro pattern",
+      "feather macro detail",
+      "reptile scales close",
+      "tree bark texture",
+      "sand dune ripples",
+      "butterfly wing scales",
+      "zebra stripes close",
+      "giraffe spots",
+      "snake skin macro",
+      "rock strata layers"
+    ]
+
+  - env: "Hidden Math IRL"
+    name: "Hidden Math IRL"
+    mode: "math_visuals"
+    lang: "en"
+    visibility: "public"
+    topic: "Geometry hidden in everyday scenes—ratios, symmetries, spirals made tangible."
+    search_terms: [
+      "spiral staircase top down",
+      "tiled floor pattern",
+      "bridge arch symmetry",
+      "fountain water arcs",
+      "honeycomb close up",
+      "domino tiling floor",
+      "crop circle fields",
+      "street crossing stripes",
+      "wind turbine blades",
+      "snowflake macro"
+    ]
+
+  - env: "Mechanism Minute"
+    name: "Mechanism Minute"
+    mode: "mechanism_explain"
+    lang: "en"
+    visibility: "public"
+    topic: "How everyday mechanisms work—clear diagrams, real parts, satisfying motion."
+    search_terms: [
+      "gears macro rotation",
+      "belt and pulley machine",
+      "cam mechanism close",
+      "ball bearing spin",
+      "conveyor line factory",
+      "hydraulic press shop",
+      "hinge slow motion",
+      "clock escapement",
+      "robotic arm assembly",
+      "bicycle drivetrain"
+    ]
+
+  - env: "LightCraft Studio"
+    name: "LightCraft Studio"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "Real‑room lighting tricks—direction, diffusion, and color made simple."
+    search_terms: [
+      "window light interior",
+      "lamp corner bounce",
+      "led strip ambient",
+      "softbox living room",
+      "desk task light",
+      "prism rainbow wall",
+      "curtain sheer light",
+      "under cabinet lighting",
+      "table lamp tungsten",
+      "white card reflector"
+    ]
+
+  - env: "Bridge & Tunnel Atlas"
+    name: "Bridge & Tunnel Atlas"
+    mode: "urban_facts"
+    lang: "en"
+    visibility: "public"
+    topic: "Iconic crossings explained—structure, history, and view in one minute."
+    search_terms: [
+      "suspension bridge aerial",
+      "cable stayed bridge",
+      "stone arch bridge river",
+      "steel truss bridge",
+      "tunnel driving pov",
+      "highway bridge timelapse",
+      "drawbridge opening",
+      "pedestrian bridge city",
+      "viaduct valley",
+      "bridge maintenance crew"
+    ]
+
+  - env: "Object Origins"
+    name: "Object Origins"
+    mode: "object_history"
+    lang: "en"
+    visibility: "public"
+    topic: "Design histories of everyday objects—first versions, key tweaks, modern form."
+    search_terms: [
+      "paper clip macro",
+      "ceramic mug rotating",
+      "zipper close up",
+      "light switch click",
+      "pencil sharpen wood",
+      "scissors cutting paper",
+      "stapler desk macro",
+      "tape dispenser pull",
+      "notebook spiral binding",
+      "door handle latch"
+    ]
+
+  - env: "Epic Mundane"
+    name: "Epic Mundane"
+    mode: "deadpan_comedy"
+    lang: "en"
+    visibility: "public"
+    topic: "Overdramatic narration for ordinary scenes—treat the trivial like a trailer."
+    search_terms: [
+      "kettle boiling steam",
+      "laundry machine spin",
+      "toaster pop slow motion",
+      "vacuum cleaner line carpet",
+      "elevator doors close",
+      "coffee drip close up",
+      "sprinkler lawn morning",
+      "mail slot letter",
+      "alarm clock ringing",
+      "fridge door open light"
+    ]
+
+  - env: "Corporate Jargon Translator"
+    name: "Corporate Jargon Translator"
+    mode: "office_plain"
+    lang: "en"
+    visibility: "public"
+    topic: "Decode buzzwords into plain English—meetings, emails, and KPIs made human."
+    search_terms: [
+      "typing hands office desk",
+      "whiteboard sticky notes",
+      "conference room glass",
+      "printer room paper",
+      "elevator corporate lobby",
+      "open office walk",
+      "spreadsheet on laptop",
+      "water cooler chat",
+      "projector presentation",
+      "email inbox screen"
+    ]
+
+  - env: "Pet Inner Monologue"
+    name: "Pet Inner Monologue"
+    mode: "pet_caption"
+    lang: "en"
+    visibility: "public"
+    topic: "Cats and dogs with subtitled thoughts—wholesome, silly, never mean."
+    search_terms: [
+      "cat by window sun",
+      "dog head tilt close",
+      "pet on sofa nap",
+      "treat jar open",
+      "leash by door",
+      "pet bowl empty",
+      "dog park running",
+      "cat paw keyboard",
+      "pet toy squeak",
+      "dog car window"
+    ]
+
+  - env: "Tiny Drama Dept."
+    name: "Tiny Drama Dept."
+    mode: "deadpan_comedy"
+    lang: "en"
+    visibility: "public"
+    topic: "Soap‑opera tension for tiny problems—music cue, dramatic pause, simple fix."
+    search_terms: [
+      "coffee spill slow motion",
+      "printer error blinking",
+      "office chair spin",
+      "microwave timer close",
+      "elevator button finger",
+      "door close slow motion",
+      "staples jam fix",
+      "sticky note falls",
+      "pen ink blot",
+      "water cooler cup drop"
+    ]
+
+  - env: "Wrong Way First"
+    name: "Wrong Way First"
+    mode: "fixit_fast"
+    lang: "en"
+    visibility: "public"
+    topic: "Show the wrong way fast—then the right fix clearly and safely."
+    search_terms: [
+      "messy desk cables",
+      "crooked frame wall",
+      "kitchen smoke alarm",
+      "overstuffed suitcase pack",
+      "tripod wrong setup",
+      "phone cracked screen",
+      "frayed power cable",
+      "dirty air filter",
+      "paint roller marks",
+      "clogged shower head"
+    ]
