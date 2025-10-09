@@ -6,3 +6,4 @@ nest-asyncio
 feedparser
 Pillow>=10.0.0
 numpy>=1.26,<2
+sentence-transformers==2.7.0
