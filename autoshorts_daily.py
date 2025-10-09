@@ -1430,6 +1430,8 @@ def _gen_topic_query_candidates(topic: str, terms: List[str]) -> List[str]:
 
 # ==================== Pexels (robust) ====================
 _USED_PEXELS_IDS_RUNTIME: Set[int] = set()
+# Pexels sayfa URL'lerini (slug) sıralamada kullanmak için
+_PEXELS_PAGE_URL: Dict[int, str] = {}
 
 def _pexels_headers():
     if not PEXELS_API_KEY: raise RuntimeError("PEXELS_API_KEY missing")
@@ -1440,14 +1442,31 @@ def _is_vertical_ok(w: int, h: int) -> bool:
         return h > w and h >= PEXELS_MIN_HEIGHT
     return (h >= PEXELS_MIN_HEIGHT) and (h >= w or PEXELS_ALLOW_LANDSCAPE)
 
-def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None) -> List[Tuple[int, str, int, int, float, str]]:
+def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None) -> List[Tuple[int, str, int, int, float]]:
+    """
+    Pexels video arama:
+    - orientation=portrait KALDIRILDI (relevans düşürüyordu)
+    - Puanlamada sayfa URL slug'ını da kullanacağız (_PEXELS_PAGE_URL'e yazarız)
+    Dönen tuple: (vid, file_link, w, h, dur)
+    """
     per_page = per_page or max(10, min(80, PEXELS_PER_PAGE))
     url = "https://api.pexels.com/videos/search"
-    params = {"query": query, "per_page": per_page, "page": page, "size":"large", "locale": locale}
-    # Yalnız portre zorunluysa gönder
-    if PEXELS_STRICT_VERTICAL:
-        params["orientation"] = "portrait"
-    r = requests.get(url, headers=_pexels_headers(), params=params, timeout=30)
+    try:
+        r = requests.get(
+            url,
+            headers=_pexels_headers(),
+            params={
+                "query": query,
+                "per_page": per_page,
+                "page": page,
+                # "orientation": "portrait",  # <-- KALDIRILDI
+                "size": "large",
+                "locale": locale
+            },
+            timeout=30
+        )
+    except Exception:
+        return []
     if r.status_code != 200:
         return []
     data = r.json() or {}
@@ -1457,23 +1476,33 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
         dur = float(v.get("duration",0.0))
         if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
             continue
-        pf=[]
+
+        # Sayfa URL'sini kaydet → slug'da kelimeler var (relevans için)
+        page_url = (v.get("url") or "").strip()
+        if page_url:
+            _PEXELS_PAGE_URL[vid] = page_url
+
+        picks=[]
         for x in (v.get("video_files", []) or []):
             w = int(x.get("width",0)); h = int(x.get("height",0))
-            if _is_vertical_ok(w, h): pf.append((w,h,x.get("link")))
-        if not pf: continue
-        pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
-        w,h,link = pf[0]
-        page_url = v.get("url","")  # kelime slug'ı içerir → sıralama için
-        out.append((vid, link, w, h, dur, page_url))
+            if _is_vertical_ok(w, h):
+                picks.append((w,h,x.get("link")))
+        if not picks:
+            continue
+        # Yükseklik hedefimize yakın + büyük çözünürlük
+        picks.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
+        w,h,link = picks[0]
+        out.append((vid, link, w, h, dur))
     return out
 
-def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tuple[int, str, int, int, float, str]]:
+def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tuple[int, str, int, int, float]]:
     url = "https://api.pexels.com/videos/popular"
-    params = {"per_page": per_page, "page": page}
-    if PEXELS_STRICT_VERTICAL:
-        params["orientation"] = "portrait"
-    r = requests.get(url, headers=_pexels_headers(), params=params, timeout=30)
+    try:
+        r = requests.get(url, headers=_pexels_headers(),
+                         params={"per_page": per_page, "page": page, "locale": locale},
+                         timeout=30)
+    except Exception:
+        return []
     if r.status_code != 200:
         return []
     data = r.json() or {}
@@ -1483,23 +1512,39 @@ def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tupl
         dur = float(v.get("duration",0.0))
         if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
             continue
-        pf=[]
+        page_url = (v.get("url") or "").strip()
+        if page_url:
+            _PEXELS_PAGE_URL[vid] = page_url
+        picks=[]
         for x in (v.get("video_files", []) or []):
             w = int(x.get("width",0)); h = int(x.get("height",0))
-            if _is_vertical_ok(w, h): pf.append((w,h,x.get("link")))
-        if not pf: continue
-        pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
-        w,h,link = pf[0]
-        page_url = v.get("url","")
-        out.append((vid, link, w, h, dur, page_url))
+            if _is_vertical_ok(w, h):
+                picks.append((w,h,x.get("link")))
+        if not picks:
+            continue
+        picks.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
+        w,h,link = picks[0]
+        out.append((vid, link, w, h, dur))
     return out
 
-def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
+def _pixabay_fallback(q: str, need: int, locale: str, syn_tokens: Optional[Set[str]] = None, strict: bool = False) -> List[Tuple[int, str]]:
+    """
+    Pixabay'de 'tags' alanı var → eş-anlam tokenları ile filtrele.
+    strict=True ise syn_tokens ile kesişmeyenler elenir.
+    """
+    syn_tokens = syn_tokens or set()
     if not (ALLOW_PIXABAY_FALLBACK and PIXABAY_API_KEY):
         return []
     try:
-        params = {"key": PIXABAY_API_KEY, "q": q, "safesearch":"true",
-                  "per_page": min(50, max(10, need*4)), "video_type":"film", "order":"popular"}
+        params = {
+            "key": PIXABAY_API_KEY,
+            "q": q,
+            "safesearch": "true",
+            "per_page": min(50, max(10, need*4)),
+            "video_type": "film",
+            "order": "popular",
+            "lang": "en" if not locale.lower().startswith("tr") else "tr"
+        }
         r = requests.get("https://pixabay.com/api/videos/", params=params, timeout=30)
         if r.status_code != 200:
             return []
@@ -1507,42 +1552,62 @@ def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
         outs=[]
         for h in data.get("hits", []):
             dur = float(h.get("duration",0.0))
-            if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION: continue
+            if dur < PEXELS_MIN_DURATION or dur > PEXELS_MAX_DURATION:
+                continue
+            tags = (h.get("tags") or "").lower()
+            tag_tokens = set(re.findall(r"[a-z0-9]+", tags))
+            if strict and syn_tokens and not (tag_tokens & syn_tokens):
+                continue
             vids = h.get("videos", {})
             chosen=None
             for qual in ("large","medium","small","tiny"):
                 v = vids.get(qual)
-                if not v: continue
+                if not v:
+                    continue
                 w,hh = int(v.get("width",0)), int(v.get("height",0))
                 if _is_vertical_ok(w, hh):
-                    chosen = (w,hh,v.get("url")); break
+                    chosen = (w,hh,v.get("url"))
+                    break
             if chosen:
                 outs.append( (int(h.get("id",0)), chosen[2]) )
         return outs[:need]
     except Exception:
         return []
 
-def _rank_and_dedup(items: List[Tuple], qtokens: Set[str], block: Set[int]) -> List[Tuple[int,str]]:
+def _rank_and_dedup(
+    items: List[Tuple[int, str, int, int, float]],
+    qtokens: Set[str],
+    block: Set[int],
+    syn_tokens: Optional[Set[str]] = None,
+    strict: bool = False
+) -> List[Tuple[int,str]]:
+    """
+    Puanlama:
+      - Sayfa slug tokenları + dosya link tokenları birlikte
+      - syn_tokens ile çakışma +2x ağırlık
+      - strict=True ise syn_tokens ile kesişmeyenler elenir
+    """
+    syn_tokens = syn_tokens or set()
     cand=[]
-    for it in items:
-        # destek: 5-tuple (eski) veya 6-tuple (yeni, page_url dahil)
-        if len(it) == 6:
-            vid, link, w, h, dur, page_url = it
-            text_for_tokens = page_url or link
-        else:
-            vid, link, w, h, dur = it
-            text_for_tokens = link
+    for tup in items:
+        vid, link, w, h, dur = tup
         if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
             continue
-        tokens = set(re.findall(r"[a-z0-9]+", (text_for_tokens or "").lower()))
-        overlap = len(tokens & qtokens)
-        score = overlap*3.0 + (1.0 if 2.0 <= dur <= 12.0 else 0.0) + (1.0 if h >= 1440 else 0.0)
+        page_url = _PEXELS_PAGE_URL.get(vid, "")
+        tokens = _url_tokens(link) | _url_tokens(page_url)
+        if strict and syn_tokens and not (tokens & syn_tokens):
+            continue
+        overlap_q   = len(tokens & qtokens)
+        overlap_syn = len(tokens & syn_tokens)
+        score = (overlap_q*1.0) + (overlap_syn*2.0) + (1.0 if 2.0 <= dur <= 12.0 else 0.0) + (1.0 if h >= 1440 else 0.0)
         cand.append((score, vid, link))
     cand.sort(key=lambda x: x[0], reverse=True)
     out=[]; seen=set()
     for _, vid, link in cand:
-        if vid in seen: continue
-        seen.add(vid); out.append((vid, link))
+        if vid in seen:
+            continue
+        seen.add(vid)
+        out.append((vid, link))
     return out
 
 def _url_tokens(s: str) -> set[str]:
@@ -1631,68 +1696,83 @@ def _entity_topic_queries(topic: str, ent: str, lang: str, user_terms: List[str]
 
 def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
     """
-    ENTITY-FIRST: Tüm sahneler için aynı konu/varlık etrafında güçlü havuz.
-    - Önce eş anlam odaklı Pexels (çok sayfa)
-    - Sonra zayıf kalanı Pixabay ile tamamla
-    - Dedup + blocklist
-    - ENTITY_VISUAL_MIN garantisi (_ensure_entity_coverage)
+    ENTITY-FIRST + STRICT:
+      - Locale önceliği: en-US (daha zengin veri)
+      - Puanlama: sayfa slug + link, eş-anlam 2x
+      - strict: eş-anlamla kesişmeyen sonuçları ele
+      - Yetersizse popular ve Pixabay ile tamamla
     """
     random.seed(rotation_seed or int(time.time()))
-    locale = "tr-TR" if LANG.startswith("tr") else "en-US"
-    block = _blocklist_get_pexels()
+    # en-US öncelik → TR ise ikinci turda TR denenir
+    locales_try = ["en-US"]
+    if LANG.startswith("tr"):
+        locales_try.append("tr-TR")
 
+    block = _blocklist_get_pexels()
     ent = _derive_focus_entity(topic, MODE, sentences)
+    syns = _entity_synonyms(ent, LANG) if ent else []
+    syn_tokens = set(re.findall(r"[a-z0-9]+", " ".join(syns).lower()))
+    strict_mode = ENTITY_VISUAL_STRICT and bool(syn_tokens)
+
+    # Kısa, temiz sorgular (eş-anlamlar + topic)
     queries = _entity_topic_queries(topic, ent, LANG, search_terms)
 
-    # 1) Pexels taraması (çok sayfa, eş anlam öncelikli)
     pool: List[Tuple[int,str]] = []
-    qtokens_cache: Dict[str, Set[str]] = {}
     target_gather = max(need * 3, 24)
 
+    # 1) Pexels search (çok sayfa, çok locale)
     for q in queries:
-        qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
-        merged: List[Tuple[int, str, int, int, float]] = []
-        for page in (1, 2, 3, 4, 5):
-            merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
-            if len(merged) >= target_gather: break
-        ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
+        qtokens = set(re.findall(r"[a-z0-9]+", q.lower()))
+        merged_items: List[Tuple[int, str, int, int, float]] = []
+        for loc in locales_try:
+            for page in (1, 2, 3, 4, 5):
+                merged_items += _pexels_search(q, loc, page=page, per_page=PEXELS_PER_PAGE)
+                if len(merged_items) >= target_gather:
+                    break
+            if len(merged_items) >= target_gather:
+                break
+
+        ranked = _rank_and_dedup(merged_items, qtokens, block, syn_tokens=syn_tokens, strict=strict_mode)
         pool += ranked[:max(6, need)]
         if len(pool) >= target_gather:
             break
 
-    # 2) Hâlâ azsa Pexels popular + Pixabay ile takviye
+    # 2) Eksikse Pexels popular (en-öncelikli)
     if len(pool) < need:
         merged=[]
-        for page in (1,2,3):
-            merged += _pexels_popular(locale, page=page, per_page=50)
-            if len(merged) >= target_gather: break
-        pop_rank = _rank_and_dedup(merged, set(), block)
+        for loc in locales_try:
+            for page in (1,2,3):
+                merged += _pexels_popular(loc, page=page, per_page=50)
+                if len(merged) >= target_gather:
+                    break
+            if len(merged) >= target_gather:
+                break
+        pop_rank = _rank_and_dedup(merged, set(), block, syn_tokens=syn_tokens, strict=strict_mode)
         pool += pop_rank[:max(0, need*2 - len(pool))]
 
+    # 3) Hâlâ azsa Pixabay — eş-anlam STRICT
     if len(pool) < need:
-        # eş anlamdan en kuvvetli olanla Pixabay dene
-        pix_q = (queries[0] if queries else _simplify_query(topic, keep=1)) or "macro detail"
-        pix = _pixabay_fallback(pix_q, need*2, locale)
+        pix_q = (queries[0] if queries else _simplify_query(topic, keep=1)) or (syns[0] if syns else "macro detail")
+        # en-US ağırlıklı
+        pix = _pixabay_fallback(pix_q, need*2, "en-US", syn_tokens=syn_tokens, strict=strict_mode)
         pool += [(vid, link) for (vid, link) in pix]
 
-    # 3) Dedup + blocklist sonrası
+    # 4) Dedup + blocklist sonrası + coverage kontrol
     seen=set(); dedup=[]
     for vid, link in pool:
-        if vid in seen: continue
+        if vid in seen:
+            continue
         seen.add(vid); dedup.append((vid, link))
 
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
     rest  = [(vid,link) for vid,link in dedup if vid in block]
-    final = (fresh + rest)
+    final = fresh + rest
 
-    # 4) Odak varlık kapsaması → zorunlu
-    syns = _entity_synonyms(ent, LANG) if ent else []
     if syns:
-        final = _ensure_entity_coverage(final, need, locale, syns)
+        final = _ensure_entity_coverage(final, need, "en-US", syns)
 
-    # 5) Sadece ihtiyacımız kadar
     final = final[:max(need, len(sentences))]
-    print(f"   Pexels candidates (entity-first): q={len(queries)} | pool={len(final)} (fresh={len(fresh)}) | ent={ent or '∅'}")
+    print(f"   Pexels candidates (entity-first/strict): q={len(queries)} | pool={len(final)} (fresh={len(fresh)}) | ent={ent or '∅'} | strict={strict_mode}")
     return final
 
 # ==================== YouTube ====================
@@ -2330,5 +2410,6 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
