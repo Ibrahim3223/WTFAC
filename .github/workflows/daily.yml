@@ -9,7 +9,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
   actions: read
   checks: read
   id-token: none
@@ -27,6 +27,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # state branch'i almak için şart
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -40,7 +43,25 @@ jobs:
         with:
           ffmpeg-version: release
 
-      # ---------- SAFE ENV EXPORT (ÖNCE) ----------
+      # ---------- PRE: .state'i 'state' branch'inden geri yükle ----------
+      - name: Restore .state from 'state' branch
+        shell: bash
+        run: |
+          set -e
+          git fetch origin state:state || true
+          if git rev-parse --verify state >/dev/null 2>&1; then
+            git checkout state
+            mkdir -p .state
+            cp -r .state ../_remote_state || true
+            git checkout -
+            rm -rf .state
+            mkdir -p .state
+            cp -r ../_remote_state/. .state/ || true
+          else
+            mkdir -p .state
+          fi
+
+      # ---------- Kanal ENV'lerini güvenli export ----------
       - name: Export channel variables (safe)
         shell: bash
         env:
@@ -93,7 +114,7 @@ jobs:
           wenv BGM_URLS            "${VARS_BGM_URLS}"
           wenv UPLOAD_TO_YT        "1"
 
-      # ---------- STATE caches ----------
+      # ---------- (opsiyonel) eski state cache'leri ----------
       - name: Restore global state cache
         uses: actions/cache/restore@v4
         with:
@@ -147,22 +168,24 @@ jobs:
 
           # ==== Contextual CTA ====
           CTA_ENABLE: "1"
-          CTA_SHOW_SEC: "2.8"    # son kaç saniye görünsün
+          CTA_SHOW_SEC: "2.8"
           CTA_MAX_CHARS: "64"
-          # CTA_TEXT: ""         # boş değilse bu metni aynen kullanır (override)
 
           # ==== BGM (arkaplan müzik) ====
           BGM_ENABLE: "1"
           BGM_DIR: "bgm"
-          # loop loudness / fade (loop oluştururken)
           BGM_DB: "0"
           BGM_FADE: "0.8"
-          # sidechain ducking (autoshorts_daily.py ile uyumlu)
           BGM_GAIN_DB: "-11"
           BGM_DUCK_THRESH: "0.035"
           BGM_DUCK_RATIO: "10"
           BGM_DUCK_ATTACK_MS: "6"
           BGM_DUCK_RELEASE_MS: "180"
+
+          # ---- StateGuard ----
+          STATE_DIR: ".state"
+          SIM_TH_SCRIPT: "0.90"
+          SIM_TH_ENTITY: "0.92"
         run: |
           set -e
           echo "== ${CHANNEL_NAME} =="
@@ -209,3 +232,34 @@ jobs:
         with:
           path: state_${{ inputs.environment }}.json
           key: chstate-${{ inputs.environment }}-${{ github.run_id }}
+
+      # ---------- POST: .state'i 'state' branch'ine merge ederek kaydet ----------
+      - name: Persist .state to 'state' branch (merge-safe)
+        if: always()
+        shell: bash
+        env:
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+          GIT_COMMITTER_NAME: "github-actions[bot]"
+          GIT_COMMITTER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -e
+          mkdir -p _remote_state _merged_state
+          git fetch origin state:state || true
+          if git rev-parse --verify state >/dev/null 2>&1; then
+            git checkout state
+            cp -r .state/. "$GITHUB_WORKSPACE/_remote_state/" || true
+            git checkout -
+          fi
+          # merge: önce uzaktakini, üstüne yeniyi
+          cp -r _remote_state/. _merged_state/ || true
+          cp -r .state/. _merged_state/ || true
+
+          git checkout state || git checkout --orphan state
+          rm -rf .state
+          mkdir -p .state
+          cp -r "$GITHUB_WORKSPACE/_merged_state/." .state/ || true
+          git add .state
+          git commit -m "update .state $(date -u +%F_%T)" || true
+          git push origin state
+          git checkout -
