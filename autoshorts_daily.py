@@ -1222,25 +1222,6 @@ def _proper_phrases(texts: List[str]) -> List[str]:
 def _domain_synonyms(all_text: str) -> List[str]:
     t = (all_text or "").lower()
     s = set()
-    def _entity_synonyms(ent: str, lang: str) -> list[str]:
-    e = (ent or "").lower().strip()
-    base = [e]
-    if e.endswith("s"): base.append(e[:-1])
-    if lang.startswith("tr"):
-        table = {
-            "bukalemun": ["bukalemun","kertenkele","gecko","iguana","sürüngen"],
-        }
-    else:
-        table = {
-            "chameleon": ["chameleon","lizard","gecko","iguana","reptile"],
-            "octopus": ["octopus","cephalopod","tentacles","cuttlefish","squid"],
-            "eagle": ["eagle","raptor","bird of prey","falcon","hawk"],
-            # burayı zamanla genişletebilirsin
-        }
-    for k,vals in table.items():
-        if k in e:
-            return list(dict.fromkeys(vals))
-    return base
     if any(k in t for k in ["bridge","tunnel","arch","span"]):
         s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
     if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
@@ -1260,6 +1241,26 @@ def _domain_synonyms(all_text: str) -> List[str]:
             "reptile eye close up"
         ])
     return list(s)
+
+def _entity_synonyms(ent: str, lang: str) -> list[str]:
+    e = (ent or "").lower().strip()
+    base = [e]
+    if e.endswith("s"): base.append(e[:-1])
+    if lang.startswith("tr"):
+        table = {
+            "bukalemun": ["bukalemun","kertenkele","gecko","iguana","sürüngen"],
+        }
+    else:
+        table = {
+            "chameleon": ["chameleon","lizard","gecko","iguana","reptile"],
+            "octopus": ["octopus","cephalopod","tentacles","cuttlefish","squid"],
+            "eagle": ["eagle","raptor","bird of prey","falcon","hawk"],
+            # burayı zamanla genişletebilirsin
+        }
+    for k,vals in table.items():
+        if k in e:
+            return list(dict.fromkeys(vals))
+    return base
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
     topic = (topic or "").strip()
@@ -2214,6 +2215,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
