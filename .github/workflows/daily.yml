@@ -164,6 +164,13 @@ jobs:
           SIM_TH_ENTITY: "0.94"
           STATE_DIR: ".state"
 
+          # --- Entity görsel kapsaması ---
+          ENTITY_VISUAL_MIN: "0.5"         # sahnelerin en az yarısı odak varlıkla alakalı olsun
+          ENTITY_VISUAL_STRICT: "1"        # sağlamazsa ek sorgu ve Pixabay ile tamamla
+
+          # --- Novelty daha sıkı (isteğe bağlı) ---
+          NOVELTY_JACCARD_MAX: "0.45"
+
           # ---- Stock kaynak & filtreler ----
           PEXELS_STRICT_VERTICAL: "0"   # yatay da kabul
           PEXELS_MIN_HEIGHT: "720"      # kaliteyi çok düşürmeden yumuşat
