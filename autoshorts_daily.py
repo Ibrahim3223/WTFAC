@@ -1124,29 +1124,29 @@ def _select_template_key(topic: str) -> str:
 # ==================== Gemini (topic-locked) ====================
 ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a 25–40s YouTube Short.
-Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
+Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
+
+FOCUS RULE:
+- `focus` MUST be 1–3 words naming the main subject for visuals (e.g., "chameleon", "Japan", "iPhone screen").
+- Keep it concrete and searchable; no verbs or filler.
 
 CONTENT RULES:
 - Stay laser-focused on the provided TOPIC (no pivoting).
-- Sentence 1 = a punchy HOOK (≤10 words, question or bold claim).
-- Sentence 8 = a SOFT CTA that nudges comments (no 'subscribe/like' words).
-- Aim for a seamless loop: let the last line mirror the first line idea.
-- Coherent, visually anchorable beats; each sentence advances one concrete idea.
-- Avoid vague fillers and meta-talk. No numbering. 6–12 words per sentence.""",
+- Sentence 1 = punchy HOOK (≤10 words, question/bold claim).
+- Sentence 8 = a SOFT CTA for comments (no 'subscribe/like').
+- 6–12 words per sentence; no numbering; visual, concrete beats.""",
 
     "country_facts": """Create amazing country/city facts.
-Return STRICT JSON with keys: topic, sentences (7–8), search_terms (4–10), title, description, tags.
+Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
+
+FOCUS RULE:
+- `focus` should be the country or city name (e.g., "Japan", "Tokyo").
+
 Rules:
-- Sentence 1 is a short HOOK (≤10 words, question/claim).
-- Sentence 8 is a soft CTA for comments (no 'subscribe/like').
+- Sentence 1 is a short HOOK (≤10 words).
+- Sentence 8 is a soft CTA (no 'subscribe/like').
 - Each fact must be specific & visual. 6–12 words per sentence."""
 }
-
-BANNED_PHRASES = [
-    "one clear tip", "see it", "learn it", "plot twist",
-    "soap-opera narration", "repeat once", "takeaway action",
-    "in 60 seconds", "just the point", "crisp beats"
-]
 
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
@@ -1198,7 +1198,7 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
     base=list(pool); random.shuffle(base)
     return _terms_normalize(base)[:8]
 
-def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]) -> Tuple[str,List[str],List[str],str,str,List[str]]:
+def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]):
     tpl_key = _select_template_key(topic_lock)
     template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
     avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
@@ -1208,7 +1208,8 @@ def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], 
     guardrails = """
 RULES (MANDATORY):
 - STAY ON TOPIC exactly as provided.
-- Return ONLY JSON, no prose/markdown, keys: topic, sentences, search_terms, title, description, tags."""
+- Return ONLY JSON, no prose/markdown.
+- Keys required: topic, focus, sentences, search_terms, title, description, tags."""
     jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
     temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
 
@@ -1224,13 +1225,14 @@ Avoid overlap for 180 days:
 """
     data = _gemini_call(prompt, GEMINI_MODEL, temp)
 
+    # Parse & normalize
     topic   = topic_lock
     sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
     sentences = [s for s in sentences if s][:8]
+
     terms = data.get("search_terms") or []
     if isinstance(terms, str): terms=[terms]
     terms = _terms_normalize(terms)
-    if not terms: terms = _derive_terms_from_text(topic, sentences)
     if user_terms:
         seed = _terms_normalize(user_terms)
         terms = _terms_normalize(seed + terms)
@@ -1238,8 +1240,14 @@ Avoid overlap for 180 days:
     title = (data.get("title") or "").strip()
     desc  = (data.get("description") or "").strip()
     tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-    return topic, sentences, terms, title, desc, tags
 
+    focus = (data.get("focus") or "").strip()
+    if not focus:
+        # Fallback: title -> topic
+        focus = (title or data.get("topic") or topic_lock).strip()
+    focus = _simplify_query(focus, keep=3)  # 1–3 kelime
+
+    return topic, sentences, terms, title, desc, tags, focus
 # --- Regenerate helper (novelty guard önerilerine göre) ---
 def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
     seed_user_terms = list(base_user_terms or [])
@@ -1313,6 +1321,30 @@ def _entity_synonyms(ent: str, lang: str) -> list[str]:
             if k in e:
                 return list(dict.fromkeys(vals))
         return base
+
+    def _required_tokens_for_focus(focus: str, lang: str) -> set[str]:
+    syns = _entity_synonyms(focus, lang) if focus else []
+    toks = set()
+    for s in (syns + [focus]):
+        toks |= _url_tokens(s)
+    return {t for t in toks if len(t) >= 3}
+
+def build_global_queries(focus: str, search_terms: List[str], mode: str, lang: str) -> List[str]:
+    """Kısa ve sade, 1–2 kelimelik genel sorgular üretir."""
+    qs = []
+    focus_q = _simplify_query(focus, keep=2)
+    if focus_q: qs.append(focus_q)
+    # sinonimlerden
+    for s in _entity_synonyms(focus, lang) or []:
+        q = _simplify_query(s, keep=2)
+        if q and q not in qs: qs.append(q)
+    # gemini search_terms
+    for t in (search_terms or []):
+        q = _simplify_query(t, keep=2)
+        if q and q not in qs: qs.append(q)
+    return qs[:20]
+
+STRICT_ENTITY_FILTER = os.getenv("STRICT_ENTITY_FILTER","1") == "1"
 
     # EN (geniş) eşlemeler
     table_en = {
@@ -1775,6 +1807,59 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     print(f"   Pexels candidates (entity-first/strict): q={len(queries)} | pool={len(final)} (fresh={len(fresh)}) | ent={ent or '∅'} | strict={strict_mode}")
     return final
 
+def build_pool_topic_only(focus: str, search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
+    random.seed(rotation_seed or int(time.time()))
+    locale = "tr-TR" if LANG.startswith("tr") else "en-US"
+    block = _blocklist_get_pexels()
+
+    queries = build_global_queries(focus, search_terms, MODE, LANG)
+    pool: List[Tuple[int,str]] = []
+    qtokens_cache: Dict[str, Set[str]] = {}
+
+    for q in queries:
+        qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
+        merged: List[Tuple[int, str, int, int, float]] = []
+        for page in (1, 2, 3):
+            merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
+            if len(merged) >= need*3: break
+        ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
+        pool += ranked[:max(3, need//2)]
+        if len(pool) >= need*2: break
+
+        # Pexels zayıfsa anında Pixabay takviye
+        if len(ranked) < 2:
+            pix = _pixabay_fallback(q, 3, locale)
+            pool += [(vid, link) for (vid, link) in pix]
+
+    # dedup
+    seen=set(); dedup=[]
+    for vid,link in pool:
+        if vid in seen: continue
+        seen.add(vid); dedup.append((vid,link))
+
+    # STRICT: focus/sinonim tokenlarını zorunlu kıl
+    req = _required_tokens_for_focus(focus, LANG)
+    if req:
+        hits = [(vid,link) for (vid,link) in dedup if (_url_tokens(link) & req)]
+        if hits and (STRICT_ENTITY_FILTER or len(hits) >= max(1, int(math.ceil(need*0.75)))):
+            dedup = hits + [p for p in dedup if p not in hits]
+
+    final = dedup[:max(need, 6)]
+    if len(final) < need:
+        # populer + pixabay ile doldur
+        merged=[]
+        for page in (1,2,3):
+            merged += _pexels_popular(locale, page=page, per_page=40)
+            if len(merged) >= need*3: break
+        pop_rank = _rank_and_dedup(merged, set(), block)
+        final += [p for p in pop_rank if p not in final][:need-len(final)]
+        if len(final) < need:
+            pix = _pixabay_fallback(focus, need-len(final), locale)
+            final += [p for p in pix if p not in final][:need-len(final)]
+
+    print(f"   Pexels candidates (topic-only): q={len(queries)} | pool={len(final)} | focus='{focus}' | strict={STRICT_ENTITY_FILTER}")
+    return final
+
 # ==================== YouTube ====================
 def yt_service():
     cid  = os.getenv("YT_CLIENT_ID")
@@ -2009,7 +2094,7 @@ def main():
         attempts += 1
         if USE_GEMINI and GEMINI_API_KEY:
             try:
-                tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(CHANNEL_NAME, topic_lock, user_terms, banlist)
+                tpc, sents, search_terms, ttl, desc, tags, focus = build_via_gemini(CHANNEL_NAME, topic_lock, user_terms, banlist)
             except Exception as e:
                 print(f"Gemini error: {str(e)[:200]}")
                 tpc = topic_lock; sents=[]; search_terms=user_terms or []
@@ -2112,7 +2197,7 @@ def main():
         score = _content_score(sents)
         print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
         if score > best_score:
-            best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final)
+            best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final, focus)
             best_score = score
         if score >= 7.2 and ok:
             break
@@ -2122,7 +2207,7 @@ def main():
             time.sleep(0.5)
 
     # Final seçilen içerik
-    tpc, sentences, search_terms, ttl, desc, tags, selected_search_term_final = best
+    tpc, sentences, search_terms, ttl, desc, tags, selected_search_term_final, focus = best
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
     fp = sorted(list(_sentences_fp(sentences)))[:500]
     _record_recent(_hash12(sig), MODE, tpc, fp=fp)
@@ -2156,6 +2241,32 @@ def main():
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
     need_clips = max(6, min(12, int(os.getenv("SCENE_COUNT", "8"))))
+
+    # 3) Pexels — TOPIC-ONLY (tüm sahneler aynı odaktan beslensin)
+    need_clips = max(6, min(12, int(os.getenv("SCENE_COUNT", "8"))))
+
+    if os.getenv("SCENE_STRATEGY","topic_only").lower() == "topic_only":
+        pool: List[Tuple[int,str]] = build_pool_topic_only(
+            focus=(focus or tpc),
+            search_terms=(search_terms or user_terms or []),
+            need=need_clips,
+            rotation_seed=ROTATION_SEED
+        )
+    else:
+        # Eski davranış (hybrid/per-scene)
+        per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
+        print("🔎 Per-scene queries:")
+        for q in per_scene_queries: print(f"   • {q}")
+        pool = build_pexels_pool(
+            topic=tpc,
+            sentences=[m[0] for m in metas],
+            search_terms=(search_terms or user_terms or []),
+            need=need_clips,
+            rotation_seed=ROTATION_SEED
+        )
+
+    if not pool:
+        raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
 
     # ENTITY-FIRST havuz
     pool: List[Tuple[int,str]] = build_pexels_pool(
@@ -2410,6 +2521,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
