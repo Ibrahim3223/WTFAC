@@ -159,6 +159,10 @@ ROTATION_SEED  = _env_int("ROTATION_SEED", 0)
 REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
 
+# ---- Entity görsel kapsama kontrolü ----
+ENTITY_VISUAL_MIN = _env_float("ENTITY_VISUAL_MIN", 0.50)  # sahnelerin en az %50'si odak varlıkla alakalı olsun
+ENTITY_VISUAL_STRICT = os.getenv("ENTITY_VISUAL_STRICT", "1") == "1"  # 1=eksikse agresif tamamla
+
 # Karaoke renkleri (ASS stili)
 KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
 KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFD700")
@@ -1218,6 +1222,25 @@ def _proper_phrases(texts: List[str]) -> List[str]:
 def _domain_synonyms(all_text: str) -> List[str]:
     t = (all_text or "").lower()
     s = set()
+    def _entity_synonyms(ent: str, lang: str) -> list[str]:
+    e = (ent or "").lower().strip()
+    base = [e]
+    if e.endswith("s"): base.append(e[:-1])
+    if lang.startswith("tr"):
+        table = {
+            "bukalemun": ["bukalemun","kertenkele","gecko","iguana","sürüngen"],
+        }
+    else:
+        table = {
+            "chameleon": ["chameleon","lizard","gecko","iguana","reptile"],
+            "octopus": ["octopus","cephalopod","tentacles","cuttlefish","squid"],
+            "eagle": ["eagle","raptor","bird of prey","falcon","hawk"],
+            # burayı zamanla genişletebilirsin
+        }
+    for k,vals in table.items():
+        if k in e:
+            return list(dict.fromkeys(vals))
+    return base
     if any(k in t for k in ["bridge","tunnel","arch","span"]):
         s.update(["suspension bridge","cable stayed","stone arch","viaduct","aerial city bridge"])
     if any(k in t for k in ["ocean","coast","tide","wave","storm"]):
@@ -1444,6 +1467,46 @@ def _rank_and_dedup(items: List[Tuple[int, str, int, int, float]], qtokens: Set[
         seen.add(vid); out.append((vid, link))
     return out
 
+def _url_tokens(s: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+def _ensure_entity_coverage(pool: List[Tuple[int,str]], need: int, locale: str, synonyms: List[str]) -> List[Tuple[int,str]]:
+    want = max(1, int(math.ceil(need * max(0.0, min(1.0, ENTITY_VISUAL_MIN)))))
+    synset = set([w for w in synonyms if w and len(w) >= 3])
+    hits = [(vid,link) for (vid,link) in pool if _url_tokens(link) & synset]
+    if len(hits) >= want or not ENTITY_VISUAL_STRICT:
+        return pool
+    # Eksikse: önce Pexels, olmazsa Pixabay ile tamamla
+    missing = want - len(hits)
+    extra: List[Tuple[int,str]] = []
+    for term in synonyms:
+        if missing <= 0: break
+        try:
+            merged = []
+            for page in (1,2):
+                merged += _pexels_search(term, locale, page=page, per_page=40)
+                if len(merged) >= missing*3: break
+            ranked = _rank_and_dedup(merged, set([term]), _blocklist_get_pexels())
+            for (vid,link) in ranked[:missing]:
+                if (vid,link) not in pool and (vid,link) not in extra:
+                    extra.append((vid,link)); missing -= 1
+        except Exception:
+            pass
+    if missing > 0:
+        pix = _pixabay_fallback(synonyms[0], missing, locale)
+        for (vid,link) in pix:
+            if (vid,link) not in pool and (vid,link) not in extra:
+                extra.append((vid,link))
+    # Önceliği isabetlilere ver
+    prioritized = hits + [p for p in pool if p not in hits] + extra
+    # Stabil tut
+    seen=set(); out=[]
+    for it in prioritized:
+        if it not in seen:
+            seen.add(it); out.append(it)
+        if len(out) >= max(need, len(pool)): break
+    return out
+
 def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
     random.seed(rotation_seed or int(time.time()))
     locale = "tr-TR" if LANG.startswith("tr") else "en-US"
@@ -1505,6 +1568,10 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
     rest  = [(vid,link) for vid,link in dedup if vid in block]
     final = (fresh + rest)[:max(need, len(sentences))]
+        ent = _derive_focus_entity(topic, MODE, sentences)
+    syns = _entity_synonyms(ent, LANG) if ent else []
+    if syns:
+        final = _ensure_entity_coverage(final, need, locale, syns)
     print(f"   Pexels candidates: q={len(queries)} | pool={len(final)} (fresh={len(fresh)})")
     return final
 
@@ -2147,6 +2214,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
