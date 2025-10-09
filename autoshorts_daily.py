@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple, Dict, Any, Set
 # ---- novelty guard (30g anti-repeat + semantic) ----
 from novelty_guard import NoveltyGuard  # novelty_guard.py eklendiğine göre direkt içeri alıyoruz
 STATE_DIR = os.getenv("STATE_DIR", ".state")
+from state_guard import StateGuard  # <-- YENİ
 
 # ---- focus-entity cooldown (stronger anti-repeat) ----
 ENTITY_COOLDOWN_DAYS = int(os.getenv("ENTITY_COOLDOWN_DAYS", os.getenv("NOVELTY_WINDOW", "30")))
@@ -1703,6 +1704,7 @@ def main():
 
     # NoveltyGuard'ı kanal + pencere ile başlat
     GUARD = NoveltyGuard(state_dir=STATE_DIR, window_days=ENTITY_COOLDOWN_DAYS)
+    SG = StateGuard(channel=CHANNEL_NAME)  # <-- YENİ
 
     # 1) İçerik üretim (topic-locked) + kalite kontrol + NOVELTY
     attempts = 0
@@ -1737,6 +1739,16 @@ def main():
 
         # Hook + CTA cilası
         sents = _polish_hook_cta(sents)
+
+        # --- StateGuard: script semantik dup kontrolü ---
+        try:
+            if SG.script_semantic_duplicate(" ".join(sents or [])):
+                novelty_tries += 1
+                print(f"🚫 StateGuard: script too similar (>=0.90) → rebuilding… ({novelty_tries}/{NOVELTY_RETRIES})")
+                banlist = [tpc] + banlist
+                continue
+        except Exception as e:
+            print(f"⚠️ SG script dup check skipped: {e}")
 
         # ---- NoveltyGuard: LRU term seçimi + semantik kontrol ----
         selected_term = None
@@ -1792,15 +1804,18 @@ def main():
                 user_terms = [selected_search_term_final] + (user_terms or [])
             continue
 
-        # Focus-entity cooldown (stronger anti-repeat)
+        # Focus-entity cooldown + alias/semantik yakınlık (StateGuard ile güçlendirilmiş)
         if ENTITY_COOLDOWN_DAYS > 0:
             ent = _derive_focus_entity(tpc, MODE, sents)
-            ek = _entity_key(MODE, ent)
-            if ent and _entity_in_cooldown(ek, ENTITY_COOLDOWN_DAYS):
-                novelty_tries += 1
-                print(f"⚠️ Focus entity in cooldown: '{ent}' ({ENTITY_COOLDOWN_DAYS}d) → rebuilding… (try {novelty_tries}/{NOVELTY_RETRIES})")
-                banlist = [ent] + banlist
-                continue
+            if ent:
+                try:
+                    if SG.is_on_cooldown(ent) or SG.entity_too_similar(ent):
+                        novelty_tries += 1
+                        print(f"⚠️ Entity blocked (cooldown/alias): '{ent}' → rebuilding… ({novelty_tries}/{NOVELTY_RETRIES})")
+                        banlist = [ent] + banlist
+                        continue
+                except Exception as e:
+                    print(f"⚠️ SG entity check skipped: {e}")
 
         score = _content_score(sents)
         print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
@@ -1958,6 +1973,17 @@ def main():
             usage[picked_vid] += 1
             chosen_files.append(downloads[picked_vid]); chosen_ids.append(picked_vid); _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
 
+        # --- StateGuard: pre-render idempotency (aynı içerikse render’a girmeden terk et) ---
+        script_text = " ".join([m[0] for m in metas])
+        try:
+            content_hash = StateGuard.make_content_hash(script_text, chosen_files, wavs[0] if wavs else None)
+        except Exception:
+            content_hash = hashlib.sha1(("fallback:"+script_text).encode("utf-8")).hexdigest()
+
+        if SG.was_uploaded(content_hash):
+            print(f"⏭️ Skipping build: identical content already uploaded (hash={content_hash[:8]})")
+            return
+
     # 5) Segment + altyazı (KARAOKE)
     print("🎬 Segments…")
     segs = []
@@ -2047,6 +2073,19 @@ def main():
     except Exception as e:
         print(f"❌ Upload skipped: {e}")
 
+    # --- StateGuard: başarı kaydı (entity + embedding + uploads) ---
+        try:
+            final_entity = __ent if '__ent' in locals() and __ent else _derive_focus_entity(tpc, MODE, [m[0] for m in metas])
+            SG.mark_uploaded(
+                entity=final_entity or "",
+                script_text=script_text,
+                content_hash=content_hash,
+                video_path=outp,
+                title=title
+            )
+        except Exception as e:
+            print(f"⚠️ SG mark_uploaded warn: {e}")
+
     # 11) Kullanılmış Pexels ID'leri state'e ekle
     try:
         _blocklist_add_pexels(chosen_ids, days=30)
@@ -2082,3 +2121,4 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
