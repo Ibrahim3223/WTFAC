@@ -1129,12 +1129,12 @@ ENHANCED_GEMINI_TEMPLATES = {
 Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
 
 FOCUS RULE:
-- `focus` MUST be 1–3 words naming the main subject for visuals (e.g., "chameleon", "Japan", "iPhone screen").
+- 'focus' MUST be 1–3 words naming the main subject for visuals (e.g., "chameleon", "Japan", "iPhone screen").
 - Keep it concrete and searchable; no verbs or filler.
 
 CONTENT RULES:
 - Stay laser-focused on the provided TOPIC (no pivoting).
-- Sentence 1 = punchy HOOK (≤10 words, question/bold claim).
+- Sentence 1 = a punchy HOOK (≤10 words, question/bold claim).
 - Sentence 8 = a SOFT CTA for comments (no 'subscribe/like').
 - 6–12 words per sentence; no numbering; visual, concrete beats.""",
 
@@ -1142,13 +1142,15 @@ CONTENT RULES:
 Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
 
 FOCUS RULE:
-- `focus` should be the country or city name (e.g., "Japan", "Tokyo").
+- 'focus' should be the country or city name (e.g., "Japan", "Tokyo").
 
 Rules:
 - Sentence 1 is a short HOOK (≤10 words).
 - Sentence 8 is a soft CTA (no 'subscribe/like').
 - Each fact must be specific & visual. 6–12 words per sentence."""
-    
+}
+
+# Cümlenin kalitesini düşüren klişeler (içerik skoru için)
 BANNED_PHRASES = [
     "one clear tip", "see it", "learn it", "plot twist",
     "soap-opera narration", "repeat once", "takeaway action",
@@ -2543,6 +2545,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
