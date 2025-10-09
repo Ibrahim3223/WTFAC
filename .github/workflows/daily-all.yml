@@ -27,6 +27,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Python (for matrix build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Build matrix from channels.yml
         id: mk
         shell: bash
@@ -56,7 +64,6 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
-
     environment: ${{ matrix.env }}
 
     steps:
@@ -175,10 +182,10 @@ jobs:
         env:
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY:  ${{ secrets.PIXABAY_API_KEY }}
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          PIXABAY_API_KEY:  ${{ secrets.PIXABAY_API_KEY }}
 
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
@@ -200,9 +207,11 @@ jobs:
           SIM_TH_ENTITY: "0.94"
           STATE_DIR: ".state"
 
-          # --- Entity görsel kapsaması ---
-          ENTITY_VISUAL_MIN: "0.5"         # sahnelerin en az yarısı odak varlıkla alakalı olsun
-          ENTITY_VISUAL_STRICT: "1"        # sağlamazsa ek sorgu ve Pixabay ile tamamla
+          # --- Entity görsel kapsaması (topic-only strateji ile uyumlu) ---
+          SCENE_STRATEGY: "topic_only"
+          STRICT_ENTITY_FILTER: "1"
+          ENTITY_VISUAL_MIN: "0.95"
+          ENTITY_VISUAL_STRICT: "1"
 
           # ---- Stock kaynak & filtreler ----
           PEXELS_STRICT_VERTICAL: "0"
