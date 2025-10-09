@@ -58,7 +58,7 @@ jobs:
             mkdir -p .state
           fi
 
-      # ---------- Kanal ENV'lerini güvenli export ----------
+      # ---------- Kanal ENV'leri ----------
       - name: Export channel variables (safe)
         shell: bash
         env:
@@ -75,7 +75,6 @@ jobs:
           VARS_TTS_VOICE:       ${{ vars.TTS_VOICE }}
           VARS_BGM_URLS:        ${{ vars.BGM_URLS }}   # optional JSON list
 
-          # karaoke offset/speed (opsiyonel ince ayar)
           KARAOKE_OFFSET_MS: "-200"
           KARAOKE_SPEED: "1.20"
         run: |
@@ -111,7 +110,6 @@ jobs:
           wenv BGM_URLS            "${VARS_BGM_URLS}"
           wenv UPLOAD_TO_YT        "1"
 
-      # ---------- (opsiyonel) eski state cache'leri ----------
       - name: Restore global state cache
         uses: actions/cache/restore@v4
         with:
@@ -142,6 +140,7 @@ jobs:
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          PIXABAY_API_KEY:  ${{ secrets.PIXABAY_API_KEY }}
 
           # captions / karaoke
           REQUIRE_CAPTIONS: "1"
@@ -150,7 +149,6 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE:   "#3EA6FF"
           KARAOKE_OUTLINE:  "#000000"
-          # ==== KARAOKE SYNC TUNE ====
           KARAOKE_SPEEDUP_PCT: "5.0"
           KARAOKE_RAMP_PCT:    "2.0"
           KARAOKE_EARLY_END_MS: "120"
@@ -161,14 +159,24 @@ jobs:
           NOVELTY_WINDOW: "40"
           NOVELTY_JACCARD_MAX: "0.55"
           NOVELTY_RETRIES: "4"
-          ENTITY_COOLDOWN_DAYS: "30"
+          ENTITY_COOLDOWN_DAYS: "45"
+          SIM_TH_SCRIPT: "0.92"
+          SIM_TH_ENTITY: "0.94"
+          STATE_DIR: ".state"
+
+          # ---- Stock kaynak & filtreler ----
+          PEXELS_STRICT_VERTICAL: "0"   # yatay da kabul
+          PEXELS_MIN_HEIGHT: "720"      # kaliteyi çok düşürmeden yumuşat
+          PEXELS_PER_PAGE: "60"
+          PEXELS_ALLOW_REUSE: "0"       # mümkünse her sahneye farklı klip
+          ALLOW_PIXABAY_FALLBACK: "1"
 
           # ==== Contextual CTA ====
           CTA_ENABLE: "1"
           CTA_SHOW_SEC: "2.8"
           CTA_MAX_CHARS: "64"
 
-          # ==== BGM (arkaplan müzik) ====
+          # ==== BGM ====
           BGM_ENABLE: "1"
           BGM_DIR: "bgm"
           BGM_DB: "0"
@@ -178,11 +186,6 @@ jobs:
           BGM_DUCK_RATIO: "10"
           BGM_DUCK_ATTACK_MS: "6"
           BGM_DUCK_RELEASE_MS: "180"
-
-          # ---- StateGuard ----
-          STATE_DIR: ".state"
-          SIM_TH_SCRIPT: "0.90"
-          SIM_TH_ENTITY: "0.92"
         run: |
           set -e
           echo "== ${CHANNEL_NAME} =="
