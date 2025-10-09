@@ -1308,19 +1308,45 @@ def _domain_synonyms(all_text: str) -> List[str]:
     return list(s)
 
 def _entity_synonyms(ent: str, lang: str) -> list[str]:
+    """
+    Odak varlık için aramada işimize yarayacak yakın/eş anlamlı terimler.
+    Dönen liste tekilleştirilmiş olarak gelir.
+    """
     e = (ent or "").lower().strip()
-    base = [e] if e else []
+    if not e:
+        return []
+
+    base = [e]
+    if e.endswith("s") and len(e) > 4:
+        base.append(e[:-1])
 
     # TR özel eşlemeler
     if lang.startswith("tr"):
         table_tr = {
-            "bukalemun": ["bukalemun","kertenkele","gecko","iguana","sürüngen"],
-            "yunus": ["yunus","yunuslar","deniz memelisi","şişeburun yunus","spinner yunus"],
+            "bukalemun": ["bukalemun", "kertenkele", "gecko", "iguana", "sürüngen", "renk değiştiren"],
+            "yunus": ["yunus", "deniz memelisi", "şişeburun yunus", "spinner yunus", "okyanus yunusu"],
+            "japonya": ["japonya", "tokyo", "kyoto", "fuji dağı", "torii kapısı", "shibuya", "japon tapınağı"],
         }
         for k, vals in table_tr.items():
             if k in e:
-                return list(dict.fromkeys(vals))
-        return base
+                return list(dict.fromkeys(vals + base))
+        return list(dict.fromkeys(base))
+
+    # EN eşlemeler
+    table_en = {
+        "chameleon": ["chameleon", "lizard", "gecko", "iguana", "reptile", "reptile skin", "chameleon close up"],
+        "dolphin": ["dolphin", "ocean dolphin", "spinner dolphin", "bottlenose dolphin", "marine mammal", "pod of dolphins"],
+        "octopus": ["octopus", "cephalopod", "cuttlefish", "squid", "tentacles", "octopus macro"],
+        "japan": ["japan", "tokyo", "kyoto", "mt fuji", "fuji", "shibuya crossing", "torii gate", "japanese temple", "japanese street"],
+        "italy": ["italy", "rome", "venice", "florence", "colosseum", "venetian canal", "duomo"],
+        "eagle": ["eagle", "raptor", "bird of prey", "falcon", "hawk"],
+        "bridge": ["suspension bridge", "cable stayed bridge", "stone arch bridge", "viaduct"],
+    }
+    for k, vals in table_en.items():
+        if k in e:
+            return list(dict.fromkeys(vals + base))
+
+    return list(dict.fromkeys(base))
 
 def _required_tokens_for_focus(focus: str, lang: str) -> set[str]:
     """URL içinde görmek istediğimiz küçük odak-token kümesini üretir.
@@ -1347,20 +1373,6 @@ def build_global_queries(focus: str, search_terms: List[str], mode: str, lang: s
     return qs[:20]
 
 STRICT_ENTITY_FILTER = os.getenv("STRICT_ENTITY_FILTER","1") == "1"
-
-    # EN (geniş) eşlemeler
-    table_en = {
-        "chameleon": ["chameleon","chameleons","lizard","gecko","iguana","reptile"],
-        "dolphin": ["dolphin","dolphins","bottlenose dolphin","spinner dolphin","porpoise","marine mammal"],
-        "octopus": ["octopus","cephalopod","cuttlefish","squid","tentacles"],
-        "eagle": ["eagle","raptor","bird of prey","falcon","hawk"],
-    }
-    for k, vals in table_en.items():
-        if k in e:
-            return list(dict.fromkeys(vals))
-
-    # Ülke/şehir gibi proper noun’larda ent kendisi yeterli
-    return base
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
     topic = (topic or "").strip()
@@ -2523,6 +2535,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
