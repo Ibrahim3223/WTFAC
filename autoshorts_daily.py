@@ -160,8 +160,10 @@ REQUIRE_CAPTIONS = os.getenv("REQUIRE_CAPTIONS", "0") == "1"
 KARAOKE_CAPTIONS = os.getenv("KARAOKE_CAPTIONS", "1") == "1"
 
 # ---- Entity görsel kapsama kontrolü ----
-ENTITY_VISUAL_MIN = _env_float("ENTITY_VISUAL_MIN", 0.50)  # sahnelerin en az %50'si odak varlıkla alakalı olsun
+ENTITY_VISUAL_MIN = _env_float("ENTITY_VISUAL_MIN", 0.95)  # sahnelerin en az %50'si odak varlıkla alakalı olsun
 ENTITY_VISUAL_STRICT = os.getenv("ENTITY_VISUAL_STRICT", "1") == "1"  # 1=eksikse agresif tamamla
+
+SCENE_QUERY_MODE = os.getenv("SCENE_QUERY_MODE", "entity").strip().lower()
 
 # Karaoke renkleri (ASS stili)
 KARAOKE_ACTIVE   = os.getenv("KARAOKE_ACTIVE",   "#3EA6FF")
@@ -1256,7 +1258,6 @@ you your we our they their he she it its as than then so such very more most man
 """.split())
 _GENERIC_BAD = {
     "great","good","bad","big","small","old","new","many","more","most","thing","things","stuff",
-    # eklenenler: pexels/pixabay'i şaşırtan boş kelimeler
     "once","next","feature","features","precisely","signal","signals","masters","master",
     "ways","way","track","tracks","uncover","gripping","limb","emotion","emotions"
 }
@@ -1300,22 +1301,31 @@ def _domain_synonyms(all_text: str) -> List[str]:
 
 def _entity_synonyms(ent: str, lang: str) -> list[str]:
     e = (ent or "").lower().strip()
-    base = [e]
-    if e.endswith("s"): base.append(e[:-1])
+    base = [e] if e else []
+
+    # TR özel eşlemeler
     if lang.startswith("tr"):
-        table = {
+        table_tr = {
             "bukalemun": ["bukalemun","kertenkele","gecko","iguana","sürüngen"],
+            "yunus": ["yunus","yunuslar","deniz memelisi","şişeburun yunus","spinner yunus"],
         }
-    else:
-        table = {
-            "chameleon": ["chameleon","lizard","gecko","iguana","reptile"],
-            "octopus": ["octopus","cephalopod","tentacles","cuttlefish","squid"],
-            "eagle": ["eagle","raptor","bird of prey","falcon","hawk"],
-            # burayı zamanla genişletebilirsin
-        }
-    for k,vals in table.items():
+        for k, vals in table_tr.items():
+            if k in e:
+                return list(dict.fromkeys(vals))
+        return base
+
+    # EN (geniş) eşlemeler
+    table_en = {
+        "chameleon": ["chameleon","chameleons","lizard","gecko","iguana","reptile"],
+        "dolphin": ["dolphin","dolphins","bottlenose dolphin","spinner dolphin","porpoise","marine mammal"],
+        "octopus": ["octopus","cephalopod","cuttlefish","squid","tentacles"],
+        "eagle": ["eagle","raptor","bird of prey","falcon","hawk"],
+    }
+    for k, vals in table_en.items():
         if k in e:
             return list(dict.fromkeys(vals))
+
+    # Ülke/şehir gibi proper noun’larda ent kendisi yeterli
     return base
 
 def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
@@ -1575,62 +1585,97 @@ def _ensure_entity_coverage(pool: List[Tuple[int,str]], need: int, locale: str, 
         if len(out) >= max(need, len(pool)): break
     return out
 
+def _entity_topic_queries(topic: str, ent: str, lang: str, user_terms: List[str]) -> List[str]:
+    """
+    Tek sahne yerine tüm sahneler için aynı (konu/varlık) odaklı sade sorgular.
+    - Öncelik: eş anlamlar
+    - Sonra: topic'ten temiz 1-2 kelimelik anahtarlar
+    - Sonra: kullanıcı verdi ise user_terms (sadeleştirilmiş)
+    """
+    def _simpl(s: str) -> str:
+        s = re.sub(r"[^A-Za-z0-9 ]+"," ", (s or "").lower()).strip()
+        toks = [t for t in s.split() if len(t) >= 3 and t not in _STOP and t not in _GENERIC_BAD]
+        return " ".join(toks[:2]) if toks else s[:40]
+
+    syns = _entity_synonyms(ent, lang) if ent else []
+    qs: List[str] = []
+
+    # 1) eş anlamlar
+    for s in syns:
+        ss = _simpl(s)
+        if ss and ss not in qs:
+            qs.append(ss)
+
+    # 2) topic’ten 1–2 kelime
+    base = _simpl(topic)
+    if base and base not in qs:
+        qs.append(base)
+    if base:
+        for w in base.split():
+            if w not in qs: qs.append(w)
+
+    # 3) user_terms sade
+    for u in (user_terms or []):
+        uu = _simpl(u)
+        if uu and uu not in qs: qs.append(uu)
+
+    # 4) Genel güvenli fallback’ler (alan bazlı)
+    if lang.startswith("tr"):
+        fallbacks = ["yakın plan", "detay çekim", "hareketli su", "okyanus dalga"]
+    else:
+        fallbacks = ["macro detail", "close up", "ocean wave", "underwater"]
+    for f in fallbacks:
+        if f not in qs: qs.append(f)
+
+    return qs[:20]
+
 def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
+    """
+    ENTITY-FIRST: Tüm sahneler için aynı konu/varlık etrafında güçlü havuz.
+    - Önce eş anlam odaklı Pexels (çok sayfa)
+    - Sonra zayıf kalanı Pixabay ile tamamla
+    - Dedup + blocklist
+    - ENTITY_VISUAL_MIN garantisi (_ensure_entity_coverage)
+    """
     random.seed(rotation_seed or int(time.time()))
     locale = "tr-TR" if LANG.startswith("tr") else "en-US"
     block = _blocklist_get_pexels()
 
-    # 1) Sahneden sade sorgular üret
-    per_scene = build_per_scene_queries(sentences, search_terms, topic=topic)
-    topic_cands = _gen_topic_query_candidates(topic, search_terms)
+    ent = _derive_focus_entity(topic, MODE, sentences)
+    queries = _entity_topic_queries(topic, ent, LANG, search_terms)
 
-    queries = []
-    seen_q=set()
-    for q in per_scene + topic_cands:
-        q = (q or "").strip()
-        if q and q not in seen_q:
-            seen_q.add(q); queries.append(q)
-
-    # 2) Her sorgu için Pexels + zayıfsa Pixabay
+    # 1) Pexels taraması (çok sayfa, eş anlam öncelikli)
     pool: List[Tuple[int,str]] = []
     qtokens_cache: Dict[str, Set[str]] = {}
+    target_gather = max(need * 3, 24)
+
     for q in queries:
         qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
         merged: List[Tuple[int, str, int, int, float]] = []
-        for page in (1, 2, 3):
+        for page in (1, 2, 3, 4, 5):
             merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
-            if len(merged) >= need*3: break
+            if len(merged) >= target_gather: break
         ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
-        pool += ranked[:max(3, need//2)]
-        # Zayıf sonuçta Pixabay destekle
-        if len(ranked) < 2:
-            pix = _pixabay_fallback(q, 3, locale)
-            pool += [(vid, link) for (vid, link) in pix]
-        if len(pool) >= need*2:
+        pool += ranked[:max(6, need)]
+        if len(pool) >= target_gather:
             break
 
-    # 3) Hâlâ eksikse popular ve Pixabay ile doldur
+    # 2) Hâlâ azsa Pexels popular + Pixabay ile takviye
     if len(pool) < need:
         merged=[]
         for page in (1,2,3):
-            merged += _pexels_popular(locale, page=page, per_page=40)
-            if len(merged) >= need*3: break
+            merged += _pexels_popular(locale, page=page, per_page=50)
+            if len(merged) >= target_gather: break
         pop_rank = _rank_and_dedup(merged, set(), block)
         pool += pop_rank[:max(0, need*2 - len(pool))]
 
     if len(pool) < need:
-        left = need - len(pool)
-        for q in queries[-3:]:
-            if left <= 0: break
-            pix = _pixabay_fallback(q, left, locale)
-            pool += [(vid, link) for (vid, link) in pix]
-            left = need - len(pool)
-        if left > 0:
-            fallback_q = (queries[-1] if queries else _simplify_query(topic, keep=1)) or "animal macro"
-            pix = _pixabay_fallback(fallback_q, left, locale)
-            pool += [(vid, link) for (vid, link) in pix]
+        # eş anlamdan en kuvvetli olanla Pixabay dene
+        pix_q = (queries[0] if queries else _simplify_query(topic, keep=1)) or "macro detail"
+        pix = _pixabay_fallback(pix_q, need*2, locale)
+        pool += [(vid, link) for (vid, link) in pix]
 
-    # 4) Dedup + blocklist sonrası
+    # 3) Dedup + blocklist sonrası
     seen=set(); dedup=[]
     for vid, link in pool:
         if vid in seen: continue
@@ -1638,15 +1683,16 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
 
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
     rest  = [(vid,link) for vid,link in dedup if vid in block]
-    final = (fresh + rest)[:max(need, len(sentences))]
+    final = (fresh + rest)
 
-    # 5) Odak varlık kapsaması (örn. chameleon → reptile, lizard, gecko...)
-    ent = _derive_focus_entity(topic, MODE, sentences)
+    # 4) Odak varlık kapsaması → zorunlu
     syns = _entity_synonyms(ent, LANG) if ent else []
     if syns:
         final = _ensure_entity_coverage(final, need, locale, syns)
 
-    print(f"   Pexels candidates: q={len(queries)} | pool={len(final)} (fresh={len(fresh)})")
+    # 5) Sadece ihtiyacımız kadar
+    final = final[:max(need, len(sentences))]
+    print(f"   Pexels candidates (entity-first): q={len(queries)} | pool={len(final)} (fresh={len(fresh)}) | ent={ent or '∅'}")
     return final
 
 # ==================== YouTube ====================
@@ -2029,12 +2075,9 @@ def main():
         wavs.append(w); metas.append((base, d, words))
         print(f"   {i+1}/{len(sentences)}: {d:.2f}s")
 
-    # 3) Pexels — per-video terms
-    per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
-    print("🔎 Per-scene queries:")
-    for q in per_scene_queries: print(f"   • {q}")
-
     need_clips = max(6, min(12, int(os.getenv("SCENE_COUNT", "8"))))
+
+    # ENTITY-FIRST havuz
     pool: List[Tuple[int,str]] = build_pexels_pool(
         topic=tpc,
         sentences=[m[0] for m in metas],
@@ -2042,7 +2085,8 @@ def main():
         need=need_clips,
         rotation_seed=ROTATION_SEED
     )
-    if not pool: raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
+    if not pool:
+        raise RuntimeError("Pexels/Pixabay: no suitable clips (after entity-first fallback).")
 
     # NoveltyGuard PEXELS tekrar filtresi (SQLite state)
     try:
@@ -2286,4 +2330,5 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
