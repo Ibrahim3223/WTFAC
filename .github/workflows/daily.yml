@@ -137,10 +137,10 @@ jobs:
         env:
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY:  ${{ secrets.PIXABAY_API_KEY }}
           YT_CLIENT_ID:     ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          PIXABAY_API_KEY:  ${{ secrets.PIXABAY_API_KEY }}
 
           # captions / karaoke
           REQUIRE_CAPTIONS: "1"
@@ -164,15 +164,17 @@ jobs:
           SIM_TH_ENTITY: "0.94"
           STATE_DIR: ".state"
 
-          # --- Entity görsel kapsaması ---
-          ENTITY_VISUAL_MIN: "0.5"         # sahnelerin en az yarısı odak varlıkla alakalı olsun
-          ENTITY_VISUAL_STRICT: "1"        # sağlamazsa ek sorgu ve Pixabay ile tamamla
+          # --- Entity görsel kapsaması (topic-only strateji ile uyumlu) ---
+          SCENE_STRATEGY: "topic_only"
+          STRICT_ENTITY_FILTER: "1"
+          ENTITY_VISUAL_MIN: "0.95"      # sahnelerin neredeyse tamamı odakla alakalı olsun
+          ENTITY_VISUAL_STRICT: "1"      # eksikse agresif tamamla (Pexels+Pixabay)
 
           # ---- Stock kaynak & filtreler ----
-          PEXELS_STRICT_VERTICAL: "0"   # yatay da kabul
-          PEXELS_MIN_HEIGHT: "720"      # kaliteyi çok düşürmeden yumuşat
+          PEXELS_STRICT_VERTICAL: "0"    # yatay kabul; dikey crop’la
+          PEXELS_MIN_HEIGHT: "720"
           PEXELS_PER_PAGE: "60"
-          PEXELS_ALLOW_REUSE: "0"       # mümkünse her sahneye farklı klip
+          PEXELS_ALLOW_REUSE: "0"
           ALLOW_PIXABAY_FALLBACK: "1"
 
           # ==== Contextual CTA ====
