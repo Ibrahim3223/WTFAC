@@ -1374,15 +1374,14 @@ def _is_vertical_ok(w: int, h: int) -> bool:
         return h > w and h >= PEXELS_MIN_HEIGHT
     return (h >= PEXELS_MIN_HEIGHT) and (h >= w or PEXELS_ALLOW_LANDSCAPE)
 
-def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None) -> List[Tuple[int, str, int, int, float]]:
+def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None) -> List[Tuple[int, str, int, int, float, str]]:
     per_page = per_page or max(10, min(80, PEXELS_PER_PAGE))
     url = "https://api.pexels.com/videos/search"
-    r = requests.get(
-        url, headers=_pexels_headers(),
-        params={"query": query, "per_page": per_page, "page": page,
-                "orientation":"portrait","size":"large","locale": locale},
-        timeout=30
-    )
+    params = {"query": query, "per_page": per_page, "page": page, "size":"large", "locale": locale}
+    # Yalnız portre zorunluysa gönder
+    if PEXELS_STRICT_VERTICAL:
+        params["orientation"] = "portrait"
+    r = requests.get(url, headers=_pexels_headers(), params=params, timeout=30)
     if r.status_code != 200:
         return []
     data = r.json() or {}
@@ -1399,12 +1398,16 @@ def _pexels_search(query: str, locale: str, page: int = 1, per_page: int = None)
         if not pf: continue
         pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
         w,h,link = pf[0]
-        out.append((vid, link, w, h, dur))
+        page_url = v.get("url","")  # kelime slug'ı içerir → sıralama için
+        out.append((vid, link, w, h, dur, page_url))
     return out
 
-def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tuple[int, str, int, int, float]]:
+def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tuple[int, str, int, int, float, str]]:
     url = "https://api.pexels.com/videos/popular"
-    r = requests.get(url, headers=_pexels_headers(), params={"per_page": per_page, "page": page}, timeout=30)
+    params = {"per_page": per_page, "page": page}
+    if PEXELS_STRICT_VERTICAL:
+        params["orientation"] = "portrait"
+    r = requests.get(url, headers=_pexels_headers(), params=params, timeout=30)
     if r.status_code != 200:
         return []
     data = r.json() or {}
@@ -1421,7 +1424,8 @@ def _pexels_popular(locale: str, page: int = 1, per_page: int = 40) -> List[Tupl
         if not pf: continue
         pf.sort(key=lambda t: (abs(t[1]-1600), -(t[0]*t[1])))
         w,h,link = pf[0]
-        out.append((vid, link, w, h, dur))
+        page_url = v.get("url","")
+        out.append((vid, link, w, h, dur, page_url))
     return out
 
 def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
@@ -1452,14 +1456,21 @@ def _pixabay_fallback(q: str, need: int, locale: str) -> List[Tuple[int, str]]:
     except Exception:
         return []
 
-def _rank_and_dedup(items: List[Tuple[int, str, int, int, float]], qtokens: Set[str], block: Set[int]) -> List[Tuple[int,str]]:
+def _rank_and_dedup(items: List[Tuple], qtokens: Set[str], block: Set[int]) -> List[Tuple[int,str]]:
     cand=[]
-    for vid, link, w, h, dur in items:
+    for it in items:
+        # destek: 5-tuple (eski) veya 6-tuple (yeni, page_url dahil)
+        if len(it) == 6:
+            vid, link, w, h, dur, page_url = it
+            text_for_tokens = page_url or link
+        else:
+            vid, link, w, h, dur = it
+            text_for_tokens = link
         if vid in block or vid in _USED_PEXELS_IDS_RUNTIME:
             continue
-        tokens = set(re.findall(r"[a-z0-9]+", (link or "").lower()))
+        tokens = set(re.findall(r"[a-z0-9]+", (text_for_tokens or "").lower()))
         overlap = len(tokens & qtokens)
-        score = overlap*2.0 + (1.0 if 2.0 <= dur <= 12.0 else 0.0) + (1.0 if h >= 1440 else 0.0)
+        score = overlap*3.0 + (1.0 if 2.0 <= dur <= 12.0 else 0.0) + (1.0 if h >= 1440 else 0.0)
         cand.append((score, vid, link))
     cand.sort(key=lambda x: x[0], reverse=True)
     out=[]; seen=set()
@@ -1526,14 +1537,14 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     qtokens_cache: Dict[str, Set[str]] = {}
     for q in queries:
         qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
-        merged: List[Tuple[int, str, int, int, float]] = []
+        merged: List[Tuple] = []
         for page in (1, 2, 3):
             merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
             if len(merged) >= need*3: break
         ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
         pool += ranked[:max(3, need//2)]
         if len(pool) >= need*2: break
-                    # Per-sorgu: Pexels zayıfsa hemen Pixabay ile takviye
+        # Per-sorgu: Pexels zayıfsa hemen Pixabay ile takviye
         if len(ranked) < 2:
             pix = _pixabay_fallback(q, 3, locale)
             pool += [(vid, link) for (vid, link) in pix]
@@ -1569,10 +1580,13 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
     rest  = [(vid,link) for vid,link in dedup if vid in block]
     final = (fresh + rest)[:max(need, len(sentences))]
-        ent = _derive_focus_entity(topic, MODE, sentences)
+
+    # ---- Focus-entity coverage (ensure enough on-topic visuals)
+    ent = _derive_focus_entity(topic, MODE, sentences)
     syns = _entity_synonyms(ent, LANG) if ent else []
     if syns:
         final = _ensure_entity_coverage(final, need, locale, syns)
+
     print(f"   Pexels candidates: q={len(queries)} | pool={len(final)} (fresh={len(fresh)})")
     return final
 
@@ -1706,7 +1720,6 @@ def _make_bgm_looped(src: str, dur: float, out_wav: str):
         "-af", f"loudnorm=I=-21:TP=-2.0:LRA=11,"
                f"afade=t=in:st=0:d={fade:.2f},afade=t=out:st={endst:.2f}:d={fade:.2f},"
                "aresample=48000,pan=mono|c0=0.5*FL+0.5*FR",
-
         "-ar","48000","-ac","1","-c:a","pcm_s16le",
         out_wav
     ])
@@ -2012,7 +2025,7 @@ def main():
         while need_more > 0 and page <= 4:
             pops = _pexels_popular(locale, page=page, per_page=50)
             page += 1
-            for vid, link, w,h,dur in pops:
+            for vid, link, w,h,dur, page_url in pops:
                 if vid in tried: continue
                 try:
                     f = str(pathlib.Path(tmp) / f"pop_{vid}.mp4")
@@ -2067,16 +2080,16 @@ def main():
             usage[picked_vid] += 1
             chosen_files.append(downloads[picked_vid]); chosen_ids.append(picked_vid); _USED_PEXELS_IDS_RUNTIME.add(picked_vid)
 
-        # --- StateGuard: pre-render idempotency (aynı içerikse render’a girmeden terk et) ---
-        script_text = " ".join([m[0] for m in metas])
-        try:
-            content_hash = StateGuard.make_content_hash(script_text, chosen_files, wavs[0] if wavs else None)
-        except Exception:
-            content_hash = hashlib.sha1(("fallback:"+script_text).encode("utf-8")).hexdigest()
+    # --- StateGuard: pre-render idempotency (aynı içerikse render’a girmeden terk et) ---
+    script_text = " ".join([m[0] for m in metas])
+    try:
+        content_hash = StateGuard.make_content_hash(script_text, chosen_files, wavs[0] if wavs else None)
+    except Exception:
+        content_hash = hashlib.sha1(("fallback:"+script_text).encode("utf-8")).hexdigest()
 
-        if SG.was_uploaded(content_hash):
-            print(f"⏭️ Skipping build: identical content already uploaded (hash={content_hash[:8]})")
-            return
+    if SG.was_uploaded(content_hash):
+        print(f"⏭️ Skipping build: identical content already uploaded (hash={content_hash[:8]})")
+        return
 
     # 5) Segment + altyazı (KARAOKE)
     print("🎬 Segments…")
@@ -2168,17 +2181,17 @@ def main():
         print(f"❌ Upload skipped: {e}")
 
     # --- StateGuard: başarı kaydı (entity + embedding + uploads) ---
-        try:
-            final_entity = __ent if '__ent' in locals() and __ent else _derive_focus_entity(tpc, MODE, [m[0] for m in metas])
-            SG.mark_uploaded(
-                entity=final_entity or "",
-                script_text=script_text,
-                content_hash=content_hash,
-                video_path=outp,
-                title=title
-            )
-        except Exception as e:
-            print(f"⚠️ SG mark_uploaded warn: {e}")
+    try:
+        final_entity = __ent if '__ent' in locals() and __ent else _derive_focus_entity(tpc, MODE, [m[0] for m in metas])
+        SG.mark_uploaded(
+            entity=final_entity or "",
+            script_text=script_text,
+            content_hash=content_hash,
+            video_path=outp,
+            title=title
+        )
+    except Exception as e:
+        print(f"⚠️ SG mark_uploaded warn: {e}")
 
     # 11) Kullanılmış Pexels ID'leri state'e ekle
     try:
@@ -2215,9 +2228,3 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
