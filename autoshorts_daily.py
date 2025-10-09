@@ -731,6 +731,7 @@ def make_segment(src: str, dur_s: float, outp: str):
     vf = (
         "scale=1080:1920:force_original_aspect_ratio=increase,"
         "crop=1080:1920,"
+        "setsar=1,"  # <<< ÖNEMLİ: tüm segmentlerde SAR=1
         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
         f"fps={TARGET_FPS},"
         f"setpts=N/{TARGET_FPS}/TB,"
@@ -751,7 +752,7 @@ def make_segment(src: str, dur_s: float, outp: str):
 
 def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     target_frames = max(2, int(target_frames))
-    vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
+    vf = f"setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", video_in,
@@ -883,12 +884,10 @@ Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outli
     return ass
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
-    """KARAOKE öncelikli. subtitles yoksa drawtext; ikisi de yoksa opsiyonel fail."""
     seg_dur = ffprobe_dur(seg)
     frames = max(2, int(round(seg_dur * TARGET_FPS)))
 
     if KARAOKE_CAPTIONS and _HAS_SUBTITLES:
-        # karaoke (ALL CAPS + kelime highlight)
         words = words or []
         ass_txt = _build_karaoke_ass(text, seg_dur, words, is_hook)
         ass_path = str(pathlib.Path(seg).with_suffix(".ass"))
@@ -897,7 +896,7 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
         try:
             run([
                 "ffmpeg","-y","-hide_banner","-loglevel","error",
-                "-i", seg, "-vf", f"subtitles='{ass_path}'",
+                "-i", seg, "-vf", f"subtitles='{ass_path}',setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}",
                 "-r", str(TARGET_FPS), "-vsync","cfr",
                 "-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
                 "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
@@ -907,6 +906,58 @@ def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_h
             pathlib.Path(ass_path).unlink(missing_ok=True)
             pathlib.Path(tmp_out).unlink(missing_ok=True)
         return
+
+    if _HAS_DRAWTEXT:
+        wrapped = wrap_mobile_lines(clean_caption_text(text).upper(), CAPTION_MAX_LINE, CAPTION_MAX_LINES)
+        tf = str(pathlib.Path(seg).with_suffix(".caption.txt"))
+        pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
+
+        lines = wrapped.split("\n")
+        n_lines = max(1, len(lines))
+        maxchars = max((len(l) for l in lines), default=1)
+
+        base = 60 if is_hook else 50
+        ratio = CAPTION_MAX_LINE / max(1, maxchars)
+        fs = int(base * min(1.0, max(0.50, ratio)))
+        if n_lines >= 5: fs = int(fs * 0.92)
+        if n_lines >= 6: fs = int(fs * 0.88)
+        if n_lines >= 7: fs = int(fs * 0.84)
+        if n_lines >= 8: fs = int(fs * 0.80)
+        fs = max(22, fs)
+
+        if n_lines >= 6:   y_pos = "(h*0.55 - text_h/2)"
+        elif n_lines >= 4: y_pos = "(h*0.58 - text_h/2)"
+        else:              y_pos = "h-h/3-text_h/2"
+
+        font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
+        col = _ff_color(color)
+        common = f"textfile='{tf}':fontsize={fs}:x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+
+        shadow = f"drawtext={common}{font_arg}:fontcolor=black@0.85:borderw=0"
+        box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw={(22 if is_hook else 18)}:boxcolor=black@0.65"
+        main   = f"drawtext={common}{font_arg}:fontcolor={col}:borderw={(5 if is_hook else 4)}:bordercolor=black@0.9"
+
+        vf = f"{shadow},{box},{main},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
+        tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
+        try:
+            run([
+                "ffmpeg","-y","-hide_banner","-loglevel","error",
+                "-i", seg, "-vf", vf,
+                "-r", str(TARGET_FPS), "-vsync","cfr",
+                "-an",
+                "-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+                "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
+            ])
+            enforce_video_exact_frames(tmp_out, frames, outp)
+        finally:
+            pathlib.Path(tf).unlink(missing_ok=True)
+            pathlib.Path(tmp_out).unlink(missing_ok=True)
+        return
+
+    if REQUIRE_CAPTIONS:
+        raise RuntimeError("Captions required but neither 'drawtext' nor 'subtitles' filter is available in ffmpeg.")
+    print("⚠️ FFmpeg 'drawtext' ve 'subtitles' filtreleri yok — caption atlanıyor.")
+    enforce_video_exact_frames(seg, frames, outp)
 
     # ---- drawtext fallback (ALL CAPS)
     if _HAS_DRAWTEXT:
@@ -971,7 +1022,7 @@ def pad_video_to_duration(video_in: str, target_sec: float, outp: str):
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", video_in,
-        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
+        "-filter_complex", f"[0:v]tpad=stop_mode=clone:stop_duration={extra:.3f},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB[v]",
         "-map","[v]",
         "-r", str(TARGET_FPS), "-vsync","cfr",
         "-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
@@ -984,7 +1035,8 @@ def concat_videos_filter(files: List[str], outp: str):
     inputs = []; filters = []
     for i, p in enumerate(files):
         inputs += ["-i", p]
-        filters.append(f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
+        # Her giriş: SAR=1, FPS kilidi, tutarlı zaman tabanı
+        filters.append(f"[{i}:v]setsar=1,fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
     filtergraph = ";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(len(files))) + f"concat=n={len(files)}:v=1:a=0[v]"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -998,7 +1050,6 @@ def concat_videos_filter(files: List[str], outp: str):
     ])
 
 def overlay_cta_tail(video_in: str, text: str, outp: str, show_sec: float, font: str):
-    """Video süresini değiştirmez; sadece son 'show_sec' boyunca CTA metni bindirir."""
     vdur = ffprobe_dur(video_in)
     if vdur <= 0.1 or not text.strip():
         pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
@@ -1011,7 +1062,7 @@ def overlay_cta_tail(video_in: str, text: str, outp: str, show_sec: float, font:
     common = f"textfile='{tf}':fontsize=52:x=(w-text_w)/2:y=h*0.18:line_spacing=10"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55:enable='gte(t,{t0:.3f})'"
     main   = f"drawtext={common}{font_arg}:fontcolor={_ff_color('#3EA6FF')}:borderw=5:bordercolor=black@0.9:enable='gte(t,{t0:.3f})'"
-    vf     = f"{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
+    vf     = f"{box},{main},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", video_in, "-vf", vf,
@@ -1203,7 +1254,12 @@ a an the and or but if while of to in on at from by with for about into over aft
 this that these those is are was were be been being have has had do does did can could should would may might will shall
 you your we our they their he she it its as than then so such very more most many much just also only even still yet
 """.split())
-_GENERIC_BAD = {"great","good","bad","big","small","old","new","many","more","most","thing","things","stuff"}
+_GENERIC_BAD = {
+    "great","good","bad","big","small","old","new","many","more","most","thing","things","stuff",
+    # eklenenler: pexels/pixabay'i şaşırtan boş kelimeler
+    "once","next","feature","features","precisely","signal","signals","masters","master",
+    "ways","way","track","tracks","uncover","gripping","limb","emotion","emotions"
+}
 
 def _proper_phrases(texts: List[str]) -> List[str]:
     phrases=[]
@@ -1524,8 +1580,10 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     locale = "tr-TR" if LANG.startswith("tr") else "en-US"
     block = _blocklist_get_pexels()
 
+    # 1) Sahneden sade sorgular üret
     per_scene = build_per_scene_queries(sentences, search_terms, topic=topic)
     topic_cands = _gen_topic_query_candidates(topic, search_terms)
+
     queries = []
     seen_q=set()
     for q in per_scene + topic_cands:
@@ -1533,24 +1591,26 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
         if q and q not in seen_q:
             seen_q.add(q); queries.append(q)
 
+    # 2) Her sorgu için Pexels + zayıfsa Pixabay
     pool: List[Tuple[int,str]] = []
     qtokens_cache: Dict[str, Set[str]] = {}
     for q in queries:
         qtokens_cache[q] = set(re.findall(r"[a-z0-9]+", q.lower()))
-        merged: List[Tuple] = []
+        merged: List[Tuple[int, str, int, int, float]] = []
         for page in (1, 2, 3):
             merged += _pexels_search(q, locale, page=page, per_page=PEXELS_PER_PAGE)
             if len(merged) >= need*3: break
         ranked = _rank_and_dedup(merged, qtokens_cache[q], block)
         pool += ranked[:max(3, need//2)]
-        if len(pool) >= need*2: break
-        # Per-sorgu: Pexels zayıfsa hemen Pixabay ile takviye
+        # Zayıf sonuçta Pixabay destekle
         if len(ranked) < 2:
             pix = _pixabay_fallback(q, 3, locale)
             pool += [(vid, link) for (vid, link) in pix]
+        if len(pool) >= need*2:
+            break
 
+    # 3) Hâlâ eksikse popular ve Pixabay ile doldur
     if len(pool) < need:
-        # önce Pexels "popular" ile doldur
         merged=[]
         for page in (1,2,3):
             merged += _pexels_popular(locale, page=page, per_page=40)
@@ -1559,19 +1619,18 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
         pool += pop_rank[:max(0, need*2 - len(pool))]
 
     if len(pool) < need:
-        # kalan boşluğu daha alakalı doldurmak için, son 3 sorguyu Pixabay'den tek tek dene
         left = need - len(pool)
         for q in queries[-3:]:
             if left <= 0: break
             pix = _pixabay_fallback(q, left, locale)
             pool += [(vid, link) for (vid, link) in pix]
             left = need - len(pool)
-        # hâlâ eksikse genel fallback
         if left > 0:
             fallback_q = (queries[-1] if queries else _simplify_query(topic, keep=1)) or "animal macro"
             pix = _pixabay_fallback(fallback_q, left, locale)
             pool += [(vid, link) for (vid, link) in pix]
 
+    # 4) Dedup + blocklist sonrası
     seen=set(); dedup=[]
     for vid, link in pool:
         if vid in seen: continue
@@ -1581,7 +1640,7 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     rest  = [(vid,link) for vid,link in dedup if vid in block]
     final = (fresh + rest)[:max(need, len(sentences))]
 
-    # ---- Focus-entity coverage (ensure enough on-topic visuals)
+    # 5) Odak varlık kapsaması (örn. chameleon → reptile, lizard, gecko...)
     ent = _derive_focus_entity(topic, MODE, sentences)
     syns = _entity_synonyms(ent, LANG) if ent else []
     if syns:
@@ -2183,6 +2242,11 @@ def main():
     # --- StateGuard: başarı kaydı (entity + embedding + uploads) ---
     try:
         final_entity = __ent if '__ent' in locals() and __ent else _derive_focus_entity(tpc, MODE, [m[0] for m in metas])
+        script_text = " ".join([m[0] for m in metas])
+        try:
+            content_hash  # varsa kullan
+        except NameError:
+            content_hash = StateGuard.make_content_hash(script_text, chosen_files, wavs[0] if wavs else None)
         SG.mark_uploaded(
             entity=final_entity or "",
             script_text=script_text,
@@ -2192,12 +2256,6 @@ def main():
         )
     except Exception as e:
         print(f"⚠️ SG mark_uploaded warn: {e}")
-
-    # 11) Kullanılmış Pexels ID'leri state'e ekle
-    try:
-        _blocklist_add_pexels(chosen_ids, days=30)
-    except Exception as e:
-        print(f"⚠️ Blocklist save warn: {e}")
 
     # 11.5) NoveltyGuard'a final kayıt (başlık + script + pexels)
     try:
@@ -2228,3 +2286,4 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
