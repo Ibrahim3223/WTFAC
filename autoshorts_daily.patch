@@ -1,0 +1,134 @@
+--- a/autoshorts_daily.py
++++ b/autoshorts_daily.py
+@@
+-from novelty_guard import NoveltyGuard  # novelty_guard.py eklendiğine göre direkt içeri alıyoruz
+-STATE_DIR = os.getenv("STATE_DIR", ".state")
+-from state_guard import StateGuard  # <-- YENİ
++from novelty_guard import NoveltyGuard  # novelty_guard.py eklendiğine göre direkt içeri alıyoruz
++STATE_DIR = os.getenv("STATE_DIR", ".state")
++# --- StateGuard embedding bağımlılıklarını best-effort kur (uygun ortamda sessizce) ---
++try:
++    import sentence_transformers  # noqa: F401
++except Exception:
++    try:
++        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "sentence-transformers"], check=True)
++        import sentence_transformers  # noqa: F401
++    except Exception:
++        pass
++try:
++    import numpy  # noqa: F401
++except Exception:
++    try:
++        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "numpy"], check=True)
++        import numpy  # noqa: F401
++    except Exception:
++        pass
++from state_guard import StateGuard  # <-- YENİ
+@@
+ KARAOKE_OFFSET_MS = int(os.getenv("KARAOKE_OFFSET_MS", "0"))
+ KARAOKE_SPEED = float(os.getenv("KARAOKE_SPEED", "1.0"))
+ 
+ def _adj_time(t_seconds: float) -> float:
+@@
+ SEARCH_TERMS_ENV = _parse_terms(os.getenv("SEARCH_TERMS", ""))
+ 
+ TARGET_FPS       = 25
+ CRF_VISUAL       = 22
+@@
+ CAPTION_MAX_LINES = int(os.getenv("CAPTION_MAX_LINES", "6"))
+ 
++# ---- Pexels sorgularını basitleştir (1–2 kelime) ----
++SIMPLE_PEXELS_QUERIES = os.getenv("SIMPLE_PEXELS_QUERIES", "1") == "1"
++MAX_QUERY_WORDS = int(os.getenv("MAX_QUERY_WORDS", "2"))
++ENTITY_HINT = (os.getenv("ENTITY_HINT") or "").strip()
++
+ # ---------- Pexels ayarları ----------
+ PEXELS_PER_PAGE            = int(os.getenv("PEXELS_PER_PAGE", "30"))
+@@
+ def make_segment(src: str, dur_s: float, outp: str):
+     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
+     fade = max(0.05, min(0.12, qdur/8.0))
+     fade_out_st = max(0.0, qdur - fade)
+     vf = (
+         "scale=1080:1920:force_original_aspect_ratio=increase,"
+-        "crop=1080:1920,"
++        "crop=1080:1920,setsar=1,"
+         "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
+-        f"fps={TARGET_FPS},"
++        f"fps={TARGET_FPS},"
+         f"setpts=N/{TARGET_FPS}/TB,"
+         f"trim=start_frame=0:end_frame={frames},"
+         f"fade=t=in:st=0:d={fade:.2f},"
+         f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
+     )
+@@
+-def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
++def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
+     target_frames = max(2, int(target_frames))
+-    vf = f"fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
++    vf = f"fps={TARGET_FPS},setsar=1,setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={target_frames}"
+     run([
+@@
+-            run([
++            run([
+                 "ffmpeg","-y","-hide_banner","-loglevel","error",
+-                "-i", seg, "-vf", f"subtitles='{ass_path}'",
++                "-i", seg, "-vf", f"subtitles='{ass_path}',setsar=1",
+                 "-r", str(TARGET_FPS), "-vsync","cfr",
+                 "-an","-c:v","libx264","-preset","medium","-crf",str(max(16,CRF_VISUAL-3)),
+                 "-pix_fmt","yuv420p","-movflags","+faststart", tmp_out
+             ])
+@@
+-        vf = f"{vf_overlay},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
++        vf = f"{vf_overlay},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB,trim=start_frame=0:end_frame={frames}"
+         tmp_out = str(pathlib.Path(outp).with_suffix(".tmp.mp4"))
+@@
+-    vf     = f"{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
++    vf     = f"{box},{main},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
+     run([
+@@
+ def concat_videos_filter(files: List[str], outp: str):
+     if not files: raise RuntimeError("concat_videos_filter: empty")
+     inputs = []; filters = []
+     for i, p in enumerate(files):
+         inputs += ["-i", p]
+-        filters.append(f"[{i}:v]fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]")
++        filters.append(
++            f"[{i}:v]scale=1080:1920:force_original_aspect_ratio=increase,"
++            f"crop=1080:1920,setsar=1,fps={TARGET_FPS},settb=AVTB,setpts=N/{TARGET_FPS}/TB[v{i}]"
++        )
+@@
+ def build_per_scene_queries(sentences: List[str], fallback_terms: List[str], topic: Optional[str]=None) -> List[str]:
+@@
+-        if (not picked or len(picked) < 4) and topic_key_join:
++        if (not picked or len(picked) < 4) and topic_key_join:
+             picked = topic_key_join
+-
+-        if not picked or picked in ("great","nice","good","bad","things","stuff"):
+-            picked = "macro detail"
+-
+-        if len(picked.split()) > 2:
+-            w = picked.split(); picked = f"{w[-2]} {w[-1]}"
+-
+-        queries.append(picked)
++        # Basitleştir (1–2 kelime), çok kısaysa güvenli makro
++        picked = _simplify_query(picked, keep=MAX_QUERY_WORDS)
++        if not picked or len(picked) < 3:
++            picked = "macro"
++        queries.append(picked)
+ 
+     return queries
+@@
+-    final = (fresh + rest)[:max(need, len(sentences))]
+-        ent = _derive_focus_entity(topic, MODE, sentences)
++    final = (fresh + rest)[:max(need, len(sentences))]
++    ent = _derive_focus_entity(topic, MODE, sentences)
+     syns = _entity_synonyms(ent, LANG) if ent else []
+     if syns:
+         final = _ensure_entity_coverage(final, need, locale, syns)
+     print(f"   Pexels candidates: q={len(queries)} | pool={len(final)} (fresh={len(fresh)})")
+     return final
+@@
+-    vf     = f"{box},{main},fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
++    vf     = f"{box},{main},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
+     run([
