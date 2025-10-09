@@ -1322,9 +1322,11 @@ def _entity_synonyms(ent: str, lang: str) -> list[str]:
                 return list(dict.fromkeys(vals))
         return base
 
-    def _required_tokens_for_focus(focus: str, lang: str) -> set[str]:
+def _required_tokens_for_focus(focus: str, lang: str) -> set[str]:
+    """URL içinde görmek istediğimiz küçük odak-token kümesini üretir.
+    (ör. 'chameleon' için {'chameleon','lizard','reptile','gecko',...})"""
     syns = _entity_synonyms(focus, lang) if focus else []
-    toks = set()
+    toks: set[str] = set()
     for s in (syns + [focus]):
         toks |= _url_tokens(s)
     return {t for t in toks if len(t) >= 3}
@@ -2521,6 +2523,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
