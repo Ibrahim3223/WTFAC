@@ -46,5 +46,13 @@
     "title": "What global news dominated headlines today",
     "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251010_015048.mp4",
     "ts": "2025-10-10T01:50:51.446275"
+  },
+  {
+    "channel": "Cinematic Echo",
+    "entity": "the",
+    "content_hash": "0eb2690436847d32783582e4f012e738ea2d4132",
+    "title": "Did you know movies hide countless production secrets",
+    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251010_015658.mp4",
+    "ts": "2025-10-10T01:57:02.304602"
   }
 ]
