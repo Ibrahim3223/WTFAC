@@ -133,7 +133,7 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
 
-- name: Build video
+      - name: Build video
         env:
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY:   ${{ secrets.PEXELS_API_KEY }}
