@@ -46,13 +46,5 @@
     "title": "What global news dominated headlines today",
     "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251010_015048.mp4",
     "ts": "2025-10-10T01:50:51.446275"
-  },
-  {
-    "channel": "Cricket Queens",
-    "entity": "cricket",
-    "content_hash": "2caea38c637bee69cbcd28c3fc01a5fc49575216",
-    "title": "Witness the incredible power of women's cricket",
-    "video_path": "out/Cricket Queens_Women_s_Cricket_Highlights_Stories_20251010_015550.mp4",
-    "ts": "2025-10-10T01:55:53.489089"
   }
 ]
