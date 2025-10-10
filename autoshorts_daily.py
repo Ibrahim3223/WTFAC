@@ -1599,13 +1599,27 @@ Avoid overlap for 180 days:
     return topic, sentences, terms, title, desc, tags, focus  # ⭐ focus'u da döndür
 # --- Regenerate helper (novelty guard önerilerine göre) ---
 def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
+    """
+    Regenerate content with novelty suggestions.
+    Returns: (topic, sentences, search_terms, title, desc, tags, focus)
+    """
     seed_user_terms = list(base_user_terms or [])
     if seed_term:
         seed_user_terms = [seed_term] + seed_user_terms
     extended_ban = list((avoid_list or [])) + list((banlist or []))
-    tpc, sents, search_terms, ttl, desc, tags = build_via_gemini(CHANNEL_NAME, topic_lock, seed_user_terms, extended_ban)
+    
+    # build_via_gemini artık focus da döndürüyor
+    tpc, sents, search_terms, ttl, desc, tags, focus = build_via_gemini(
+        CHANNEL_NAME, 
+        topic_lock, 
+        seed_user_terms, 
+        extended_ban
+    )
+    
     sents = _polish_hook_cta(sents)
-    return tpc, sents, search_terms, ttl, desc, tags
+    
+    # ⭐ focus'u da döndür
+    return tpc, sents, search_terms, ttl, desc, tags, focus
 
 # ==================== Per-scene queries ====================
 _STOP = set("""
@@ -2601,21 +2615,35 @@ def main():
     SG = StateGuard(channel=CHANNEL_NAME)  # <-- YENİ
 
     # 1) İçerik üretim (topic-locked) + kalite kontrol + NOVELTY
+
     attempts = 0
-    best = None; best_score = -1.0
+    best = None
+    best_score = -1.0
     banlist = _recent_topics_for_prompt()
     novelty_tries = 0
-    selected_search_term_final = None  # kayda geçeceğimiz seçim
-
+    selected_search_term_final = None
+    
     while attempts < max(3, NOVELTY_RETRIES):
         attempts += 1
+        
         if USE_GEMINI and GEMINI_API_KEY:
             try:
-                tpc, sents, search_terms, ttl, desc, tags, focus = build_via_gemini(CHANNEL_NAME, topic_lock, user_terms, banlist)
+                # ⭐ focus'u da yakala
+                tpc, sents, search_terms, ttl, desc, tags, focus = build_via_gemini(
+                    CHANNEL_NAME, 
+                    topic_lock, 
+                    user_terms, 
+                    banlist
+                )
             except Exception as e:
                 print(f"Gemini error: {str(e)[:200]}")
-                tpc = topic_lock; sents=[]; search_terms=user_terms or []
-                ttl = ""; desc = ""; tags=[]
+                tpc = topic_lock
+                sents = []
+                search_terms = user_terms or []
+                ttl = ""
+                desc = ""
+                tags = []
+                focus = topic_lock  # ⭐ fallback focus
         else:
             tpc = topic_lock
             sents = [
@@ -2629,7 +2657,10 @@ def main():
                 "What would you add? Tell me below."
             ]
             search_terms = _terms_normalize(user_terms or ["macro detail","timelapse","clean b-roll"])
-            ttl = ""; desc=""; tags=[]
+            ttl = ""
+            desc = ""
+            tags = []
+            focus = _simplify_query(tpc, keep=1)  # ⭐ fallback focus
 
         # Hook + CTA cilası
         sents = _polish_hook_cta(sents)
@@ -2651,14 +2682,14 @@ def main():
                 selected_term = GUARD.pick_search_term(channel=CHANNEL_NAME, candidates=search_terms)
         except Exception as e:
             print(f"⚠️ pick_search_term warn: {e}")
-
+    
         def _guard_recent_titles(n=10):
             try:
                 return [it["title"] for it in GUARD.recent_items(CHANNEL_NAME, ENTITY_COOLDOWN_DAYS)[:n] if it.get("title")]
             except Exception:
                 return []
 
-        # 1.a Semantik benzerlik + cooldown kontrolü
+        # Semantik benzerlik + cooldown kontrolü
         try:
             title_for_check = (ttl or "").strip() or (sents[0] if sents else tpc)
             script_for_check = " ".join(sents or [])
@@ -2667,19 +2698,26 @@ def main():
                 title=title_for_check,
                 script=script_for_check,
                 search_term=selected_term,
-                category=MODE, mode=MODE, lang=LANG
+                category=MODE,
+                mode=MODE,
+                lang=LANG
             )
             if not decision.ok:
                 novelty_tries += 1
                 print(f"🚫 NoveltyGuard block ({novelty_tries}/{NOVELTY_RETRIES}): {decision.reason}")
-                # Alternatif term ve avoid list ile yeniden üret
                 alt_terms = (decision.suggestions or {}).get("alt_terms", [])
                 avoid_list = _guard_recent_titles(12)
                 seed_alt = (alt_terms[0] if alt_terms else None)
-                tpc, sents, search_terms, ttl, desc, tags = regenerate_with_llm(topic_lock, seed_alt, avoid_list, (user_terms or []), banlist)
-                # Bir sonraki döngüye bırak
+                
+                # ⭐ regenerate_with_llm artık focus da döndürüyor
+                tpc, sents, search_terms, ttl, desc, tags, focus = regenerate_with_llm(
+                    topic_lock, 
+                    seed_alt, 
+                    avoid_list, 
+                    (user_terms or []), 
+                    banlist
+                )
                 banlist = avoid_list + banlist
-                # devam → döngü başına
                 continue
             else:
                 selected_search_term_final = selected_term or (search_terms[0] if search_terms else None)
@@ -2693,12 +2731,11 @@ def main():
             novelty_tries += 1
             print(f"⚠️ Similar to recent videos (try {novelty_tries}/{NOVELTY_RETRIES}) → rebuilding with bans: {avoid_terms[:8]}")
             banlist = avoid_terms + banlist
-            # Ayrıca GUARD önerilerini tohuma ekle:
             if selected_search_term_final:
                 user_terms = [selected_search_term_final] + (user_terms or [])
             continue
 
-        # Focus-entity cooldown + alias/semantik yakınlık (StateGuard ile güçlendirilmiş)
+        # Focus-entity cooldown
         if ENTITY_COOLDOWN_DAYS > 0:
             ent = _derive_focus_entity(tpc, MODE, sents)
             if ent:
@@ -2711,22 +2748,37 @@ def main():
                 except Exception as e:
                     print(f"⚠️ SG entity check skipped: {e}")
 
+        # ⭐ UNIVERSAL QUALITY SCORING
         scores = _universal_quality_score(sents, ttl)
         quality = scores['quality']
         viral = scores['viral']
         retention = scores['retention']
         overall = (quality * 0.4 + viral * 0.35 + retention * 0.25)
-        
+    
         print(f"📝 Content: {tpc} | {len(sents)} lines")
         print(f"   📊 Quality={quality:.1f} | Viral={viral:.1f} | Retention={retention:.1f} | Overall={overall:.1f}")
-        
+    
+        # ⭐ Best'i kaydet (focus dahil)
         if overall >= 7.0 and quality >= 6.5:
+            best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final, focus)
+            best_score = overall
             break
         else:
+            # Score yine de best'ten iyiyse kaydet
+            if overall > best_score:
+                best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final, focus)
+                best_score = overall
+            
             print(f"⚠️ Low scores → rebuilding…")
             banlist = [tpc] + banlist
             time.sleep(0.5)
 
+    # ⭐ Döngü sonrası: best None olabilir mi kontrolü
+    if best is None:
+        # Fallback: son denenen değerleri kullan
+        print(f"⚠️ No content passed threshold, using last attempt (score={overall:.1f})")
+        best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final, focus)
+    
     # Final seçilen içerik
     tpc, sentences, search_terms, ttl, desc, tags, selected_search_term_final, focus = best
     sig = f"{CHANNEL_NAME}|{tpc}|{sentences[0] if sentences else ''}"
@@ -3036,6 +3088,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
