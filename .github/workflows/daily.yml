@@ -143,7 +143,7 @@ jobs:
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
           # ===== UNIVERSAL TTS (Natural Speech) =====
-          TTS_SSML: "1"                     # SSML prosody for all topics
+          TTS_SSML: "0"                     # SSML prosody for all topics
           TTS_RATE: "+12%"                  # Universal speech speed
 
           # ===== CAPTIONS / KARAOKE (Sync Perfect) =====
