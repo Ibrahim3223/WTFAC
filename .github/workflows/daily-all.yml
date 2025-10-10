@@ -123,6 +123,7 @@ jobs:
 
           KARAOKE_OFFSET_MS: "0"
           KARAOKE_SPEED: "1.0"
+          TTS_RATE: "+10%"
         run: |
           set -euo pipefail
           CHANNEL_NAME="${MATRIX_NAME}"
@@ -194,9 +195,9 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE: "#3EA6FF"
           KARAOKE_OUTLINE: "#000000"
-          KARAOKE_SPEEDUP_PCT: "2.0"
-          KARAOKE_RAMP_PCT:    "1.0"
-          KARAOKE_EARLY_END_MS: "50"
+          KARAOKE_SPEEDUP_PCT: "0.0"
+          KARAOKE_RAMP_PCT:    "0.0"
+          KARAOKE_EARLY_END_MS: "0"
           CAPTION_LEAD_MS:     "0"
 
           # ==== NOVELTY & COOLDOWN ====
