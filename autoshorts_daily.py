@@ -811,75 +811,86 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     return frames, frames / float(fps)
 
 def make_segment(src: str, dur_s: float, outp: str):
-    """Segment with optional zoom/pan for visual interest"""
-    
-    # ⭐ Check if source is image (common extensions)
+    """Segment with optional zoom/pan for visual interest (image-safe & video-safe)."""
+    # Kaynak bir görüntü mü?
     is_image = any(src.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp'])
-    
+
     if is_image:
-        # Image'ları video'ya çevir (ken burns effect)
-        print(f"   ⚠️ Converting image to video: {src}")
-        # Ken burns: slow zoom in
+        # === IMAGE PATH ===
+        # Ken Burns + tam süre üret (donma yapmaz)
         frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
         run([
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
             "-loop", "1", "-i", src,
-            "-vf", f"scale=1080:1920:force_original_aspect_ratio=increase,"
-                   f"crop=1080:1920,"
-                   f"zoompan=z='min(1.2,1+0.0008*on)':d={frames}:s=1080x1920,"
-                   f"setsar=1,fps={TARGET_FPS}",
+            "-vf",
+            f"scale=1080:1920:force_original_aspect_ratio=increase,"
+            f"crop=1080:1920,"
+            # image için d=frames doğru: tek girdi karesi, çıktı süresini biz belirliyoruz
+            f"zoompan=z='min(1.18,1+0.0012*on)':d={frames}:s=1080x1920,"
+            f"setsar=1,fps={TARGET_FPS}",
             "-t", f"{qdur:.3f}",
             "-c:v", "libx264", "-preset", "fast", "-crf", str(CRF_VISUAL),
             "-pix_fmt", "yuv420p",
             outp
         ])
         return
+
+    # === VIDEO PATH ===
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
-    
-    # ===== ADAPTIVE MOTION =====
+
     use_motion = os.getenv("VIDEO_MOTION", "1") == "1"
     motion_intensity = os.getenv("MOTION_INTENSITY", "subtle").lower()  # subtle/moderate/dynamic
-    
-    if use_motion and qdur > 2.5:
-        # Intensity mapping
-        if motion_intensity == "dynamic":
-            zoom_range = (1.0, 1.20)
-            speed = 0.002
-        elif motion_intensity == "moderate":
-            zoom_range = (1.0, 1.12)
-            speed = 0.0015
-        else:  # subtle
-            zoom_range = (1.0, 1.08)
-            speed = 0.001
-        
-        # Random motion (works for any footage)
+
+    zoom_range = (1.0, 1.12)
+    speed = 0.001
+    if motion_intensity == "moderate":
+        zoom_range = (1.0, 1.15); speed = 0.0015
+    elif motion_intensity == "dynamic":
+        zoom_range = (1.0, 1.20); speed = 0.002
+
+    motion = ""
+    if use_motion and qdur > 2.0:
+        # DİKKAT: videoda zoompan kullanırken d=1 şart (aksi halde son kare tutulur → donma)
         motion_types = ['zoom_in', 'zoom_out', 'pan_right', 'pan_left', 'static']
-        weights = [0.3, 0.2, 0.2, 0.2, 0.1]  # Prefer zoom in
-        motion_type = random.choices(motion_types, weights=weights)[0]
-        
-        if motion_type == 'zoom_in':
-            zoom = f"zoompan=z='min({zoom_range[1]},1+{speed}*on)':d={frames}:s=1080x1920"
-        elif motion_type == 'zoom_out':
-            zoom = f"zoompan=z='max(1.0,{zoom_range[1]}-{speed}*on)':d={frames}:s=1080x1920"
-        elif motion_type in ['pan_right', 'pan_left']:
-            direction = '+' if motion_type == 'pan_right' else '-'
-            zoom = f"zoompan=z=1.15:x='iw/2-(iw/zoom/2){direction}min(iw/zoom-iw,iw*{speed}*on)':d={frames}:s=1080x1920"
+        weights = [0.35, 0.20, 0.20, 0.20, 0.05]
+        m = random.choices(motion_types, weights=weights)[0]
+
+        if m == 'zoom_in':
+            motion = (
+                "zoompan="
+                f"z='min(zoom+{speed}, {zoom_range[1]})':"
+                "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                f"d=1:s=1080x1920"
+            )
+        elif m == 'zoom_out':
+            # 1.18'den başlatıp 1.0'a in
+            motion = (
+                "zoompan="
+                f"z='max(zoom-{speed}, {zoom_range[0]})':"
+                "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                f"d=1:s=1080x1920,scale=1080:1920"
+            )
+        elif m in ('pan_right', 'pan_left'):
+            sign = "+" if m == "pan_right" else "-"
+            pan = "min(iw/zoom - iw*0.02, iw*0.004*on)"
+            motion = (
+                "zoompan="
+                "z='1.08':"
+                f"x='iw/2-(iw/zoom/2){sign}{pan}':"
+                "y='ih/2-(ih/zoom/2)':"
+                f"d=1:s=1080x1920"
+            )
         else:
-            zoom = ""
-    else:
-        zoom = ""
-    
-    # Build filter chain
+            motion = ""  # static → sadece scale/crop
+
     base_filters = [
         "scale=1080:1920:force_original_aspect_ratio=increase",
         "crop=1080:1920",
     ]
-    
-    if zoom:
-        base_filters.append(zoom)
-    
+    if motion:
+        base_filters.append(motion)  # zoompan d=1 (videoda donma yok)
     base_filters.extend([
         "setsar=1",
         "eq=brightness=0.02:contrast=1.08:saturation=1.1",
@@ -889,14 +900,13 @@ def make_segment(src: str, dur_s: float, outp: str):
         f"fade=t=in:st=0:d={fade:.2f}",
         f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
     ])
-    
     vf = ",".join(base_filters)
-    
+
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", src,
         "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
+        "-r", str(TARGET_FPS), "-vsync", "cfr",
         "-an",
         "-c:v","libx264","-preset","fast","-crf",str(CRF_VISUAL),
         "-pix_fmt","yuv420p","-movflags","+faststart",
@@ -2036,9 +2046,10 @@ def _rank_and_dedup(
 
 def download_pool_videos(pool: List[Tuple[int, str]], tmpdir: str) -> Dict[int, str]:
     """
-    Havuzdan SADECE video dosyalarını indirir.
-    - URL uzantısı .mp4/.mov/.m4v/.webm değilse atlar
-    - Content-Type video/* değilse atlar (CDN'ler bazen image/jpeg döndürür → elenir)
+    Havuzdan SADECE gerçek video dosyalarını indirir.
+    - Uzantı .mp4/.mov/.m4v/.webm kontrolü
+    - HTTP Content-Type startswith('video/')
+    - ffprobe ile >=2 kare doğrulaması (tek kare "mp4 imaj"ları eler)
     """
     import re, pathlib, requests
 
@@ -2046,27 +2057,43 @@ def download_pool_videos(pool: List[Tuple[int, str]], tmpdir: str) -> Dict[int, 
         m = re.search(r"\.(mp4|mov|m4v|webm)(?:$|\?)", (u or ""), re.I)
         return ("." + m.group(1).lower()) if m else None
 
+    def _has_multiple_frames(path: str) -> bool:
+        # bazı kodeklerde nb_read_frames N/A olabilir; o durumda True kabul ediyoruz
+        try:
+            out = run([
+                "ffprobe","-v","error","-select_streams","v:0","-count_frames",
+                "-show_entries","stream=nb_read_frames",
+                "-of","csv=p=0", path
+            ], check=False).stdout.strip()
+            if out and out.upper() != "N/A":
+                try:
+                    n = int(out)
+                    return n >= 2
+                except Exception:
+                    return True
+            return True
+        except Exception:
+            return True
+
     downloads: Dict[int, str] = {}
     print("⬇️ Download pool (videos only)…")
 
     for idx, (vid, link) in enumerate(pool):
         ext = _is_video_url(link)
         if not ext:
-            # uzantısı belli değilse hiç uğraşma; foto olma ihtimali yüksek
-            continue
+            continue  # uzantı belirsizse riskli → geç
         try:
             with requests.get(link, stream=True, timeout=120) as rr:
                 rr.raise_for_status()
                 ctype = (rr.headers.get("Content-Type") or "").lower()
                 if ctype and not ctype.startswith("video/"):
-                    # örn: image/jpeg, text/html → geç
                     continue
                 out_path = str(pathlib.Path(tmpdir) / f"pool_{idx:02d}_{vid}{ext}")
                 with open(out_path, "wb") as w:
                     for ch in rr.iter_content(8192):
                         w.write(ch)
-                # küçük placeholderları ele
-                if pathlib.Path(out_path).stat().st_size > 300_000:
+                # boyut + ffprobe kare sayısı
+                if pathlib.Path(out_path).stat().st_size > 300_000 and _has_multiple_frames(out_path):
                     downloads[vid] = out_path
         except Exception as e:
             print(f"⚠️ download skip ({vid}): {e}")
@@ -3128,6 +3155,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
