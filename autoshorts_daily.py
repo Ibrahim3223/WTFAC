@@ -1205,46 +1205,71 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
     return _terms_normalize(base)[:8]
 
 def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]):
-    # ... mevcut kod ...
-    
+    tpl_key = _select_template_key(topic_lock)
+    template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
+    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
+    terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
+    extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
+
+    guardrails = """
+RULES (MANDATORY):
+- STAY ON TOPIC exactly as provided.
+- Return ONLY JSON, no prose/markdown.
+- Keys required: topic, focus, sentences, search_terms, title, description, tags.
+
+🎯 FOCUS SELECTION GUIDE:
+- Pick ONE visual subject with abundant stock footage
+- Good: "chameleon", "Tokyo tower", "lightning storm", "gears"
+- Bad: "innovation", "happiness", "success" (too abstract)
+- Must be filmable from multiple angles
+"""
+    jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
+    temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
+
     prompt = f"""{template}
 
 Channel: {channel_name}
 Language: {LANG}
 TOPIC (hard lock): {topic_lock}
-
-🎯 CRITICAL: Determine ONE main visual focus keyword that:
-1. Has abundant stock footage (animals, landmarks, objects, NOT concepts)
-2. Can be filmed from multiple angles
-3. Appears naturally when searching on Pexels/Pixabay
-4. Example good focuses: "octopus", "Tokyo tower", "lightning storm", "gears mechanism"
-5. Example BAD focuses: "innovation", "success", "happiness" (too abstract)
-
 Seed search terms (use and expand): {terms_hint}
 Avoid overlap for 180 days:
 {avoid}{extra}
 {guardrails}
 """
-    
     data = _gemini_call(prompt, GEMINI_MODEL, temp)
-    
-    # ... parsing ...
-    
+
+    # Parse & normalize
+    topic   = topic_lock
+    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
+    sentences = [s for s in sentences if s][:8]
+
+    terms = data.get("search_terms") or []
+    if isinstance(terms, str): terms=[terms]
+    terms = _terms_normalize(terms)
+    if user_terms:
+        seed = _terms_normalize(user_terms)
+        terms = _terms_normalize(seed + terms)
+
+    title = (data.get("title") or "").strip()
+    desc  = (data.get("description") or "").strip()
+    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
+
+    # ⭐ FOCUS extraction ve temizleme
     focus = (data.get("focus") or "").strip()
     if not focus:
-        # Fallback: title'dan çıkar
-        focus = (title or data.get("topic") or topic_lock).strip()
+        # Fallback: title -> topic -> first search term
+        focus = (title or data.get("topic") or topic_lock or (terms[0] if terms else "")).strip()
     
-    # Focus'u temizle ve basitleştir (1-2 kelime maks)
+    # Focus'u 1-2 kelimeye indir
     focus = _simplify_query(focus, keep=2)
     
-    # Eğer hâlâ çok generic ise search_terms'den al
-    if not focus or focus in ["great", "thing", "concept", "idea"]:
-        focus = (terms[0] if terms else _simplify_query(topic_lock, keep=1))
+    # Çok generic ise search_terms'den al
+    if not focus or focus in ["great", "thing", "concept", "idea", "topic", "story"]:
+        focus = (terms[0] if terms else _simplify_query(topic_lock, keep=1)) or "macro detail"
     
-    print(f"🎯 Extracted FOCUS: '{focus}'")
-    
-    return topic, sentences, terms, title, desc, tags, focus
+    print(f"🎯 Extracted FOCUS: '{focus}' (from Gemini)")
+
+    return topic, sentences, terms, title, desc, tags, focus  # ⭐ focus'u da döndür
 # --- Regenerate helper (novelty guard önerilerine göre) ---
 def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
     seed_user_terms = list(base_user_terms or [])
@@ -1307,7 +1332,6 @@ def _domain_synonyms(all_text: str) -> List[str]:
 def _entity_synonyms(ent: str, lang: str) -> list[str]:
     """
     Odak varlık için aramada işimize yarayacak yakın/eş anlamlı terimler.
-    Dönen liste tekilleştirilmiş olarak gelir.
     """
     e = (ent or "").lower().strip()
     if not e:
@@ -1320,14 +1344,35 @@ def _entity_synonyms(ent: str, lang: str) -> list[str]:
     # TR özel eşlemeler
     if lang.startswith("tr"):
         table_tr = {
-            "bukalemun": ["bukalemun", "kertenkele", "gecko", "iguana", "sürüngen", "renk değiştiren"],
-            "yunus": ["yunus", "deniz memelisi", "şişeburun yunus", "spinner yunus", "okyanus yunusu"],
-            "japonya": ["japonya", "tokyo", "kyoto", "fuji dağı", "torii kapısı", "shibuya", "japon tapınağı"],
+            "bukalemun": ["bukalemun", "kertenkele", "gecko", "iguana", "sürüngen"],
+            "yunus": ["yunus", "deniz memelisi", "şişeburun yunus"],
+            "japonya": ["japonya", "tokyo", "kyoto", "fuji dağı", "japon tapınağı"],
+            "ahtapot": ["ahtapot", "kafadan bacaklı", "deniz canavarı"],
+            "kartal": ["kartal", "yırtıcı kuş", "şahin", "atmaca"],
         }
         for k, vals in table_tr.items():
             if k in e:
                 return list(dict.fromkeys(vals + base))
         return list(dict.fromkeys(base))
+
+    # EN eşlemeler
+    table_en = {
+        "chameleon": ["chameleon", "lizard", "gecko", "iguana", "reptile"],
+        "dolphin": ["dolphin", "marine mammal", "bottlenose dolphin"],
+        "octopus": ["octopus", "cephalopod", "tentacles", "sea creature"],
+        "japan": ["japan", "tokyo", "kyoto", "mt fuji", "japanese temple"],
+        "italy": ["italy", "rome", "venice", "colosseum", "venetian canal"],
+        "eagle": ["eagle", "raptor", "bird of prey", "hawk"],
+        "bridge": ["suspension bridge", "cable stayed bridge", "arch bridge"],
+        "ocean": ["ocean", "sea", "waves", "marine", "underwater"],
+        "lightning": ["lightning", "storm", "thunder", "electric storm"],
+        "volcano": ["volcano", "volcanic", "lava", "magma", "eruption"],
+    }
+    for k, vals in table_en.items():
+        if k in e:
+            return list(dict.fromkeys(vals + base))
+
+    return list(dict.fromkeys(base))
 
     # EN eşlemeler
     table_en = {
@@ -1737,10 +1782,14 @@ def _entity_topic_queries(topic: str, ent: str, lang: str, user_terms: List[str]
 
     return qs[:20]
 
-def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
+def build_pexels_pool(focus: str, search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
     """
     FOCUS-FIRST STRATEGY:
-    Tüm videolar tek bir ana keyword etrafında toplanır.
+    Tüm videolar tek bir 'focus' keyword etrafında toplanır.
+    Args:
+        focus: Ana görsel anahtar kelime (ör: "chameleon", "Tokyo")
+        search_terms: Ek arama terimleri (Gemini'den)
+        need: Kaç klip gerekli
     """
     random.seed(rotation_seed or int(time.time()))
     
@@ -1748,72 +1797,81 @@ def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str],
     locale = "en-US"
     block = _blocklist_get_pexels()
     
-    # Ana focus keyword'ü belirle (Gemini'den gelmeli)
-    main_focus = search_terms[0] if search_terms else _simplify_query(topic, keep=1)
+    # Ana focus keyword
+    main_focus = focus or (search_terms[0] if search_terms else "macro detail")
+    main_focus = _simplify_query(main_focus, keep=2)
     
     # Synonyms ve variations
-    syns = _entity_synonyms(main_focus, LANG) if main_focus else []
-    syn_tokens = set(re.findall(r"[a-z0-9]+", " ".join(syns).lower()))
+    syns = _entity_synonyms(main_focus, LANG)
+    syn_tokens = set(re.findall(r"[a-z0-9]+", " ".join(syns + [main_focus]).lower()))
     
-    # SADECE main focus ve synonyms ile ara
-    queries = [main_focus] + syns[:5]  # Maksimum 6 farklı sorgu
+    # Sorgu havuzu: focus + synonyms (maksimum 6)
+    queries = [main_focus] + syns[:5]
+    queries = list(dict.fromkeys(queries))  # dedup
     
-    print(f"🎯 FOCUS-FIRST: Main keyword = '{main_focus}' | Synonyms = {syns[:3]}")
+    print(f"🎯 FOCUS-FIRST: '{main_focus}' | Synonyms: {syns[:3]}")
     
     pool: List[Tuple[int,str]] = []
-    target = need * 4  # Bol havuz oluştur
+    target = need * 4  # Bol havuz
     
-    # 1) Ana focus ile DEEP search (birçok sayfa)
+    # 1) Ana focus ile DEEP search (7 sayfaya kadar)
     for q in queries:
         qtokens = set(re.findall(r"[a-z0-9]+", q.lower()))
         merged = []
         
-        # Daha fazla sayfa tara
-        for page in range(1, 8):  # 7 sayfaya kadar
+        for page in range(1, 8):
             merged += _pexels_search(q, locale, page=page, per_page=80)
             if len(merged) >= target:
                 break
         
-        # Strict ranking: SADECE focus ile ilgili olanlar
+        # STRICT ranking: SADECE focus ile ilgili olanlar
         ranked = _rank_and_dedup(
             merged, qtokens, block, 
             syn_tokens=syn_tokens, 
-            strict=True  # Synonym ile kesişmeyen ELENIR
+            strict=STRICT_ENTITY_FILTER  # ENV'den
         )
         
         pool += ranked
+        print(f"   Query '{q}': {len(ranked)} clips")
+        
         if len(pool) >= target:
             break
-        
-        print(f"   Query '{q}': found {len(ranked)} clips")
     
-    # 2) Hâlâ eksikse popular'dan SADECE focus-matching olanları al
-    if len(pool) < need:
-        print(f"   ⚠️ Need more clips, checking popular...")
+    # 2) Eksikse Popular'dan focus-matching olanları
+    if len(pool) < need * 2:
+        print(f"   ⚠️ Need more, checking popular...")
         merged = []
         for page in range(1, 4):
             merged += _pexels_popular(locale, page=page, per_page=80)
         
-        # Strict filter
-        pop_rank = _rank_and_dedup(merged, syn_tokens, block, syn_tokens=syn_tokens, strict=True)
+        pop_rank = _rank_and_dedup(
+            merged, syn_tokens, block, 
+            syn_tokens=syn_tokens, 
+            strict=STRICT_ENTITY_FILTER
+        )
         pool += pop_rank[:max(0, need*2 - len(pool))]
     
-    # 3) Son çare: Pixabay ama yine strict
-    if len(pool) < need:
-        print(f"   ⚠️ Using Pixabay fallback...")
-        pix = _pixabay_fallback(main_focus, need*2, locale, syn_tokens=syn_tokens, strict=True)
+    # 3) Son çare: Pixabay (strict)
+    if len(pool) < need and ALLOW_PIXABAY_FALLBACK:
+        print(f"   ⚠️ Pixabay fallback...")
+        pix = _pixabay_fallback(
+            main_focus, need*2, locale, 
+            syn_tokens=syn_tokens, 
+            strict=STRICT_ENTITY_FILTER
+        )
         pool += [(vid, link) for (vid, link) in pix]
     
-    # Dedup ve fresh prioritize
+    # Dedup
     seen=set(); dedup=[]
     for vid, link in pool:
         if vid in seen: continue
         seen.add(vid); dedup.append((vid, link))
     
+    # Fresh olanları önceliklendir
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
-    final = fresh[:need*2]  # Bol marjla döndür
+    final = fresh[:need*2] if fresh else dedup[:need*2]
     
-    print(f"   ✅ Final pool: {len(final)} clips (all related to '{main_focus}')")
+    print(f"   ✅ Final pool: {len(final)} clips (all '{main_focus}' related)")
     return final
 
 def build_pool_topic_only(focus: str, search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
@@ -2347,9 +2405,8 @@ def main():
         per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
         print("🔎 Per-scene queries:")
         for q in per_scene_queries: print(f"   • {q}")
-        pool = build_pexels_pool(
-            topic=tpc,
-            sentences=[m[0] for m in metas],
+        pool: List[Tuple[int,str]] = build_pexels_pool(
+            focus=focus,
             search_terms=(search_terms or user_terms or []),
             need=need_clips,
             rotation_seed=ROTATION_SEED
@@ -2611,6 +2668,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
