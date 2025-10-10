@@ -40,11 +40,11 @@
     "ts": "2025-10-09T22:35:06.082893"
   },
   {
-    "channel": "TaxWise USA",
-    "entity": "keep",
-    "content_hash": "378bedff88b43d58134ec01a62c851e61c54f71e",
-    "title": "Want to keep more of your hard-earned money",
-    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251010_015046.mp4",
-    "ts": "2025-10-10T01:50:49.480902"
+    "channel": "World Briefing",
+    "entity": "global",
+    "content_hash": "a5e2531293a01ee1c333afe58917a811434a2ce7",
+    "title": "What global news dominated headlines today",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251010_015048.mp4",
+    "ts": "2025-10-10T01:50:51.446275"
   }
 ]
