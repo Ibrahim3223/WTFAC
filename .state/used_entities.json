@@ -11,13 +11,10 @@
   "World Briefing": {
     "global": "2025-10-10T01:50:51.418400"
   },
-  "Cinematic Echo": {
-    "the": "2025-10-10T01:57:02.274570"
+  "One Day Inside": {
+    "scenario": "2025-10-10T02:01:55.970707"
   },
-  "Microworld Stories": {
-    "make": "2025-10-10T02:02:22.217767"
-  },
-  "FixIt Fast": {
-    "repair": "2025-10-10T02:07:20.035615"
+  "Bot Gone Wild": {
+    "scenario": "2025-10-10T02:07:29.046003"
   }
 }
