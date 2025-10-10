@@ -123,7 +123,6 @@ jobs:
 
           KARAOKE_OFFSET_MS: "0"
           KARAOKE_SPEED: "1.0"
-          TTS_RATE: "+10%"
         run: |
           set -euo pipefail
           CHANNEL_NAME="${MATRIX_NAME}"
@@ -151,7 +150,7 @@ jobs:
           wenv ROTATION_SEED       "${SEED_VAL}"
           wenv SEARCH_TERMS        "${VARS_SEARCH_TERMS}"
           wenv GEMINI_PROMPT       "${VARS_GEMINI_PROMPT}"
-          wenv TTS_RATE            "${VARS_TTS_RATE}"
+          wenv TTS_RATE            "${VARS_TTS_RATE:-+12%}"
           wenv TTS_VOICE           "${VARS_TTS_VOICE}"
           wenv BGM_URLS            "${VARS_BGM_URLS}"
           wenv UPLOAD_TO_YT        "1"
@@ -188,19 +187,36 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
-          # ==== CAPTIONS / KARAOKE ====
+          # ===== UNIVERSAL TTS (Natural Speech) =====
+          TTS_SSML: "1"                     # SSML prosody for all topics
+          TTS_RATE: "+12%"                  # Universal speech speed
+
+          # ===== CAPTIONS / KARAOKE (Sync Perfect) =====
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER: "1"
           KARAOKE_INACTIVE: "#FFD700"
           KARAOKE_ACTIVE: "#3EA6FF"
           KARAOKE_OUTLINE: "#000000"
-          KARAOKE_SPEEDUP_PCT: "0.0"
-          KARAOKE_RAMP_PCT:    "0.0"
-          KARAOKE_EARLY_END_MS: "0"
-          CAPTION_LEAD_MS:     "0"
+          KARAOKE_OFFSET_MS: "0"            # Perfect sync
+          KARAOKE_SPEED: "1.0"              # No tempo adjustment
+          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust Edge-TTS timing
+          KARAOKE_RAMP_PCT: "0.0"           # No progressive speed
+          KARAOKE_EARLY_END_MS: "0"         # Full duration
+          CAPTION_LEAD_MS: "0"              # No lead offset
 
-          # ==== NOVELTY & COOLDOWN ====
+          # ===== UNIVERSAL EFFECTS (Adaptive) =====
+          KARAOKE_EFFECTS: "1"              # Enable ASS effects
+          EFFECT_STYLE: "moderate"          # subtle/moderate/dynamic
+          VIDEO_MOTION: "1"                 # Enable zoom/pan
+          MOTION_INTENSITY: "subtle"        # subtle/moderate/dynamic
+
+          # ===== UNIVERSAL QUALITY THRESHOLDS =====
+          MIN_QUALITY_SCORE: "6.5"          # Content quality (0-10)
+          MIN_VIRAL_SCORE: "6.0"            # Viral potential (0-10)
+          MIN_OVERALL_SCORE: "7.0"          # Weighted average
+
+          # ===== NOVELTY & COOLDOWN =====
           NOVELTY_ENFORCE: "1"
           NOVELTY_WINDOW: "40"
           NOVELTY_JACCARD_MAX: "0.55"
@@ -210,34 +226,34 @@ jobs:
           SIM_TH_ENTITY: "0.94"
           STATE_DIR: ".state"
 
-          # ==== HOOK & FOCUS İYİLEŞTİRMELERİ ⭐ YENİ ====
+          # ===== FOCUS & HOOK (Universal) =====
           HOOK_MAX_WORDS: "8"
           STRICT_ENTITY_FILTER: "1"
           ENTITY_VISUAL_MIN: "0.95"
           ENTITY_VISUAL_STRICT: "1"
-          
-          # ==== SEO & TITLE İYİLEŞTİRMELERİ ⭐ YENİ ====
+
+          # ===== SEO & METADATA (Universal) =====
           SEO_KEYWORD_DENSITY: "1"
           TITLE_POWER_WORDS: "1"
           MAX_DESCRIPTION_LENGTH: "4900"
           MAX_TAGS: "30"
 
-          # ==== PEXELS STRATEJİ ⭐ GÜNCEL ====
+          # ===== PEXELS STRATEGY (Focus-First) =====
           SCENE_STRATEGY: "topic_only"
           PEXELS_DEEP_SEARCH: "1"
           PEXELS_STRICT_VERTICAL: "0"
           PEXELS_MIN_HEIGHT: "720"
-          PEXELS_PER_PAGE: "80"               # ⭐ 60'tan 80'e çıkardık
+          PEXELS_PER_PAGE: "80"
           PEXELS_ALLOW_REUSE: "0"
-          PEXELS_MAX_PAGES: "7"               # ⭐ YENİ: kaç sayfa taransın
+          PEXELS_MAX_PAGES: "7"
           ALLOW_PIXABAY_FALLBACK: "1"
 
-          # ==== CTA ====
+          # ===== CTA (Contextual) =====
           CTA_ENABLE: "1"
           CTA_SHOW_SEC: "2.8"
           CTA_MAX_CHARS: "64"
 
-          # ==== BGM ====
+          # ===== BGM (Background Music) =====
           BGM_ENABLE: "1"
           BGM_DIR: "bgm"
           BGM_FADE: "0.8"
