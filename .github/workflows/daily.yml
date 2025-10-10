@@ -75,7 +75,7 @@ jobs:
           VARS_TTS_VOICE:       ${{ vars.TTS_VOICE }}
           VARS_BGM_URLS:        ${{ vars.BGM_URLS }}
 
-          KARAOKE_OFFSET_MS: "0"
+          KARAOKE_OFFSET_MS: "50"
           KARAOKE_SPEED: "1.0"
         run: |
           set -euo pipefail
