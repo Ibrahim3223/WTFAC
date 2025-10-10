@@ -184,51 +184,51 @@
     "ts": "2025-10-10T12:45:57.155455"
   },
   {
-    "channel": "WT Facts About Countries",
-    "entity": "street",
-    "content_hash": "fb3ece9c791940f68b61616dc4f906136e3d927b",
-    "title": "Imagine a city where streets are made of 👀",
-    "video_path": "out/WT Facts About Countries_Amazing_Country_Secrets_Cultural_Facts_20251010_162337.mp4",
-    "ts": "2025-10-10T16:23:42.412962"
-  },
-  {
-    "channel": "GalacticUpdate",
-    "entity": "distant",
-    "content_hash": "6e3b6ced72748d3e3078addb792606cbfa8b30d3",
-    "title": "186 Things About Latest That'll Blow Your Mind ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251010_163106.mp4",
-    "ts": "2025-10-10T16:31:09.349692"
-  },
-  {
-    "channel": "BehindTheFame",
-    "entity": "sees",
-    "content_hash": "a02c5eb66a308840dc4c43081e361076c9098630",
-    "title": "Nobody sees the true cost of this gleaming 🔥",
-    "video_path": "out/BehindTheFame_Celebrity_Success_Stories_Behind_the_Fame_Tales_20251010_163736.mp4",
-    "ts": "2025-10-10T16:37:39.172777"
-  },
-  {
-    "channel": "Bot Gone Wild",
-    "entity": "watched",
-    "content_hash": "7697fbb84cabd4724d2e1579a33b51a8896b7ab5",
-    "title": "What if AI watched your every move 🎯",
-    "video_path": "out/Bot Gone Wild_AI_Integration_in_Daily_Life_Future_Scenarios_20251010_164452.mp4",
-    "ts": "2025-10-10T16:44:55.459217"
-  },
-  {
-    "channel": "CityFrame Stories",
+    "channel": "Famous Quotes Explained",
     "entity": "think",
-    "content_hash": "27f445c81fddac4857ed116d8d3f0d156fe2c556",
-    "title": "You think city skyscrapers stand perfectly still? Think 🔥",
-    "video_path": "out/CityFrame Stories_Urban_Facts_Skyline_Insights_20251010_165311.mp4",
-    "ts": "2025-10-10T16:53:14.229654"
+    "content_hash": "7ae7e0910eb961b9ef8170f5411a0535b07f5d17",
+    "title": "You think you're smart? Socrates challenges that idea 😱",
+    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251010_162216.mp4",
+    "ts": "2025-10-10T16:22:19.587301"
   },
   {
-    "channel": "TrailScape 60",
-    "entity": "know",
-    "content_hash": "abfacf77b9491d1ac281c9bf00d43ed7f9cac335",
-    "title": "60 Things About Beautiful That'll Blow Your Mind 💡",
-    "video_path": "out/TrailScape 60_Beautiful_Trails_Landmarks_in_60s_20251010_170138.mp4",
-    "ts": "2025-10-10T17:01:41.815071"
+    "channel": "Flashback Minute",
+    "entity": "fall",
+    "content_hash": "c79a19594dc57773d085662f28efc321ed98d81e",
+    "title": "What if a nation-dividing wall disappeared overnight ⚡",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251010_163000.mp4",
+    "ts": "2025-10-10T16:30:03.491697"
+  },
+  {
+    "channel": "CritterFact",
+    "entity": "told",
+    "content_hash": "753eeeea3a41e24a2390b14d722135eb53ed5fd4",
+    "title": "What if I told you this ocean creature ✨",
+    "video_path": "out/CritterFact_Interesting_Visual_Explainers_20251010_163708.mp4",
+    "ts": "2025-10-10T16:37:11.651730"
+  },
+  {
+    "channel": "Microworld Stories",
+    "entity": "told",
+    "content_hash": "1c2f1c5eb80f55bc5ec75da8c15ad5d8c77dfc6d",
+    "title": "What if I told you ants are tiny 👀",
+    "video_path": "out/Microworld Stories_Fun_Educational_Stories_for_Young_Minds_20251010_164424.mp4",
+    "ts": "2025-10-10T16:44:27.303708"
+  },
+  {
+    "channel": "Planet Snapshot",
+    "entity": "the",
+    "content_hash": "83a48d0ee203955eb7fceb7626cb3215fe9eb97f",
+    "title": "Did you know one of the world's most 👀",
+    "video_path": "out/Planet Snapshot_Fast_Geography_Country_Curiosities_20251010_165408.mp4",
+    "ts": "2025-10-10T16:54:12.252408"
+  },
+  {
+    "channel": "Ocean Pulse",
+    "entity": "you",
+    "content_hash": "2459b6cb28a5f5a55061c4f000885874e1e52f0d",
+    "title": "POV: You just discovered a secret universe at 😱",
+    "video_path": "out/Ocean Pulse_One_Minute_Ocean_Coast_Science_20251010_170309.mp4",
+    "ts": "2025-10-10T17:03:12.024842"
   }
 ]
