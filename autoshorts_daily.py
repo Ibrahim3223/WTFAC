@@ -607,55 +607,99 @@ def _edge_stream_tts(text: str, voice: str, rate_env: str, mp3_out: str) -> List
 
 def _merge_marks_to_words(text: str, marks: List[Dict[str,Any]], total: float) -> List[Tuple[str,float]]:
     """
-    Return [(WORD, seconds)] covering total duration.
-    - Edge word boundaries are BEFORE atempo; we rescale to final duration.
-    - Fallback: equal-split if mismatch/empty.
+    Edge-TTS word boundaries'lerini kullanarak kelime sürelerini hesapla.
+    Args:
+        text: Orijinal metin
+        marks: Edge-TTS'den gelen [{t0, t1, text}] listesi (atempo ÖNCESİ)
+        total: Final audio süresi (atempo SONRASI)
+    Returns:
+        [(WORD, duration_seconds), ...]
+    
+    Strateji: Edge-TTS boundary'lerini OLDUĞU GİBİ scale et, ekstra düzeltme yapma.
     """
     words = [w for w in re.split(r"\s+", (text or "").strip()) if w]
     if not words:
         return []
-    out=[]
-    if marks:
-        ms = [m for m in marks if (m.get("t1",0) > m.get("t0",0))]
-        if len(ms) >= len(words)*0.6:
-            N = min(len(words), len(ms))
-            raw_durs = [max(0.02, float(ms[i]["t1"]-ms[i]["t0"])) for i in range(N)]
-            sum_raw = sum(raw_durs) if raw_durs else 0.0
-            scale = (total / sum_raw) if sum_raw > 0 else 1.0
-            for i in range(N):
-                out.append((words[i], max(0.05, raw_durs[i]*scale)))
-            remain = max(0.0, total - sum(d for _,d in out))
-            if len(words) > N and remain>0:
-                each = remain/(len(words)-N)
-                for i in range(N, len(words)):
-                    out.append((words[i], max(0.05, each)))
-        else:
-            out=[]
-    if not out:
-        each = max(0.05, total/max(1,len(words)))
+    
+    out = []
+    
+    # Edge-TTS marks varsa ve güvenilirse
+    if marks and len(marks) >= len(words) * 0.7:  # En az %70 coverage
+        N = min(len(words), len(marks))
+        
+        # Ham süreler (atempo öncesi)
+        raw_durs = [max(0.05, float(marks[i]["t1"] - marks[i]["t0"])) for i in range(N)]
+        sum_raw = sum(raw_durs)
+        
+        # Scale factor: atempo sonrası gerçek süreye uyarla
+        scale = (total / sum_raw) if sum_raw > 0 else 1.0
+        
+        # Scale edilmiş süreler
+        for i in range(N):
+            scaled_dur = max(0.08, raw_durs[i] * scale)  # min 80ms
+            out.append((words[i], scaled_dur))
+        
+        # Kalan kelimeler varsa (N < len(words))
+        if len(words) > N:
+            used_time = sum(d for _, d in out)
+            remain = max(0.0, total - used_time)
+            each = remain / (len(words) - N) if (len(words) - N) > 0 else 0.1
+            
+            for i in range(N, len(words)):
+                out.append((words[i], max(0.08, each)))
+        
+        # Son düzeltme: toplam süreyi garanti et
+        current_total = sum(d for _, d in out)
+        if abs(current_total - total) > 0.05:  # 50ms'den fazla fark varsa
+            diff = total - current_total
+            # Farkı son kelimeye ekle/çıkar
+            if out:
+                last_word, last_dur = out[-1]
+                out[-1] = (last_word, max(0.08, last_dur + diff))
+    
+    else:
+        # Fallback: Marks yok/yetersiz → equal split
+        each = max(0.08, total / max(1, len(words)))
         out = [(w, each) for w in words]
-        s = sum(d for _,d in out)
-        if s>0 and abs(s-total)>0.02:
-            out[-1] = (out[-1][0], max(0.05, out[-1][1] + (total-s)))
+        
+        # Son kelimeyi düzelt
+        if out:
+            current_sum = sum(d for _, d in out)
+            diff = total - current_sum
+            if abs(diff) > 0.01:  # 10ms'den fazla fark
+                last_word, last_dur = out[-1]
+                out[-1] = (last_word, max(0.08, last_dur + diff))
+    
     return out
 
 def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
-    """Returns (duration_seconds, word_durations_list) where list = [(WORD, seconds), ...]"""
+    """
+    Returns (duration_seconds, word_durations_list) where list = [(WORD, seconds), ...]
+    - Edge-TTS stream ile word boundaries yakala
+    - Atempo uygula
+    - Word durations'ı final duration'a scale et
+    """
     import asyncio
     from aiohttp.client_exceptions import WSServerHandshakeError
+    
     text = (text or "").strip()
     if not text:
         run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 1.0, []
 
     mp3 = wav_out.replace(".wav", ".mp3")
-    rate_env = os.getenv("TTS_RATE", "+12%")
-    atempo = _rate_to_atempo(rate_env, default=1.12)
+    
+    # TTS hızı ENV'den (workflow'da kontrol edilir)
+    rate_env = os.getenv("TTS_RATE", "+10%")
+    atempo = _rate_to_atempo(rate_env, default=1.10)
+    
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
+    
     marks: List[Dict[str,Any]] = []
+    
+    # TRY 1: Edge-TTS stream (word boundaries ile)
     try:
-        # Stream to capture WordBoundary
         marks = _edge_stream_tts(text, selected_voice, rate_env, mp3)
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
@@ -667,24 +711,28 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
         words = _merge_marks_to_words(text, marks, dur)
+        print(f"   TTS: {len(words)} words | {dur:.2f}s | atempo={atempo:.2f}")
         return dur, words
+        
     except WSServerHandshakeError as e:
         if getattr(e, "status", None) != 401 and "401" not in str(e):
             print(f"⚠️ edge-tts stream fail: {e}")
     except Exception as e:
         print(f"⚠️ edge-tts stream fail: {e}")
 
-    # Fallback 1: edge save (no marks)
+    # FALLBACK 1: Edge-TTS save (no marks)
     try:
         async def _edge_save_simple():
             comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
             await comm.save(mp3)
+        
         try:
             asyncio.run(_edge_save_simple())
         except RuntimeError:
             nest_asyncio.apply()
             loop = asyncio.get_event_loop()
             loop.run_until_complete(_edge_save_simple())
+        
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
@@ -695,18 +743,22 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
         words = _merge_marks_to_words(text, [], dur)
+        print(f"   TTS (no marks): {len(words)} words | {dur:.2f}s | atempo={atempo:.2f}")
         return dur, words
+        
     except Exception as e:
         print(f"⚠️ edge-tts 401 → hızlı fallback TTS")
 
-    # Fallback 2: Google TTS (no marks)
+    # FALLBACK 2: Google TTS (no marks)
     try:
         q = requests.utils.quote(text.replace('"','').replace("'",""))
         lang_code = LANG or "en"
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
         headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=30); r.raise_for_status()
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
         open(mp3, "wb").write(r.content)
+        
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
@@ -717,7 +769,9 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
         words = _merge_marks_to_words(text, [], dur)
+        print(f"   TTS (Google fallback): {len(words)} words | {dur:.2f}s")
         return dur, words
+        
     except Exception as e2:
         print(f"❌ TTS tüm yollar başarısız, sessizlik üretilecek: {e2}")
         run(["ffmpeg","-y","-f","lavfi","-t","4.0","-i","anullsrc=r=48000:cl=mono", wav_out])
@@ -768,11 +822,20 @@ def enforce_video_exact_frames(video_in: str, target_frames: int, outp: str):
     ])
 
 def _ass_time(s: float) -> str:
-    h = int(s//3600); s -= h*3600
-    m = int(s//60); s -= m*60
+    """Float seconds'ı ASS time formatına çevir (H:MM:SS.CS)"""
+    h = int(s // 3600)
+    s -= h * 3600
+    m = int(s // 60)
+    s -= m * 60
     return f"{h:d}:{m:02d}:{s:05.2f}"
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
+    """
+    Karaoke-style ASS subtitle oluştur.
+    - Edge-TTS word boundaries'lerine güvenir
+    - Minimal düzeltme yapar (SPEEDUP_PCT ve EARLY_END_MS)
+    - RAMP ve LEAD kullanmaz (tutarlılık için)
+    """
     # ASS renk notasyonu: &HAABBGGRR (A=alpha, BGR sırası)
     def _to_ass(c: str) -> str:
         c = c.strip()
@@ -790,86 +853,59 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     # Kelimeleri UPPERCASE + süreleri al
     words_upper = [(re.sub(r"\s+", " ", w.upper()), d) for w, d in words if str(w).strip()]
     if not words_upper:
-        words_upper = [(w.upper(), 0.5) for w in (text or "…").split()]
+        # Fallback: eşit bölme
+        split_words = (text or "…").split()
+        each_dur = seg_dur / max(1, len(split_words))
+        words_upper = [(w.upper(), each_dur) for w in split_words]
 
     n = len(words_upper)
 
     # Hedef toplam süre (centisecond)
     total_cs = int(round(seg_dur * 100))
 
-    # Ham süreler (centisecond)
-    ds = [max(5, int(round(d * 100))) for _, d in words_upper]
+    # Ham süreler (centisecond) - Edge-TTS'den gelen verileri KORU
+    ds = [max(8, int(round(d * 100))) for _, d in words_upper]  # min 80ms
     if sum(ds) == 0:
-        ds = [50] * n
+        ds = [max(8, int(total_cs / n)) for _ in range(n)]
 
-    # --- global hız düzeltmeleri ---
+    # --- SADECE MİNİMAL GLOBAL DÜZELTME ---
     try:
-        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "2.0"))  # ⭐ varsayılan 3.0 → 2.0
+        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "0.0"))
     except Exception:
-        speedup_pct = 2.0  # ⭐ düşük tutun
-    speedup_pct = max(-2.0, min(5.0, speedup_pct))  # ⭐ maks %5
+        speedup_pct = 0.0
+    speedup_pct = max(0.0, min(5.0, speedup_pct))
 
     try:
-        early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "50"))  # ⭐ varsayılan 80 → 50
+        early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "0"))
     except Exception:
-        early_end_ms = 50
+        early_end_ms = 0
     early_end_cs = max(0, int(round(early_end_ms / 10.0)))
 
-    try:
-        ramp_pct = float(os.getenv("KARAOKE_RAMP_PCT", "0.5"))  # ⭐ varsayılan 1.0 → 0.5
-    except Exception:
-        ramp_pct = 0.5
-    ramp_pct = max(0.0, min(3.0, ramp_pct))
-
+    # Target hesapla (minimal düzeltme)
     target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
-    target_cs = max(5 * n, target_cs)
+    target_cs = max(8 * n, target_cs)  # min 80ms/kelime
 
-    if n > 1 and ramp_pct > 0:
-        ramp = (ramp_pct / 100.0)
-        for i in range(n):
-            k = i / (n - 1)
-            ds[i] = max(5, int(round(ds[i] * (1.0 - ramp * k))))
-
+    # Global scale (tüm kelimelere eşit oranda uygula)
     s = sum(ds)
-    if s > 0:
+    scale = 1.0
+    if s > 0 and s != target_cs:
         scale = target_cs / s
-        ds = [max(5, int(round(x * scale))) for x in ds]
+        ds = [max(8, int(round(x * scale))) for x in ds]
 
-    while sum(ds) > target_cs:
+    # Fine-tune: tam hedefe ulaş (1 cs hassasiyetle)
+    while sum(ds) > target_cs and any(d > 8 for d in ds):
         for i in range(n):
             if sum(ds) <= target_cs: break
-            if ds[i] > 5: ds[i] -= 1
-    i = 0
+            if ds[i] > 8: ds[i] -= 1
+    
     while sum(ds) < target_cs:
-        ds[i % n] += 1
-        i += 1
+        # Uzun kelimelere öncelik ver (daha doğal)
+        longest_idx = max(range(n), key=lambda i: ds[i])
+        ds[longest_idx] += 1
 
-    # lead (başlangıcı öne çek)
-    try:
-        lead_ms = int(os.getenv("CAPTION_LEAD_MS", os.getenv("KARAOKE_LEAD_MS", "0")))
-    except Exception:
-        lead_ms = 0
-    lead_cs_target = max(0, int(round(lead_ms / 10.0)))
-
-    if lead_cs_target > 0 and sum(ds) > 5 * n:
-        removed = 0
-        for i in range(n):
-            if removed >= lead_cs_target: break
-            can_take = max(0, ds[i] - 5)
-            take = min(can_take, lead_cs_target - removed)
-            if take > 0:
-                ds[i] -= take
-                removed += take
-        if n >= 2:
-            add_a = removed // 2
-            add_b = removed - add_a
-            ds[-2] += add_a
-            ds[-1] += add_b
-        else:
-            ds[-1] += removed
-
+    # ASS formatını oluştur
     cap = " ".join([w for w, _ in words_upper])
-    _ = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
+    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
     kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(n)]).strip()
 
     ass = f"""[Script Info]
@@ -885,6 +921,10 @@ Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},{_to_ass(KARAOKE_A
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad0}}{kline}
 """
+
+    # Debug log
+    print(f"   🎵 Karaoke: {n} words | seg={seg_dur:.2f}s | target={target_cs/100:.2f}s | scale={scale:.3f} | speedup={speedup_pct}%")
+
     return ass
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
@@ -2673,6 +2713,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
