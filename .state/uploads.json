@@ -184,51 +184,51 @@
     "ts": "2025-10-10T12:45:57.155455"
   },
   {
-    "channel": "Famous Quotes Explained",
+    "channel": "WT Facts About Countries",
+    "entity": "street",
+    "content_hash": "fb3ece9c791940f68b61616dc4f906136e3d927b",
+    "title": "Imagine a city where streets are made of 👀",
+    "video_path": "out/WT Facts About Countries_Amazing_Country_Secrets_Cultural_Facts_20251010_162337.mp4",
+    "ts": "2025-10-10T16:23:42.412962"
+  },
+  {
+    "channel": "GalacticUpdate",
+    "entity": "distant",
+    "content_hash": "6e3b6ced72748d3e3078addb792606cbfa8b30d3",
+    "title": "186 Things About Latest That'll Blow Your Mind ✨",
+    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251010_163106.mp4",
+    "ts": "2025-10-10T16:31:09.349692"
+  },
+  {
+    "channel": "BehindTheFame",
+    "entity": "sees",
+    "content_hash": "a02c5eb66a308840dc4c43081e361076c9098630",
+    "title": "Nobody sees the true cost of this gleaming 🔥",
+    "video_path": "out/BehindTheFame_Celebrity_Success_Stories_Behind_the_Fame_Tales_20251010_163736.mp4",
+    "ts": "2025-10-10T16:37:39.172777"
+  },
+  {
+    "channel": "Bot Gone Wild",
+    "entity": "watched",
+    "content_hash": "7697fbb84cabd4724d2e1579a33b51a8896b7ab5",
+    "title": "What if AI watched your every move 🎯",
+    "video_path": "out/Bot Gone Wild_AI_Integration_in_Daily_Life_Future_Scenarios_20251010_164452.mp4",
+    "ts": "2025-10-10T16:44:55.459217"
+  },
+  {
+    "channel": "Eco Habit Hacks",
     "entity": "think",
-    "content_hash": "7ae7e0910eb961b9ef8170f5411a0535b07f5d17",
-    "title": "You think you're smart? Socrates challenges that idea 😱",
-    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251010_162216.mp4",
-    "ts": "2025-10-10T16:22:19.587301"
+    "content_hash": "97caf9e298201cbe4542909f7833685954fc334a",
+    "title": "You think your fridge keeps food fresh? It's ⚡",
+    "video_path": "out/Eco Habit Hacks_One_Minute_Sustainable_Living_Tips_20251010_165146.mp4",
+    "ts": "2025-10-10T16:51:49.210165"
   },
   {
-    "channel": "Rewind Retro Media",
+    "channel": "Focus Rituals",
     "entity": "think",
-    "content_hash": "9c4217b2e5b2e2364b0655fc1973b6798e1f85fe",
-    "title": "You think you know old CRT TVs. You're ⚡",
-    "video_path": "out/Rewind Retro Media_Nostalgic_Memories_Retro_Culture_20251010_162943.mp4",
-    "ts": "2025-10-10T16:29:47.981343"
-  },
-  {
-    "channel": "WildWonderCaps",
-    "entity": "think",
-    "content_hash": "0f267faa9627d3239b2322304eff57688bc905bc",
-    "title": "You think chameleons change color to hide? That's 🎯",
-    "video_path": "out/WildWonderCaps_Incredible_Wildlife_Moments_Animal_Wonders_20251010_163611.mp4",
-    "ts": "2025-10-10T16:36:13.941549"
-  },
-  {
-    "channel": "One Day Inside",
-    "entity": "know",
-    "content_hash": "6158eeb7580d966c1725954db445bc7ae6f489aa",
-    "title": "Nobody knows why these bunkers were *truly* built 🎯",
-    "video_path": "out/One Day Inside_Post_Apocalyptic_Survival_Stories_Future_Scenarios_20251010_164336.mp4",
-    "ts": "2025-10-10T16:43:39.429252"
-  },
-  {
-    "channel": "GameDay 60",
-    "entity": "all",
-    "content_hash": "6907ab9450a047ce55d5fcf3faf8c391652ec258",
-    "title": "3 Things About Daily That'll Blow Your Mind 💡",
-    "video_path": "out/GameDay 60_Daily_Sports_Updates_Athletic_Highlights_20251010_165057.mp4",
-    "ts": "2025-10-10T16:51:00.097667"
-  },
-  {
-    "channel": "MicroNature Minute",
-    "entity": "every",
-    "content_hash": "fe282363763829df40854790c8b45df3151a884d",
-    "title": "The secret behind every mushroom's life is hidden 🎯",
-    "video_path": "out/MicroNature Minute_Tiny_Ecosystems_Macro_Nature_Facts_20251010_165651.mp4",
-    "ts": "2025-10-10T16:56:54.933086"
+    "content_hash": "97bc700a80351b37626ea48e4eaf05353ce19d95",
+    "title": "You think you need more to focus effectively 🔥",
+    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251010_165746.mp4",
+    "ts": "2025-10-10T16:57:49.162392"
   }
 ]
