@@ -676,6 +676,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
     """
     Returns (duration_seconds, word_durations_list) where list = [(WORD, seconds), ...]
     - Edge-TTS stream ile word boundaries yakala
+    - Universal SSML prosody (tüm konular için)
     - Atempo uygula
     - Word durations'ı final duration'a scale et
     """
@@ -686,6 +687,55 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
     if not text:
         run(["ffmpeg","-y","-f","lavfi","-t","1.0","-i","anullsrc=r=48000:cl=mono", wav_out])
         return 1.0, []
+
+    # ===== UNIVERSAL SSML ENHANCEMENT =====
+    use_ssml = os.getenv("TTS_SSML", "1") == "1"
+    
+    if use_ssml:
+        # Numbers → always emphasize (works for any topic)
+        text = re.sub(r'\b(\d+)\b', r'<emphasis level="strong">\1</emphasis>', text)
+        
+        # Question words → pitch up (universal)
+        text = re.sub(
+            r'\b(Why|What|How|When|Where|Who|Which)\b', 
+            r'<prosody pitch="+5%">\1</prosody>', 
+            text, flags=re.IGNORECASE
+        )
+        
+        # Exclamation → volume up (universal emotion)
+        if '!' in text:
+            parts = text.split('!')
+            enhanced = []
+            for i, part in enumerate(parts):
+                if i < len(parts) - 1:
+                    enhanced.append(f'<prosody volume="+10%">{part}</prosody>!')
+                else:
+                    enhanced.append(part)
+            text = ''.join(enhanced)
+        
+        # Contrast words → pause before (universal drama)
+        contrast_words = ['but', 'however', 'although', 'yet', 'still', 'despite', 'actually']
+        for word in contrast_words:
+            text = re.sub(
+                rf'\b({word})\b', 
+                rf'<break time="150ms"/>\1', 
+                text, flags=re.IGNORECASE
+            )
+        
+        # Action verbs → moderate stress (universal energy)
+        action_pattern = r'\b(makes|shows|reveals|changes|stops|starts|turns|becomes|creates|breaks|moves)\b'
+        text = re.sub(
+            action_pattern, 
+            r'<emphasis level="moderate">\1</emphasis>', 
+            text, flags=re.IGNORECASE
+        )
+        
+        # Final sentence → slight slowdown (universal closure)
+        sentences_split = re.split(r'[.!?]', text)
+        if len(sentences_split) > 1 and sentences_split[-2].strip():
+            last = sentences_split[-2].strip()
+            # Sadece ilk bulduğunu değiştir
+            text = text.replace(last, f'<prosody rate="-5%">{last}</prosody>', 1)
 
     mp3 = wav_out.replace(".wav", ".mp3")
     
@@ -711,7 +761,8 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
         words = _merge_marks_to_words(text, marks, dur)
-        print(f"   TTS: {len(words)} words | {dur:.2f}s | atempo={atempo:.2f}")
+        ssml_status = "SSML" if use_ssml else "plain"
+        print(f"   TTS: {len(words)} words | {dur:.2f}s | atempo={atempo:.2f} | {ssml_status}")
         return dur, words
         
     except WSServerHandshakeError as e:
@@ -749,9 +800,12 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
     except Exception as e:
         print(f"⚠️ edge-tts 401 → hızlı fallback TTS")
 
-    # FALLBACK 2: Google TTS (no marks)
+    # FALLBACK 2: Google TTS (no marks, no SSML support)
     try:
-        q = requests.utils.quote(text.replace('"','').replace("'",""))
+        # SSML etiketlerini temizle (Google desteklemiyor)
+        clean_text = re.sub(r'<[^>]+>', '', text) if use_ssml else text
+        
+        q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
         lang_code = LANG or "en"
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -768,7 +822,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, [], dur)
+        words = _merge_marks_to_words(clean_text, [], dur)
         print(f"   TTS (Google fallback): {len(words)} words | {dur:.2f}s")
         return dur, words
         
@@ -783,20 +837,65 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     return frames, frames / float(fps)
 
 def make_segment(src: str, dur_s: float, outp: str):
+    """Universal motion effects (adapts to any content)"""
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
-    vf = (
-        "scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,"
-        "setsar=1,"  # <<< ÖNEMLİ: tüm segmentlerde SAR=1
-        "eq=brightness=0.02:contrast=1.08:saturation=1.1,"
-        f"fps={TARGET_FPS},"
-        f"setpts=N/{TARGET_FPS}/TB,"
-        f"trim=start_frame=0:end_frame={frames},"
-        f"fade=t=in:st=0:d={fade:.2f},"
+    
+    # ===== ADAPTIVE MOTION =====
+    use_motion = os.getenv("VIDEO_MOTION", "1") == "1"
+    motion_intensity = os.getenv("MOTION_INTENSITY", "subtle").lower()  # subtle/moderate/dynamic
+    
+    if use_motion and qdur > 2.5:
+        # Intensity mapping
+        if motion_intensity == "dynamic":
+            zoom_range = (1.0, 1.20)
+            speed = 0.002
+        elif motion_intensity == "moderate":
+            zoom_range = (1.0, 1.12)
+            speed = 0.0015
+        else:  # subtle
+            zoom_range = (1.0, 1.08)
+            speed = 0.001
+        
+        # Random motion (works for any footage)
+        motion_types = ['zoom_in', 'zoom_out', 'pan_right', 'pan_left', 'static']
+        weights = [0.3, 0.2, 0.2, 0.2, 0.1]  # Prefer zoom in
+        motion_type = random.choices(motion_types, weights=weights)[0]
+        
+        if motion_type == 'zoom_in':
+            zoom = f"zoompan=z='min({zoom_range[1]},1+{speed}*on)':d={frames}:s=1080x1920"
+        elif motion_type == 'zoom_out':
+            zoom = f"zoompan=z='max(1.0,{zoom_range[1]}-{speed}*on)':d={frames}:s=1080x1920"
+        elif motion_type in ['pan_right', 'pan_left']:
+            direction = '+' if motion_type == 'pan_right' else '-'
+            zoom = f"zoompan=z=1.15:x='iw/2-(iw/zoom/2){direction}min(iw/zoom-iw,iw*{speed}*on)':d={frames}:s=1080x1920"
+        else:
+            zoom = ""
+    else:
+        zoom = ""
+    
+    # Build filter chain
+    base_filters = [
+        "scale=1080:1920:force_original_aspect_ratio=increase",
+        "crop=1080:1920",
+    ]
+    
+    if zoom:
+        base_filters.append(zoom)
+    
+    base_filters.extend([
+        "setsar=1",
+        "eq=brightness=0.02:contrast=1.08:saturation=1.1",
+        f"fps={TARGET_FPS}",
+        f"setpts=N/{TARGET_FPS}/TB",
+        f"trim=start_frame=0:end_frame={frames}",
+        f"fade=t=in:st=0:d={fade:.2f}",
         f"fade=t=out:st={fade_out_st:.2f}:d={fade:.2f}"
-    )
+    ])
+    
+    vf = ",".join(base_filters)
+    
     run([
         "ffmpeg","-y","-hide_banner","-loglevel","error",
         "-i", src,
@@ -831,9 +930,10 @@ def _ass_time(s: float) -> str:
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
     """
-    Karaoke-style ASS subtitle oluştur.
+    Karaoke-style ASS subtitle oluştur (Universal - tüm konular için).
     - Edge-TTS word boundaries'lerine güvenir
     - Minimal düzeltme yapar (SPEEDUP_PCT ve EARLY_END_MS)
+    - Adaptive effects (subtle/moderate/dynamic)
     - RAMP ve LEAD kullanmaz (tutarlılık için)
     """
     # ASS renk notasyonu: &HAABBGGRR (A=alpha, BGR sırası)
@@ -903,11 +1003,49 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         longest_idx = max(range(n), key=lambda i: ds[i])
         ds[longest_idx] += 1
 
-    # ASS formatını oluştur
-    cap = " ".join([w for w, _ in words_upper])
-    wrapped = wrap_mobile_lines(cap, max_line_length=CAPTION_MAX_LINE, max_lines=3).replace("\n", "\\N")
-    kline = "".join([f"{{\\k{ds[i]}}}{words_upper[i][0]} " for i in range(n)]).strip()
+    # ===== ADAPTIVE ASS EFFECTS (Universal) =====
+    use_effects = os.getenv("KARAOKE_EFFECTS", "1") == "1"
+    effect_style = os.getenv("EFFECT_STYLE", "moderate").lower()  # subtle/moderate/dynamic
+    
+    if use_effects:
+        if effect_style == "dynamic":
+            # Aggressive (gaming, comedy, fast topics)
+            shake = r"{\t(0,40,\fscx108\fscy108)\t(40,80,\fscx92\fscy92)\t(80,120,\fscx100\fscy100)}"
+            blur = r"{\blur4}"
+            scale_in = r"{\fscx85\fscy85\t(0,100,\fscx100\fscy100)}"
+            shadow = "3"
+        elif effect_style == "subtle":
+            # Minimal (educational, serious topics)
+            shake = ""
+            blur = r"{\blur1}"
+            scale_in = ""
+            shadow = "1"
+        else:  # moderate (default - works for everything)
+            shake = r"{\t(0,50,\fscx103\fscy103)\t(50,100,\fscx97\fscy97)\t(100,150,\fscx100\fscy100)}" if is_hook else ""
+            blur = r"{\blur2}"
+            scale_in = r"{\fscx90\fscy90\t(0,80,\fscx100\fscy100)}" if is_hook else ""
+            shadow = "2"
+    else:
+        shake = ""
+        blur = ""
+        scale_in = ""
+        shadow = "0"
+    
+    # Build karaoke line with effects
+    initial = scale_in if scale_in else ""
+    kline = initial
+    
+    for i in range(n):
+        word_text = words_upper[i][0]
+        duration_cs = ds[i]
+        
+        # Hook words get extra effect, normal words get blur only
+        effect_this = shake if (is_hook and use_effects and shake) else ""
+        kline += f"{{\\k{duration_cs}{effect_this}{blur}}}{word_text} "
+    
+    kline = kline.strip()
 
+    # ===== ASS OUTPUT =====
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -915,15 +1053,16 @@ PlayResY: 1920
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},{_to_ass(KARAOKE_ACTIVE)},{_to_ass(KARAOKE_OUTLINE)},&H7F000000,1,0,0,0,100,100,0,0,1,{outline},0,2,50,50,{margin_v},0
+Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},{_to_ass(KARAOKE_ACTIVE)},{_to_ass(KARAOKE_OUTLINE)},&H7F000000,1,0,0,0,100,100,0,0,1,{outline},{shadow},2,50,50,{margin_v},0
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad0}}{kline}
+Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad{shadow}}}{kline}
 """
 
     # Debug log
-    print(f"   🎵 Karaoke: {n} words | seg={seg_dur:.2f}s | target={target_cs/100:.2f}s | scale={scale:.3f} | speedup={speedup_pct}%")
+    effect_status = f"{effect_style} effects" if use_effects else "no effects"
+    print(f"   🎵 Karaoke: {n} words | seg={seg_dur:.2f}s | target={target_cs/100:.2f}s | scale={scale:.3f} | {effect_status}")
 
     return ass
 
@@ -1165,33 +1304,86 @@ def _select_template_key(topic: str) -> str:
 
 # ==================== Gemini (topic-locked) ====================
 ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """Create a 25–40s YouTube Short.
-Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
+    "_default": """Create a viral 25-40s YouTube Short that STOPS THE SCROLL.
 
-FOCUS RULE (CRITICAL):
-- 'focus' MUST be ONE specific, visual, searchable keyword that DOMINATES the entire video.
-- Examples: "chameleon", "octopus", "Dubai", "iPhone screen", "volcanic eruption"
-- This focus will be used to find ALL video clips, so make it concrete and abundant in stock footage.
-- DO NOT use abstract concepts like "innovation" or "transformation" - use physical subjects.
+Return STRICT JSON: topic, focus, sentences (7-8), search_terms (4-10), title, description, tags.
 
-CONTENT RULES:
-- Sentence 1 = POWERFUL HOOK using numbers, "Why", "How", "Secret", or shocking claim (≤10 words).
-- Sentence 8 = soft CTA asking for comments/thoughts (no 'subscribe/like').
-- All 6-8 sentences should describe visual aspects of the FOCUS keyword.
-- Each sentence should be filmable with stock footage of the focus subject.""",
+🎯 FOCUS RULE:
+- ONE specific, visual, filmable subject
+- Must have abundant stock footage
+- Physical subjects only (no abstract concepts)
 
-    "country_facts": """Create amazing country/city facts.
-Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
+🔥 HOOK FORMULA (Sentence 1 - First 3 Seconds):
+Pick the BEST pattern for your topic:
 
-FOCUS RULE (CRITICAL):
-- 'focus' should be the country/city name OR its most iconic visual landmark.
-- Examples: "Tokyo", "Eiffel Tower", "Great Wall", "Venice canals"
-- Pick something with abundant stock footage.
+**Pattern A: Number + Shock**
+"[Number] seconds/ways/reasons [subject] [unexpected action]"
+Examples: "3 seconds is all this takes" | "5 reasons nobody tells you"
 
-Rules:
-- Sentence 1 = HOOK with numbers or "Did you know" (≤10 words).
-- Sentence 8 = soft CTA asking viewers' thoughts.
-- Focus on visually striking, filmable facts."""
+**Pattern B: Contradiction**
+"[Common belief] is wrong. Here's why"
+Examples: "You think you know this. You don't" | "Everything you learned is backwards"
+
+**Pattern C: Question Hook**
+"What if [surprising claim]?"
+Examples: "What if I told you this changes everything?"
+
+**Pattern D: Challenge**
+"Try to [action] before [time/condition]"
+Examples: "Try to spot the difference" | "Find the hidden detail"
+
+**Pattern E: POV/Relatability**
+"POV: You just [discovered/learned/realized] [X]"
+Examples: "POV: You finally understand" | "When you realize"
+
+**Pattern F: Mystery/Gap**
+"Nobody knows why [X]... until now"
+Examples: "The secret behind" | "What they don't show you"
+
+🧲 RETENTION ARCHITECTURE (Sentences 2-7):
+
+**Early (2-3): Build Intrigue**
+- Plant a question you'll answer later
+- Use: "But here's the crazy part"
+- Introduce contrast/surprise
+
+**Middle (4-5): Pattern Interrupt**
+- Break expected flow
+- Use: "Wait", "Stop", "Watch closely"
+- Visual cue: "Look at [specific element]"
+
+**Late (6-7): Climax**
+- Deliver on hook promise
+- Peak surprise/payoff
+- Use: "And that's not even..."
+
+📝 CTA (Sentence 8 - Last 3 Seconds):
+
+**Comment Bait** (universal):
+- "Which one surprised you?"
+- "A or B? Comment below"
+- "Did you catch it? Drop your answer"
+- "Agree or disagree?"
+
+⚡ UNIVERSAL RULES:
+- 6-12 words per sentence
+- Every sentence = ONE filmable action
+- NO: "it's interesting", "you won't believe", "subscribe/like"
+- Build: tension → peak → satisfying end
+- End HIGH (not fade out)
+
+Language: {lang}
+""",
+
+    "country_facts": """Create viral geographic/cultural facts.
+
+[Same structure as default but with]:
+- Focus on visual landmarks OR cultural elements
+- Hook patterns adapted for places/culture
+- Everything else stays universal
+
+Language: {lang}
+"""
 }
 
 BANNED_PHRASES = [
@@ -1204,14 +1396,99 @@ BANNED_PHRASES = [
     "keep watching", "stick around", "coming up",
 ]
 
-def _content_score(sentences: List[str]) -> float:
-    if not sentences: return 0.0
-    bad = 0
-    for s in sentences:
-        low = (s or "").lower()
-        if any(bp in low for bp in BANNED_PHRASES): bad += 1
-        if len(low.split()) < 5: bad += 0.5
-    return max(0.0, 10.0 - (bad * 1.4))
+def _universal_quality_score(sentences: List[str], title: str = "") -> dict:
+    """
+    Universal content quality scoring (works for ALL topics)
+    Returns: {quality: float, viral: float, retention: float}
+    """
+    text_all = (" ".join(sentences) + " " + title).lower()
+    
+    scores = {
+        'quality': 5.0,
+        'viral': 5.0,
+        'retention': 5.0
+    }
+    
+    # ===== QUALITY SIGNALS (Universal) =====
+    # Conciseness (short sentences = clearer)
+    avg_words = sum(len(s.split()) for s in sentences) / max(1, len(sentences))
+    if avg_words <= 12:
+        scores['quality'] += 1.5
+    elif avg_words > 15:
+        scores['quality'] -= 1.0
+    
+    # Specificity (numbers = concrete)
+    num_count = len(re.findall(r'\b\d+\b', text_all))
+    scores['quality'] += min(2.0, num_count * 0.5)
+    
+    # Active voice detection (verbs present)
+    action_verbs = len(re.findall(r'\b(is|does|makes|shows|reveals|changes|breaks|creates|moves|stops|starts|turns)\b', text_all))
+    scores['quality'] += min(1.5, action_verbs * 0.3)
+    
+    # ===== VIRAL SIGNALS (Universal) =====
+    # Hook strength (question/number in first sentence)
+    if sentences:
+        hook = sentences[0].lower()
+        if '?' in hook:
+            scores['viral'] += 1.0
+        if re.search(r'\b\d+\b', hook):
+            scores['viral'] += 0.8
+        if any(w in hook for w in ['secret', 'hidden', 'never', 'nobody', 'why', 'how']):
+            scores['viral'] += 0.6
+    
+    # Curiosity gap (unanswered questions)
+    question_marks = text_all.count('?')
+    scores['viral'] += min(1.2, question_marks * 0.4)
+    
+    # Emotional triggers (universal words)
+    triggers = ['shocking', 'insane', 'crazy', 'mind', 'unbelievable', 'secret', 'hidden']
+    scores['viral'] += sum(0.3 for t in triggers if t in text_all)
+    
+    # Contrast markers (creates tension)
+    contrasts = ['but', 'however', 'actually', 'surprisingly', 'turns out', 'wait']
+    scores['viral'] += sum(0.25 for c in contrasts if c in text_all)
+    
+    # ===== RETENTION SIGNALS (Universal) =====
+    # Pattern interrupts
+    interrupts = ['wait', 'stop', 'look', 'watch', 'check', 'see', 'notice']
+    scores['retention'] += sum(0.4 for i in interrupts if i in text_all)
+    
+    # Temporal cues (creates urgency)
+    temporal = ['now', 'right now', 'immediately', 'seconds', 'instantly']
+    scores['retention'] += sum(0.3 for t in temporal if t in text_all)
+    
+    # Visual references (guides attention)
+    visual_refs = ['look at', 'watch', 'see', 'notice', 'spot', 'check']
+    scores['retention'] += sum(0.35 for v in visual_refs if v in text_all)
+    
+    # Callback to hook (narrative closure)
+    if len(sentences) >= 2 and sentences[-1] and sentences[0]:
+        hook_words = set(sentences[0].lower().split()[:5])
+        end_words = set(sentences[-1].lower().split())
+        if hook_words & end_words:  # Overlap = callback
+            scores['retention'] += 1.0
+    
+    # ===== NEGATIVE SIGNALS (Universal) =====
+    # Generic filler
+    bad_words = ['interesting', 'amazing', 'great', 'nice', 'good', 'cool', 'awesome']
+    penalty = sum(0.5 for b in bad_words if b in text_all)
+    scores['quality'] -= penalty
+    scores['viral'] -= penalty
+    
+    # Meta references (breaks immersion)
+    meta = ['this video', 'in this', 'today we', 'i\'m going', 'we\'re going', 'subscribe', 'like']
+    meta_penalty = sum(0.6 for m in meta if m in text_all)
+    scores['retention'] -= meta_penalty
+    
+    # Too long (loses attention)
+    if any(len(s.split()) > 18 for s in sentences):
+        scores['retention'] -= 1.0
+    
+    # Normalize to 0-10
+    for key in scores:
+        scores[key] = max(0.0, min(10.0, scores[key]))
+    
+    return scores
 
 def _gemini_call(prompt: str, model: str, temp: float) -> dict:
     if not GEMINI_API_KEY: raise RuntimeError("GEMINI_API_KEY missing")
@@ -2012,91 +2289,133 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 
 # ==================== Long SEO Description ====================
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
+    """
+    Universal viral title & description generator (works for ALL topics)
+    """
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
     
-    # TITLE: Clickbait ama doğru formül
-    title_patterns = [
-        f"{hook} 🤯",
-        f"{hook} | You Won't Believe This",
-        f"The Truth About {topic}",
-        f"{topic}: {hook}",
-    ]
-    # En kısa ve etkili olanı seç
-    title = min(title_patterns, key=len)[:95]
+    # ===== DYNAMIC TITLE GENERATION (Topic-Agnostic) =====
+    # Extract key elements from content
+    numbers = re.findall(r'\d+', hook + " " + topic)
+    has_question = '?' in hook
+    has_negation = any(w in hook.lower() for w in ['no', 'not', 'never', 'nobody', 'nothing'])
     
-    para = " ".join(sentences)
+    # Get first noun/main keyword (generic extraction)
+    words = [w for w in topic.split() if len(w) >= 3 and w.lower() not in {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at'}]
+    main_keyword = words[0] if words else "This"
     
-    # SEO-focused description with keyword density
-    keyword = topic.lower()
+    # Universal emoji pool (works for any topic)
+    neutral_emojis = ['🤯', '😱', '🔥', '⚡', '✨', '💡', '👀', '🎯']
+    emoji = random.choice(neutral_emojis)
+    
+    # Universal title patterns (no topic-specific assumptions)
+    patterns = []
+    
+    if numbers:
+        patterns.extend([
+            f"{numbers[0]} Things About {main_keyword} That'll Blow Your Mind {emoji}",
+            f"{numbers[0]} {main_keyword} Facts You Didn't Know {emoji}",
+            f"Why {numbers[0]} Changes Everything About {main_keyword} {emoji}",
+        ])
+    
+    if has_question:
+        patterns.extend([
+            f"{hook} {emoji}",
+            f"{hook.replace('?', '')} {emoji}",
+        ])
+    
+    if has_negation:
+        patterns.extend([
+            f"{hook} {emoji}",
+            f"The {main_keyword} Truth Nobody Tells You {emoji}",
+        ])
+    
+    # Generic fallbacks (always work)
+    patterns.extend([
+        f"{hook} {emoji}",
+        f"Wait Until You See This About {main_keyword} {emoji}",
+        f"The {main_keyword} Secret {emoji}",
+        f"{main_keyword}: You Won't Believe This {emoji}",
+        f"This {main_keyword} Fact Will Change You {emoji}",
+        f"POV: You Just Learned About {main_keyword} {emoji}",
+    ])
+    
+    # Pick shortest that fits YouTube limit
+    title = None
+    for p in patterns:
+        if len(p) <= 95:
+            title = p
+            break
+    if not title:
+        title = patterns[0][:92] + "..."
+    
+    # ===== UNIVERSAL DESCRIPTION (Works for All Topics) =====
+    keyword = main_keyword.lower()
+    
+    # Dynamic intro (adapts to content)
     explainer = (
-        f"🎬 {para}\n\n"
-        f"In this short, we explore {keyword} in a way that's visual, engaging, and unforgettable. "
-        f"Learn about {keyword} through clear scenes that stick in your memory. "
-        f"Whether you're curious about {keyword} or just love quick knowledge, this is for you.\n\n"
+        f"🎬 {' '.join(sentences[:2])}\n\n"
+        f"Quick breakdown of {keyword} in under 60 seconds. "
+        f"Perfect for curious minds! 🧠\n\n"
     )
     
-    # Key takeaways with emojis
-    takeaways = "📌 Key Points:\n" + "\n".join([f"• {s}" for s in sentences[:6]])
+    # Key points (universal formatting)
+    takeaways = "📌 Key Points:\n"
+    emoji_bullets = ["🔹", "💡", "⚡", "✨", "🎯", "🔥", "💥", "🌟"]
+    for i, s in enumerate(sentences[:6]):
+        emoji = emoji_bullets[i % len(emoji_bullets)]
+        takeaways += f"{emoji} {s}\n"
     
-    # Why watch section
+    # Why watch (universal hook)
     why_watch = (
-        f"\n\n💡 Why This Matters:\n"
-        f"Understanding {keyword} helps you see the world differently. "
-        f"Each visual in this short reinforces one core idea about {keyword}, "
-        f"making complex topics simple and memorable.\n\n"
+        f"\n💭 Why Watch:\n"
+        f"Clear visuals + concise facts = instant understanding. "
+        f"Each scene reinforces one idea. Watch till the end! {emoji}\n\n"
     )
     
-    # Strong CTA
+    # Universal CTA
     cta_section = (
-        f"🔔 Want more shorts about {keyword}?\n"
-        f"→ Subscribe for daily visual explainers\n"
-        f"→ Comment your thoughts on {keyword} below\n"
-        f"→ Share with someone who'd love learning about {keyword}\n\n"
+        f"👇 Take Action:\n"
+        f"🔔 Subscribe for daily shorts\n"
+        f"💬 Share your thoughts below\n"
+        f"🔄 Send this to someone\n"
+        f"📲 Save for later\n\n"
     )
     
-    # Generate rich tags
+    # Universal hashtag strategy
     tagset = []
-    # Primary keyword variations
-    for word in topic.split()[:3]:
+    
+    # Extract main keywords (max 3)
+    for word in words[:3]:
         if len(word) >= 3:
             tagset.append(f"#{word.lower()}")
     
-    # Category tags
-    tagset += ["#shorts", "#viral", "#trending", "#educational", "#visuallearning", 
-               "#quickfacts", "#knowledge", "#mindblown", "#satisfying"]
+    # Universal viral tags (work for everything)
+    universal_tags = [
+        "#shorts", "#viral", "#trending", "#fyp", 
+        "#educational", "#mindblown", "#didyouknow", 
+        "#facts", "#learnontiktok", "#quicklearn"
+    ]
+    tagset.extend(universal_tags)
     
-    # Topic-specific tags
+    # Topic-specific tags (if provided)
     if tags:
-        for t in tags[:15]:
-            tclean = re.sub(r"[^A-Za-z0-9]+","", t).lower()
-            if tclean and len(tclean) >= 3 and ("#"+tclean) not in tagset: 
+        for t in tags[:12]:
+            tclean = re.sub(r"[^A-Za-z0-9]+", "", t).lower()
+            if tclean and len(tclean) >= 3 and ("#"+tclean) not in tagset:
                 tagset.append("#"+tclean)
     
-    # Combine everything
+    # Combine
     body = explainer + takeaways + why_watch + cta_section + " ".join(tagset[:30])
     
-    if len(body) > 4900: 
+    if len(body) > 4900:
         body = body[:4900] + "..."
     
-    # YouTube tags (without #)
-    yt_tags = []
-    for h in tagset:
-        k = h[1:]  # Remove #
-        if k and k not in yt_tags: 
-            yt_tags.append(k)
-        if len(yt_tags) >= 25:  # YouTube allows up to 500 chars total
-            break
+    # YouTube tags
+    yt_tags = [h[1:] for h in tagset if h][:30]
+    yt_tags.extend(["shorts", "viral", "trending", "educational"])
     
-    # Add long-tail keywords
-    yt_tags.extend([
-        f"{topic} explained",
-        f"{topic} facts",
-        f"{topic} visual",
-        "educational shorts",
-        "quick learning"
-    ])
-    
-    return title, body, yt_tags[:30]
+    return title, body, list(dict.fromkeys(yt_tags))[:30]
 
 # ==================== HOOK/CTA cilası ====================
 HOOK_MAX_WORDS = _env_int("HOOK_MAX_WORDS", 10)
@@ -2392,15 +2711,19 @@ def main():
                 except Exception as e:
                     print(f"⚠️ SG entity check skipped: {e}")
 
-        score = _content_score(sents)
-        print(f"📝 Content: {tpc} | {len(sents)} lines | score={score:.2f}")
-        if score > best_score:
-            best = (tpc, sents, search_terms, ttl, desc, tags, selected_search_term_final, focus)
-            best_score = score
-        if score >= 7.2 and ok:
+        scores = _universal_quality_score(sents, ttl)
+        quality = scores['quality']
+        viral = scores['viral']
+        retention = scores['retention']
+        overall = (quality * 0.4 + viral * 0.35 + retention * 0.25)
+        
+        print(f"📝 Content: {tpc} | {len(sents)} lines")
+        print(f"   📊 Quality={quality:.1f} | Viral={viral:.1f} | Retention={retention:.1f} | Overall={overall:.1f}")
+        
+        if overall >= 7.0 and quality >= 6.5:
             break
         else:
-            print("⚠️ Low content score → rebuilding…")
+            print(f"⚠️ Low scores → rebuilding…")
             banlist = [tpc] + banlist
             time.sleep(0.5)
 
@@ -2713,6 +3036,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
