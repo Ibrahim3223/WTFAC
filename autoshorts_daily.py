@@ -1154,6 +1154,16 @@ Rules:
 - Focus on visually striking, filmable facts."""
 }
 
+BANNED_PHRASES = [
+    "one clear tip", "see it", "learn it", "plot twist",
+    "soap-opera narration", "repeat once", "takeaway action",
+    "in 60 seconds", "just the point", "crisp beats",
+    "sum it up", "watch till the end", "mind-blowing fact",
+    "you won't believe", "wait for it", "mind blown",
+    "this will shock you", "number will surprise",
+    "keep watching", "stick around", "coming up",
+]
+
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
     bad = 0
@@ -2668,6 +2678,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
