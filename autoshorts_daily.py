@@ -2404,17 +2404,22 @@ def main():
     need_clips = max(6, min(12, int(os.getenv("SCENE_COUNT", "8"))))
 
     if os.getenv("SCENE_STRATEGY","topic_only").lower() == "topic_only":
-        pool: List[Tuple[int,str]] = build_pool_topic_only(
+        pool: List[Tuple[int,str]] = build_pexels_pool(
             focus=(focus or tpc),
             search_terms=(search_terms or user_terms or []),
             need=need_clips,
             rotation_seed=ROTATION_SEED
         )
     else:
-        # Eski davranış (hybrid/per-scene)
-        per_scene_queries = build_per_scene_queries([m[0] for m in metas], (search_terms or user_terms or []), topic=tpc)
+        # Eski davranış (hybrid/per-scene) - artık kullanılmıyor
+        per_scene_queries = build_per_scene_queries(
+            [m[0] for m in metas], 
+            (search_terms or user_terms or []), 
+            topic=tpc
+        )
         print("🔎 Per-scene queries:")
-        for q in per_scene_queries: print(f"   • {q}")
+        for q in per_scene_queries: 
+            print(f"   • {q}")
         pool: List[Tuple[int,str]] = build_pexels_pool(
             focus=focus,
             search_terms=(search_terms or user_terms or []),
@@ -2422,19 +2427,9 @@ def main():
             rotation_seed=ROTATION_SEED
         )
 
+    # İlk kontrol
     if not pool:
         raise RuntimeError("Pexels: no suitable clips (after all fallbacks).")
-
-    # ENTITY-FIRST havuz
-    pool: List[Tuple[int,str]] = build_pexels_pool(
-        topic=tpc,
-        sentences=[m[0] for m in metas],
-        search_terms=(search_terms or user_terms or []),
-        need=need_clips,
-        rotation_seed=ROTATION_SEED
-    )
-    if not pool:
-        raise RuntimeError("Pexels/Pixabay: no suitable clips (after entity-first fallback).")
 
     # NoveltyGuard PEXELS tekrar filtresi (SQLite state)
     try:
@@ -2678,6 +2673,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
