@@ -224,27 +224,35 @@
     "ts": "2025-10-10T16:51:49.210165"
   },
   {
-    "channel": "Kitchen Logic Lab",
+    "channel": "Focus Rituals",
     "entity": "think",
-    "content_hash": "0a3f3d9d0a91cb43a70517ed142e25000cf7ddff",
-    "title": "60 Things About Practical That'll Blow Your Mind ✨",
-    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251010_165825.mp4",
-    "ts": "2025-10-10T16:58:28.576224"
+    "content_hash": "97bc700a80351b37626ea48e4eaf05353ce19d95",
+    "title": "You think you need more to focus effectively 🔥",
+    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251010_165746.mp4",
+    "ts": "2025-10-10T16:57:49.162392"
   },
   {
-    "channel": "Wild Pattern Atlas",
-    "entity": "texture",
-    "content_hash": "ff89ba424e92e08dd5191b11325c3fa0ba9c3f89",
-    "title": "You think a feather is just soft. It's ✨",
-    "video_path": "out/Wild Pattern Atlas_The_Science_of_Natural_Textures_20251010_170557.mp4",
-    "ts": "2025-10-10T17:05:59.930223"
+    "channel": "Timelapse Lab",
+    "entity": "plant",
+    "content_hash": "3939d8dc5dfe4f7eae683ecb68c8cbbd5a7bb768",
+    "title": "What if plants moved faster than you think 💡",
+    "video_path": "out/Timelapse Lab_Visual_Science_Through_Time_20251010_170413.mp4",
+    "ts": "2025-10-10T17:04:17.171883"
   },
   {
-    "channel": "Bridge & Tunnel Atlas",
-    "entity": "bridge",
-    "content_hash": "565d06900260acfaeb3733c21d04f08180c460dc",
-    "title": "60 Things About Beautiful That'll Blow Your Mind 🎯",
-    "video_path": "out/Bridge & Tunnel Atlas_Beautiful_Crossings_Explained_in_60s_20251010_171434.mp4",
-    "ts": "2025-10-10T17:14:37.724664"
+    "channel": "LightCraft Studio",
+    "entity": "wash",
+    "content_hash": "dc3e1a656fed76a03b250e0453c00c3b2c496900",
+    "title": "What if one subtle light could make your ⚡",
+    "video_path": "out/LightCraft Studio_One_Minute_Lighting_for_Real_Rooms_20251010_171107.mp4",
+    "ts": "2025-10-10T17:11:10.776115"
+  },
+  {
+    "channel": "Pet Inner Monologue",
+    "entity": "every",
+    "content_hash": "a3c199c0921d09a11ec235f95bdba9c628c0b5f3",
+    "title": "What if every human sound held a secret ✨",
+    "video_path": "out/Pet Inner Monologue_Cats_Dogs_Captioned_Thoughts_20251010_171710.mp4",
+    "ts": "2025-10-10T17:17:13.048977"
   }
 ]
