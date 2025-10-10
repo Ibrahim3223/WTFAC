@@ -690,58 +690,29 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
 
     # ===== UNIVERSAL SSML ENHANCEMENT =====
     use_ssml = os.getenv("TTS_SSML", "1") == "1"
+    original_text = text  # Backup for word boundaries
     
     if use_ssml:
-        # Numbers → always emphasize (works for any topic)
-        text = re.sub(r'\b(\d+)\b', r'<emphasis level="strong">\1</emphasis>', text)
+        # ⚠️ Edge-TTS SSML support is LIMITED and UNRELIABLE
+        # Better approach: Clean enhancement without breaking TTS
         
-        # Question words → pitch up (universal)
-        text = re.sub(
-            r'\b(Why|What|How|When|Where|Who|Which)\b', 
-            r'<prosody pitch="+5%">\1</prosody>', 
-            text, flags=re.IGNORECASE
-        )
+        # Numbers → keep as-is (no SSML needed, naturally emphasized)
+        # Just mark them for potential future use
+        has_numbers = bool(re.search(r'\b\d+\b', text))
         
-        # Exclamation → volume up (universal emotion)
-        if '!' in text:
-            parts = text.split('!')
-            enhanced = []
-            for i, part in enumerate(parts):
-                if i < len(parts) - 1:
-                    enhanced.append(f'<prosody volume="+10%">{part}</prosody>!')
-                else:
-                    enhanced.append(part)
-            text = ''.join(enhanced)
-        
-        # Contrast words → pause before (universal drama)
-        contrast_words = ['but', 'however', 'although', 'yet', 'still', 'despite', 'actually']
-        for word in contrast_words:
-            text = re.sub(
-                rf'\b({word})\b', 
-                rf'<break time="150ms"/>\1', 
-                text, flags=re.IGNORECASE
-            )
-        
-        # Action verbs → moderate stress (universal energy)
-        action_pattern = r'\b(makes|shows|reveals|changes|stops|starts|turns|becomes|creates|breaks|moves)\b'
-        text = re.sub(
-            action_pattern, 
-            r'<emphasis level="moderate">\1</emphasis>', 
-            text, flags=re.IGNORECASE
-        )
-        
-        # Final sentence → slight slowdown (universal closure)
-        sentences_split = re.split(r'[.!?]', text)
-        if len(sentences_split) > 1 and sentences_split[-2].strip():
-            last = sentences_split[-2].strip()
-            # Sadece ilk bulduğunu değiştir
-            text = text.replace(last, f'<prosody rate="-5%">{last}</prosody>', 1)
+        # ⚠️ DISABLE SSML - Edge-TTS doesn't parse it reliably in all voices
+        # Instead, rely on natural prosody and rate adjustment
+        use_ssml = False  # Force disable
+    
+    # Clean text (no SSML tags - Edge-TTS will use natural prosody)
+    clean_text = re.sub(r'<[^>]+>', '', text)  # Remove any existing tags
+    clean_text = clean_text.strip()
 
     mp3 = wav_out.replace(".wav", ".mp3")
     
     # TTS hızı ENV'den (workflow'da kontrol edilir)
-    rate_env = os.getenv("TTS_RATE", "+10%")
-    atempo = _rate_to_atempo(rate_env, default=1.10)
+    rate_env = os.getenv("TTS_RATE", "+12%")
+    atempo = _rate_to_atempo(rate_env, default=1.12)
     
     available = VOICE_OPTIONS.get(LANG, ["en-US-JennyNeural"])
     selected_voice = VOICE if VOICE in available else available[0]
@@ -750,7 +721,8 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
     
     # TRY 1: Edge-TTS stream (word boundaries ile)
     try:
-        marks = _edge_stream_tts(text, selected_voice, rate_env, mp3)
+        # Use clean text without SSML
+        marks = _edge_stream_tts(clean_text, selected_voice, rate_env, mp3)
         run([
             "ffmpeg","-y","-hide_banner","-loglevel","error",
             "-i", mp3,
@@ -760,9 +732,8 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, marks, dur)
-        ssml_status = "SSML" if use_ssml else "plain"
-        print(f"   TTS: {len(words)} words | {dur:.2f}s | atempo={atempo:.2f} | {ssml_status}")
+        words = _merge_marks_to_words(clean_text, marks, dur)
+        print(f"   TTS: {len(words)} words | {dur:.2f}s | atempo={atempo:.2f}")
         return dur, words
         
     except WSServerHandshakeError as e:
@@ -774,7 +745,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
     # FALLBACK 1: Edge-TTS save (no marks)
     try:
         async def _edge_save_simple():
-            comm = edge_tts.Communicate(text, voice=selected_voice, rate=rate_env)
+            comm = edge_tts.Communicate(clean_text, voice=selected_voice, rate=rate_env)
             await comm.save(mp3)
         
         try:
@@ -793,7 +764,7 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
         ])
         pathlib.Path(mp3).unlink(missing_ok=True)
         dur = ffprobe_dur(wav_out) or 0.0
-        words = _merge_marks_to_words(text, [], dur)
+        words = _merge_marks_to_words(clean_text, [], dur)
         print(f"   TTS (no marks): {len(words)} words | {dur:.2f}s | atempo={atempo:.2f}")
         return dur, words
         
@@ -802,9 +773,6 @@ def tts_to_wav(text: str, wav_out: str) -> Tuple[float, List[Tuple[str,float]]]:
 
     # FALLBACK 2: Google TTS (no marks, no SSML support)
     try:
-        # SSML etiketlerini temizle (Google desteklemiyor)
-        clean_text = re.sub(r'<[^>]+>', '', text) if use_ssml else text
-        
         q = requests.utils.quote(clean_text.replace('"','').replace("'",""))
         lang_code = LANG or "en"
         url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
@@ -1233,27 +1201,42 @@ def concat_videos_filter(files: List[str], outp: str):
     ])
 
 def overlay_cta_tail(video_in: str, text: str, outp: str, show_sec: float, font: str):
+    """CTA overlay at end of video (with fallback if drawtext unavailable)"""
     vdur = ffprobe_dur(video_in)
     if vdur <= 0.1 or not text.strip():
         pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
         return
+    
+    # Check if drawtext is available
+    if not _HAS_DRAWTEXT:
+        print("⚠️ drawtext not available, skipping CTA overlay")
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
+        return
+    
     t0 = max(0.0, vdur - max(0.8, show_sec))
     tf = str(pathlib.Path(outp).with_suffix(".cta.txt"))
     wrapped = wrap_mobile_lines(text.upper(), max_line_length=26, max_lines=3)
     pathlib.Path(tf).write_text(wrapped, encoding="utf-8")
+    
     font_arg = f":fontfile={_ff_sanitize_font(font)}" if font else ""
     common = f"textfile='{tf}':fontsize=52:x=(w-text_w)/2:y=h*0.18:line_spacing=10"
     box    = f"drawtext={common}{font_arg}:fontcolor=white@0.0:box=1:boxborderw=18:boxcolor=black@0.55:enable='gte(t,{t0:.3f})'"
     main   = f"drawtext={common}{font_arg}:fontcolor={_ff_color('#3EA6FF')}:borderw=5:bordercolor=black@0.9:enable='gte(t,{t0:.3f})'"
     vf     = f"{box},{main},setsar=1,fps={TARGET_FPS},setpts=N/{TARGET_FPS}/TB"
-    run([
-        "ffmpeg","-y","-hide_banner","-loglevel","error",
-        "-i", video_in, "-vf", vf,
-        "-r", str(TARGET_FPS), "-vsync","cfr",
-        "-an","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
-        "-pix_fmt","yuv420p","-movflags","+faststart", outp
-    ])
-    pathlib.Path(tf).unlink(missing_ok=True)
+    
+    try:
+        run([
+            "ffmpeg","-y","-hide_banner","-loglevel","error",
+            "-i", video_in, "-vf", vf,
+            "-r", str(TARGET_FPS), "-vsync","cfr",
+            "-an","-c:v","libx264","-preset","medium","-crf",str(CRF_VISUAL),
+            "-pix_fmt","yuv420p","-movflags","+faststart", outp
+        ])
+    except Exception as e:
+        print(f"⚠️ CTA overlay failed: {e} - using video without CTA")
+        pathlib.Path(outp).write_bytes(pathlib.Path(video_in).read_bytes())
+    finally:
+        pathlib.Path(tf).unlink(missing_ok=True)
 
 # ==================== Audio concat (lossless) ====================
 def concat_audios(files: List[str], outp: str):
@@ -3088,6 +3071,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
