@@ -72,11 +72,11 @@
     "ts": "2025-10-10T02:08:10.930888"
   },
   {
-    "channel": "MicroNature Minute",
-    "entity": "forest",
-    "content_hash": "2d96053c5f303e1000205f89da72289dc820db60",
-    "title": "Did you know trees talk through underground networks",
-    "video_path": "out/MicroNature Minute_Tiny_Ecosystems_Macro_Nature_Facts_20251010_021412.mp4",
-    "ts": "2025-10-10T02:14:15.419019"
+    "channel": "Weather Window 60",
+    "entity": "cloud",
+    "content_hash": "a6552ac70a647af8b692c2989f0c836d79af67bc",
+    "title": "What causes that terrifying shelf cloud before a storm",
+    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251010_021456.mp4",
+    "ts": "2025-10-10T02:14:59.949976"
   }
 ]
