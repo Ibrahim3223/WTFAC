@@ -1128,35 +1128,31 @@ ENHANCED_GEMINI_TEMPLATES = {
     "_default": """Create a 25–40s YouTube Short.
 Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
 
-FOCUS RULE:
-- 'focus' MUST be 1–3 words naming the main subject for visuals (e.g., "chameleon", "Japan", "iPhone screen").
-- Keep it concrete and searchable; no verbs or filler.
+FOCUS RULE (CRITICAL):
+- 'focus' MUST be ONE specific, visual, searchable keyword that DOMINATES the entire video.
+- Examples: "chameleon", "octopus", "Dubai", "iPhone screen", "volcanic eruption"
+- This focus will be used to find ALL video clips, so make it concrete and abundant in stock footage.
+- DO NOT use abstract concepts like "innovation" or "transformation" - use physical subjects.
 
 CONTENT RULES:
-- Stay laser-focused on the provided TOPIC (no pivoting).
-- Sentence 1 = a punchy HOOK (≤10 words, question/bold claim).
-- Sentence 8 = a SOFT CTA for comments (no 'subscribe/like').
-- 6–12 words per sentence; no numbering; visual, concrete beats.""",
+- Sentence 1 = POWERFUL HOOK using numbers, "Why", "How", "Secret", or shocking claim (≤10 words).
+- Sentence 8 = soft CTA asking for comments/thoughts (no 'subscribe/like').
+- All 6-8 sentences should describe visual aspects of the FOCUS keyword.
+- Each sentence should be filmable with stock footage of the focus subject.""",
 
     "country_facts": """Create amazing country/city facts.
 Return STRICT JSON with keys: topic, focus, sentences (7–8), search_terms (4–10), title, description, tags.
 
-FOCUS RULE:
-- 'focus' should be the country or city name (e.g., "Japan", "Tokyo").
+FOCUS RULE (CRITICAL):
+- 'focus' should be the country/city name OR its most iconic visual landmark.
+- Examples: "Tokyo", "Eiffel Tower", "Great Wall", "Venice canals"
+- Pick something with abundant stock footage.
 
 Rules:
-- Sentence 1 is a short HOOK (≤10 words).
-- Sentence 8 is a soft CTA (no 'subscribe/like').
-- Each fact must be specific & visual. 6–12 words per sentence."""
+- Sentence 1 = HOOK with numbers or "Did you know" (≤10 words).
+- Sentence 8 = soft CTA asking viewers' thoughts.
+- Focus on visually striking, filmable facts."""
 }
-
-# Cümlenin kalitesini düşüren klişeler (içerik skoru için)
-BANNED_PHRASES = [
-    "one clear tip", "see it", "learn it", "plot twist",
-    "soap-opera narration", "repeat once", "takeaway action",
-    "in 60 seconds", "just the point", "crisp beats",
-    "sum it up", "watch till the end", "mind-blowing fact",
-]
 
 def _content_score(sentences: List[str]) -> float:
     if not sentences: return 0.0
@@ -1209,54 +1205,45 @@ def _derive_terms_from_text(topic: str, sentences: List[str]) -> List[str]:
     return _terms_normalize(base)[:8]
 
 def build_via_gemini(channel_name: str, topic_lock: str, user_terms: List[str], banlist: List[str]):
-    tpl_key = _select_template_key(topic_lock)
-    template = ENHANCED_GEMINI_TEMPLATES[tpl_key]
-    avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
-    terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
-    extra = (("\nADDITIONAL STYLE:\n"+GEMINI_PROMPT) if GEMINI_PROMPT else "")
-
-    guardrails = """
-RULES (MANDATORY):
-- STAY ON TOPIC exactly as provided.
-- Return ONLY JSON, no prose/markdown.
-- Keys required: topic, focus, sentences, search_terms, title, description, tags."""
-    jitter = ((ROTATION_SEED or int(time.time())) % 13) * 0.01
-    temp = max(0.6, min(1.2, GEMINI_TEMP + (jitter - 0.06)))
-
+    # ... mevcut kod ...
+    
     prompt = f"""{template}
 
 Channel: {channel_name}
 Language: {LANG}
 TOPIC (hard lock): {topic_lock}
+
+🎯 CRITICAL: Determine ONE main visual focus keyword that:
+1. Has abundant stock footage (animals, landmarks, objects, NOT concepts)
+2. Can be filmed from multiple angles
+3. Appears naturally when searching on Pexels/Pixabay
+4. Example good focuses: "octopus", "Tokyo tower", "lightning storm", "gears mechanism"
+5. Example BAD focuses: "innovation", "success", "happiness" (too abstract)
+
 Seed search terms (use and expand): {terms_hint}
 Avoid overlap for 180 days:
 {avoid}{extra}
 {guardrails}
 """
+    
     data = _gemini_call(prompt, GEMINI_MODEL, temp)
-
-    # Parse & normalize
-    topic   = topic_lock
-    sentences = [clean_caption_text(s) for s in (data.get("sentences") or [])]
-    sentences = [s for s in sentences if s][:8]
-
-    terms = data.get("search_terms") or []
-    if isinstance(terms, str): terms=[terms]
-    terms = _terms_normalize(terms)
-    if user_terms:
-        seed = _terms_normalize(user_terms)
-        terms = _terms_normalize(seed + terms)
-
-    title = (data.get("title") or "").strip()
-    desc  = (data.get("description") or "").strip()
-    tags  = [t.strip() for t in (data.get("tags") or []) if isinstance(t,str) and t.strip()]
-
+    
+    # ... parsing ...
+    
     focus = (data.get("focus") or "").strip()
     if not focus:
-        # Fallback: title -> topic
+        # Fallback: title'dan çıkar
         focus = (title or data.get("topic") or topic_lock).strip()
-    focus = _simplify_query(focus, keep=3)  # 1–3 kelime
-
+    
+    # Focus'u temizle ve basitleştir (1-2 kelime maks)
+    focus = _simplify_query(focus, keep=2)
+    
+    # Eğer hâlâ çok generic ise search_terms'den al
+    if not focus or focus in ["great", "thing", "concept", "idea"]:
+        focus = (terms[0] if terms else _simplify_query(topic_lock, keep=1))
+    
+    print(f"🎯 Extracted FOCUS: '{focus}'")
+    
     return topic, sentences, terms, title, desc, tags, focus
 # --- Regenerate helper (novelty guard önerilerine göre) ---
 def regenerate_with_llm(topic_lock: str, seed_term: Optional[str], avoid_list: List[str], base_user_terms: List[str], banlist: List[str]):
@@ -1752,83 +1739,81 @@ def _entity_topic_queries(topic: str, ent: str, lang: str, user_terms: List[str]
 
 def build_pexels_pool(topic: str, sentences: List[str], search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
     """
-    ENTITY-FIRST + STRICT:
-      - Locale önceliği: en-US (daha zengin veri)
-      - Puanlama: sayfa slug + link, eş-anlam 2x
-      - strict: eş-anlamla kesişmeyen sonuçları ele
-      - Yetersizse popular ve Pixabay ile tamamla
+    FOCUS-FIRST STRATEGY:
+    Tüm videolar tek bir ana keyword etrafında toplanır.
     """
     random.seed(rotation_seed or int(time.time()))
-    # en-US öncelik → TR ise ikinci turda TR denenir
-    locales_try = ["en-US"]
-    if LANG.startswith("tr"):
-        locales_try.append("tr-TR")
-
+    
+    # EN-US öncelik (daha zengin içerik)
+    locale = "en-US"
     block = _blocklist_get_pexels()
-    ent = _derive_focus_entity(topic, MODE, sentences)
-    syns = _entity_synonyms(ent, LANG) if ent else []
+    
+    # Ana focus keyword'ü belirle (Gemini'den gelmeli)
+    main_focus = search_terms[0] if search_terms else _simplify_query(topic, keep=1)
+    
+    # Synonyms ve variations
+    syns = _entity_synonyms(main_focus, LANG) if main_focus else []
     syn_tokens = set(re.findall(r"[a-z0-9]+", " ".join(syns).lower()))
-    strict_mode = ENTITY_VISUAL_STRICT and bool(syn_tokens)
-
-    # Kısa, temiz sorgular (eş-anlamlar + topic)
-    queries = _entity_topic_queries(topic, ent, LANG, search_terms)
-
+    
+    # SADECE main focus ve synonyms ile ara
+    queries = [main_focus] + syns[:5]  # Maksimum 6 farklı sorgu
+    
+    print(f"🎯 FOCUS-FIRST: Main keyword = '{main_focus}' | Synonyms = {syns[:3]}")
+    
     pool: List[Tuple[int,str]] = []
-    target_gather = max(need * 3, 24)
-
-    # 1) Pexels search (çok sayfa, çok locale)
+    target = need * 4  # Bol havuz oluştur
+    
+    # 1) Ana focus ile DEEP search (birçok sayfa)
     for q in queries:
         qtokens = set(re.findall(r"[a-z0-9]+", q.lower()))
-        merged_items: List[Tuple[int, str, int, int, float]] = []
-        for loc in locales_try:
-            for page in (1, 2, 3, 4, 5):
-                merged_items += _pexels_search(q, loc, page=page, per_page=PEXELS_PER_PAGE)
-                if len(merged_items) >= target_gather:
-                    break
-            if len(merged_items) >= target_gather:
+        merged = []
+        
+        # Daha fazla sayfa tara
+        for page in range(1, 8):  # 7 sayfaya kadar
+            merged += _pexels_search(q, locale, page=page, per_page=80)
+            if len(merged) >= target:
                 break
-
-        ranked = _rank_and_dedup(merged_items, qtokens, block, syn_tokens=syn_tokens, strict=strict_mode)
-        pool += ranked[:max(6, need)]
-        if len(pool) >= target_gather:
+        
+        # Strict ranking: SADECE focus ile ilgili olanlar
+        ranked = _rank_and_dedup(
+            merged, qtokens, block, 
+            syn_tokens=syn_tokens, 
+            strict=True  # Synonym ile kesişmeyen ELENIR
+        )
+        
+        pool += ranked
+        if len(pool) >= target:
             break
-
-    # 2) Eksikse Pexels popular (en-öncelikli)
+        
+        print(f"   Query '{q}': found {len(ranked)} clips")
+    
+    # 2) Hâlâ eksikse popular'dan SADECE focus-matching olanları al
     if len(pool) < need:
-        merged=[]
-        for loc in locales_try:
-            for page in (1,2,3):
-                merged += _pexels_popular(loc, page=page, per_page=50)
-                if len(merged) >= target_gather:
-                    break
-            if len(merged) >= target_gather:
-                break
-        pop_rank = _rank_and_dedup(merged, set(), block, syn_tokens=syn_tokens, strict=strict_mode)
+        print(f"   ⚠️ Need more clips, checking popular...")
+        merged = []
+        for page in range(1, 4):
+            merged += _pexels_popular(locale, page=page, per_page=80)
+        
+        # Strict filter
+        pop_rank = _rank_and_dedup(merged, syn_tokens, block, syn_tokens=syn_tokens, strict=True)
         pool += pop_rank[:max(0, need*2 - len(pool))]
-
-    # 3) Hâlâ azsa Pixabay — eş-anlam STRICT
+    
+    # 3) Son çare: Pixabay ama yine strict
     if len(pool) < need:
-        pix_q = (queries[0] if queries else _simplify_query(topic, keep=1)) or (syns[0] if syns else "macro detail")
-        # en-US ağırlıklı
-        pix = _pixabay_fallback(pix_q, need*2, "en-US", syn_tokens=syn_tokens, strict=strict_mode)
+        print(f"   ⚠️ Using Pixabay fallback...")
+        pix = _pixabay_fallback(main_focus, need*2, locale, syn_tokens=syn_tokens, strict=True)
         pool += [(vid, link) for (vid, link) in pix]
-
-    # 4) Dedup + blocklist sonrası + coverage kontrol
+    
+    # Dedup ve fresh prioritize
     seen=set(); dedup=[]
     for vid, link in pool:
-        if vid in seen:
-            continue
+        if vid in seen: continue
         seen.add(vid); dedup.append((vid, link))
-
+    
     fresh = [(vid,link) for vid,link in dedup if vid not in block]
-    rest  = [(vid,link) for vid,link in dedup if vid in block]
-    final = fresh + rest
-
-    if syns:
-        final = _ensure_entity_coverage(final, need, "en-US", syns)
-
-    final = final[:max(need, len(sentences))]
-    print(f"   Pexels candidates (entity-first/strict): q={len(queries)} | pool={len(final)} (fresh={len(fresh)}) | ent={ent or '∅'} | strict={strict_mode}")
+    final = fresh[:need*2]  # Bol marjla döndür
+    
+    print(f"   ✅ Final pool: {len(final)} clips (all related to '{main_focus}')")
     return final
 
 def build_pool_topic_only(focus: str, search_terms: List[str], need: int, rotation_seed: int = 0) -> List[Tuple[int,str]]:
@@ -1920,36 +1905,90 @@ def upload_youtube(video_path: str, meta: dict) -> str:
 # ==================== Long SEO Description ====================
 def build_long_description(channel: str, topic: str, sentences: List[str], tags: List[str]) -> Tuple[str, str, List[str]]:
     hook = (sentences[0].rstrip(" .!?") if sentences else topic or channel)
-    title = (hook[:1].upper() + hook[1:])[:95]
+    
+    # TITLE: Clickbait ama doğru formül
+    title_patterns = [
+        f"{hook} 🤯",
+        f"{hook} | You Won't Believe This",
+        f"The Truth About {topic}",
+        f"{topic}: {hook}",
+    ]
+    # En kısa ve etkili olanı seç
+    title = min(title_patterns, key=len)[:95]
+    
     para = " ".join(sentences)
+    
+    # SEO-focused description with keyword density
+    keyword = topic.lower()
     explainer = (
-        f"{para} "
-        f"This short explores “{topic}” with clear, visual steps so you can grasp it at a glance. "
-        f"Rewatch to catch tiny details, save for later, and share with someone who’ll enjoy it."
+        f"🎬 {para}\n\n"
+        f"In this short, we explore {keyword} in a way that's visual, engaging, and unforgettable. "
+        f"Learn about {keyword} through clear scenes that stick in your memory. "
+        f"Whether you're curious about {keyword} or just love quick knowledge, this is for you.\n\n"
     )
+    
+    # Key takeaways with emojis
+    takeaways = "📌 Key Points:\n" + "\n".join([f"• {s}" for s in sentences[:6]])
+    
+    # Why watch section
+    why_watch = (
+        f"\n\n💡 Why This Matters:\n"
+        f"Understanding {keyword} helps you see the world differently. "
+        f"Each visual in this short reinforces one core idea about {keyword}, "
+        f"making complex topics simple and memorable.\n\n"
+    )
+    
+    # Strong CTA
+    cta_section = (
+        f"🔔 Want more shorts about {keyword}?\n"
+        f"→ Subscribe for daily visual explainers\n"
+        f"→ Comment your thoughts on {keyword} below\n"
+        f"→ Share with someone who'd love learning about {keyword}\n\n"
+    )
+    
+    # Generate rich tags
     tagset = []
-    base_terms = [w for w in re.findall(r"[A-Za-z]{3,}", (topic or ""))][:5]
-    for t in base_terms: tagset.append("#" + t.lower())
-    tagset += ["#shorts", "#learn", "#visual", "#broll", "#education"]
+    # Primary keyword variations
+    for word in topic.split()[:3]:
+        if len(word) >= 3:
+            tagset.append(f"#{word.lower()}")
+    
+    # Category tags
+    tagset += ["#shorts", "#viral", "#trending", "#educational", "#visuallearning", 
+               "#quickfacts", "#knowledge", "#mindblown", "#satisfying"]
+    
+    # Topic-specific tags
     if tags:
-        for t in tags[:10]:
+        for t in tags[:15]:
             tclean = re.sub(r"[^A-Za-z0-9]+","", t).lower()
-            if tclean and ("#"+tclean) not in tagset: tagset.append("#"+tclean)
-    body = (
-        f"{explainer}\n\n— Key takeaways —\n"
-        + "\n".join([f"• {s}" for s in sentences[:8]]) +
-        "\n\n— Why it matters —\nThis topic sticks because it ties a vivid visual to a single idea per scene. "
-        f"That’s how your brain remembers faster and better.\n\n— Watch next —\n"
-        f"Subscribe for more {topic.lower()} in clear, repeatable visuals.\n\n"
-        + " ".join(tagset)
-    )
-    if len(body) > 4900: body = body[:4900]
+            if tclean and len(tclean) >= 3 and ("#"+tclean) not in tagset: 
+                tagset.append("#"+tclean)
+    
+    # Combine everything
+    body = explainer + takeaways + why_watch + cta_section + " ".join(tagset[:30])
+    
+    if len(body) > 4900: 
+        body = body[:4900] + "..."
+    
+    # YouTube tags (without #)
     yt_tags = []
     for h in tagset:
-        k = h[1:]
-        if k and k not in yt_tags: yt_tags.append(k)
-        if len(yt_tags) >= 15: break
-    return title, body, yt_tags
+        k = h[1:]  # Remove #
+        if k and k not in yt_tags: 
+            yt_tags.append(k)
+        if len(yt_tags) >= 25:  # YouTube allows up to 500 chars total
+            break
+    
+    # Add long-tail keywords
+    yt_tags.extend([
+        f"{topic} explained",
+        f"{topic} facts",
+        f"{topic} visual",
+        "educational shorts",
+        "quick learning"
+    ])
+    
+    return title, body, yt_tags[:30]
 
 # ==================== HOOK/CTA cilası ====================
 HOOK_MAX_WORDS = _env_int("HOOK_MAX_WORDS", 10)
@@ -1960,19 +1999,46 @@ def _polish_hook_cta(sentences: List[str]) -> List[str]:
     if not sentences: return sentences
     ss = sentences[:]
 
-    # HOOK: ilk cümle ≤ 10 kelime ve vurucu olsun
+    # HOOK: ilk cümle ≤ 10 kelime ve POWER WORDS ile başlasın
     hook = clean_caption_text(ss[0])
     words = hook.split()
+    
+    # Power patterns - bunlardan biri yoksa ekle
+    power_starters = [
+        (r"^\d+", ""),  # Sayı ile başlıyorsa zaten güçlü
+        (r"^(Why|How|What|When|Where)", ""),  # Soru kelimeleri
+        (r"^(Secret|Hidden|Unknown|Rare)", ""),  # Merak uyandıran
+        (r"^(Never|Always|Only|Just)", ""),  # Mutlak ifadeler
+    ]
+    
+    has_power = any(re.search(pattern, hook, re.IGNORECASE) for pattern, _ in power_starters)
+    
+    if not has_power and len(words) > 3:
+        # Güçlü bir başlangıç ekle
+        first_word = words[0].lower()
+        if first_word not in ["the", "a", "an", "this", "that"]:
+            # Sayı varsa öne çıkar
+            numbers = re.findall(r'\d+', hook)
+            if numbers:
+                hook = f"{numbers[0]} {hook}"
+            # Yoksa "How" veya "Why" ekle
+            elif "?" not in hook:
+                hook = f"How {hook.lower()}"
+            elif not hook.endswith("?"):
+                hook = hook.rstrip(".!") + "?"
+    
+    # Maksimum kelime sınırı
     if len(words) > HOOK_MAX_WORDS:
         hook = " ".join(words[:HOOK_MAX_WORDS])
-    if not re.search(r"[?!]$", hook):
-        if hook.split()[0:1] and hook.split()[0].lower() not in {"why","how","did","are","is","can"}:
+        if not re.search(r"[?!]$", hook):
             hook = hook.rstrip(".") + "?"
+    
     ss[0] = hook
 
-    # CTA: narration temiz; son cümleyi düzgün noktalayalım
+    # CTA temiz ve noktalı
     if ss and not re.search(r'[.!?]$', ss[-1].strip()):
         ss[-1] = ss[-1].strip() + '.'
+    
     return ss
 
 # ==================== BGM helpers (download, loop, duck, mix) ====================
@@ -2545,6 +2611,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
