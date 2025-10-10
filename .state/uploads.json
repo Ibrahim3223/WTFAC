@@ -40,27 +40,19 @@
     "ts": "2025-10-09T22:35:06.082893"
   },
   {
-    "channel": "WT Facts About Countries",
-    "entity": "wonder",
-    "content_hash": "ba5b27ab79eddf61d8c343915b0070d3a942905c",
-    "title": "Italy: Land of ancient wonders and vibrant culture",
-    "video_path": "out/WT Facts About Countries_Amazing_Country_Secrets_Cultural_Facts_20251010_014951.mp4",
-    "ts": "2025-10-10T01:49:53.835112"
+    "channel": "World Briefing",
+    "entity": "global",
+    "content_hash": "a5e2531293a01ee1c333afe58917a811434a2ce7",
+    "title": "What global news dominated headlines today",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251010_015048.mp4",
+    "ts": "2025-10-10T01:50:51.446275"
   },
   {
-    "channel": "Universe Jumper",
-    "entity": "knight",
-    "content_hash": "383d96e3e322677f3eb8682bd1102e7cd13a39ac",
-    "title": "A noble knight, suddenly in a neon cyberpunk city",
-    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251010_015445.mp4",
-    "ts": "2025-10-10T01:54:48.461044"
-  },
-  {
-    "channel": "NextGen Update",
-    "entity": "you",
-    "content_hash": "57c053e88683286177f5b4299ead137ff82dc3e9",
-    "title": "Are you ready for tech that redefines possibilities",
-    "video_path": "out/NextGen Update_Latest_Technology_Breakthroughs_Innovations_20251010_020111.mp4",
-    "ts": "2025-10-10T02:01:14.487682"
+    "channel": "BeyondAxis",
+    "entity": "tomorrow",
+    "content_hash": "456ee1725534622233bb75af3db297219cb0c56d",
+    "title": "Could tomorrow's cities truly be perfect, effortless havens",
+    "video_path": "out/BeyondAxis_Future_Utopian_Technology_Tomorrow_s_Innovations_20251010_020128.mp4",
+    "ts": "2025-10-10T02:01:31.153952"
   }
 ]
