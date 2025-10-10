@@ -158,5 +158,13 @@
     "title": "You think the ISS is just a station ✨",
     "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251010_120335.mp4",
     "ts": "2025-10-10T12:03:38.307964"
+  },
+  {
+    "channel": "GalacticUpdate",
+    "entity": "alien",
+    "content_hash": "e158b45ef9877d65e41bac006dc00888e5cd8017",
+    "title": "5 Things About Latest That'll Blow Your Mind ✨",
+    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251010_122107.mp4",
+    "ts": "2025-10-10T12:21:11.205637"
   }
 ]
