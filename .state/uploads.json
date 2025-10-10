@@ -72,19 +72,19 @@
     "ts": "2025-10-10T02:08:10.930888"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "cloud",
-    "content_hash": "a6552ac70a647af8b692c2989f0c836d79af67bc",
-    "title": "What causes that terrifying shelf cloud before a storm",
-    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251010_021456.mp4",
-    "ts": "2025-10-10T02:14:59.949976"
+    "channel": "Kitchen Logic Lab",
+    "entity": "herb",
+    "content_hash": "8b0a1f3638a24a803cce917fd8b3113889d1672f",
+    "title": "Stop wasting fresh herbs! This simple trick changes everything",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251010_021257.mp4",
+    "ts": "2025-10-10T02:13:00.312413"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "road",
-    "content_hash": "c4eaa9d0562eea3213d2ffa103df37d1631aacae",
-    "title": "Want the ultimate coastal drive experience",
-    "video_path": "out/RoadVista 60_Scenic_Road_Mini_Guides_20251010_022059.mp4",
-    "ts": "2025-10-10T02:21:03.059472"
+    "channel": "Timelapse Lab",
+    "entity": "sun",
+    "content_hash": "358b79469a51e0a90c1dfa48772c0d02dd676fc6",
+    "title": "Ever wonder how plants reach for the sun",
+    "video_path": "out/Timelapse Lab_Visual_Science_Through_Time_20251010_021846.mp4",
+    "ts": "2025-10-10T02:18:49.491716"
   }
 ]
