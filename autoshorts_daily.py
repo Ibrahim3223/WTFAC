@@ -926,13 +926,11 @@ def _ass_time(s: float) -> str:
 
 def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]], is_hook: bool) -> str:
     """
-    Karaoke-style ASS subtitle oluştur (Universal - tüm konular için).
-    - Edge-TTS word boundaries'lerine güvenir
-    - Minimal düzeltme yapar (SPEEDUP_PCT ve EARLY_END_MS)
-    - Adaptive effects (subtle/moderate/dynamic)
-    - RAMP ve LEAD kullanmaz (tutarlılık için)
+    Karaoke-style ASS subtitle (libass uyumlu).
+    NOT: Tag blokları içinde **iç içe süslü parantez** YOK. Tüm taglar tek { ... } içinde birleşir.
     """
-    # ASS renk notasyonu: &HAABBGGRR (A=alpha, BGR sırası)
+    import re, random
+
     def _to_ass(c: str) -> str:
         c = c.strip()
         if c.startswith("0x"): c = c[2:]
@@ -946,25 +944,20 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     margin_v = 270 if is_hook else 330
     outline  = 4  if is_hook else 3
 
-    # Kelimeleri UPPERCASE + süreleri al
+    # Kelimeler
     words_upper = [(re.sub(r"\s+", " ", w.upper()), d) for w, d in words if str(w).strip()]
     if not words_upper:
-        # Fallback: eşit bölme
         split_words = (text or "…").split()
         each_dur = seg_dur / max(1, len(split_words))
         words_upper = [(w.upper(), each_dur) for w in split_words]
 
     n = len(words_upper)
-
-    # Hedef toplam süre (centisecond)
     total_cs = int(round(seg_dur * 100))
-
-    # Ham süreler (centisecond) - Edge-TTS'den gelen verileri KORU
-    ds = [max(8, int(round(d * 100))) for _, d in words_upper]  # min 80ms
+    ds = [max(8, int(round(d * 100))) for _, d in words_upper]
     if sum(ds) == 0:
         ds = [max(8, int(total_cs / n)) for _ in range(n)]
 
-    # --- SADECE MİNİMAL GLOBAL DÜZELTME ---
+    # Global hız/süre ayarı (küçük düzeltme)
     try:
         speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "0.0"))
     except Exception:
@@ -977,82 +970,55 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         early_end_ms = 0
     early_end_cs = max(0, int(round(early_end_ms / 10.0)))
 
-    # Target hesapla (minimal düzeltme)
     target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
-    target_cs = max(8 * n, target_cs)  # min 80ms/kelime
+    target_cs = max(8 * n, target_cs)
 
-    # Global scale (tüm kelimelere eşit oranda uygula)
     s = sum(ds)
-    scale = 1.0
-    if s > 0 and s != target_cs:
+    if s and s != target_cs:
         scale = target_cs / s
         ds = [max(8, int(round(x * scale))) for x in ds]
 
-    # Fine-tune: tam hedefe ulaş (1 cs hassasiyetle)
     while sum(ds) > target_cs and any(d > 8 for d in ds):
         for i in range(n):
             if sum(ds) <= target_cs: break
             if ds[i] > 8: ds[i] -= 1
-    
     while sum(ds) < target_cs:
-        # Uzun kelimelere öncelik ver (daha doğal)
         longest_idx = max(range(n), key=lambda i: ds[i])
         ds[longest_idx] += 1
 
-    # ===== ADAPTIVE ASS EFFECTS (Universal) =====
+    # ---- efekt tag'ları (SÜSLÜSÜZ) ----
     use_effects = os.getenv("KARAOKE_EFFECTS", "1") == "1"
-    effect_style = os.getenv("EFFECT_STYLE", "moderate").lower()  # subtle/moderate/dynamic
-    
+    effect_style = os.getenv("EFFECT_STYLE", "moderate").lower()
+
     if use_effects:
         if effect_style == "dynamic":
-            # Aggressive (gaming, comedy, fast topics)
-            shake = r"{\t(0,40,\fscx108\fscy108)\t(40,80,\fscx92\fscy92)\t(80,120,\fscx100\fscy100)}"
-            blur = r"{\blur4}"
-            scale_in = r"{\fscx85\fscy85\t(0,100,\fscx100\fscy100)}"
-            shadow = "3"
+            shake_tag = r"\t(0,40,\fscx108\fscy108)\t(40,80,\fscx92\fscy92)\t(80,120,\fscx100\fscy100)"
+            blur_tag  = r"\blur4"
         elif effect_style == "subtle":
-            # Minimal (educational, serious topics)
-            shake = ""
-            blur = r"{\blur1}"
-            scale_in = ""
-            shadow = "1"
-        else:  # moderate (default - works for everything)
-            shake = r"{\t(0,50,\fscx103\fscy103)\t(50,100,\fscx97\fscy97)\t(100,150,\fscx100\fscy100)}" if is_hook else ""
-            blur = r"{\blur2}"
-            scale_in = r"{\fscx90\fscy90\t(0,80,\fscx100\fscy100)}" if is_hook else ""
-            shadow = "2"
+            shake_tag = ""     # minimal
+            blur_tag  = r"\blur1"
+        else:  # moderate
+            shake_tag = r"\t(0,50,\fscx103\fscy103)\t(50,100,\fscx97\fscy97)\t(100,150,\fscx100\fscy100)" if is_hook else ""
+            blur_tag  = r"\blur2"
+        shadow = "3" if effect_style == "dynamic" else ("1" if effect_style == "subtle" else "2")
     else:
-        shake = ""
-        blur = ""
-        scale_in = ""
-        shadow = "0"
-    
-    # Build karaoke line with effects
-    initial = scale_in if scale_in else ""
-    kline = ""  # Initial'ı string'e ekle
-    
-    for i in range(n):
-        word_text = words_upper[i][0]
-        duration_cs = ds[i]
-        
-        # Hook words get extra effect, normal words get blur only
-        effect_this = shake if (is_hook and use_effects and shake) else ""
-        
-        # ⭐ Doğru ASS syntax (escaping)
-        kline += f"{{\\k{duration_cs}{effect_this}{blur}}}{word_text} "
-    
-    # İlk kelimeye initial ekle
-    if initial and kline:
-        # İlk kelimeyi bul ve initial'ı önüne ekle
-        first_word_start = kline.find("{")
-        if first_word_start == 0:
-            kline = initial + kline
-        else:
-            kline = initial + kline
-    
-    kline = kline.strip()
+        shake_tag = ""
+        blur_tag  = ""
+        shadow    = "0"
 
-    # ===== ASS OUTPUT =====
+    # girişte küçülüp büyüme (ayrı bir override bloğu)
+    initial_block = r"{\fscx90\fscy90\t(0,80,\fscx100\fscy100)}" if (is_hook and use_effects and effect_style != "subtle") else ""
+
+    # kelime kelime karaoke satırı (TÜM taglar tek { ... } içinde)
+    kline_parts = []
+    for i in range(n):
+        word_text  = words_upper[i][0]
+        duration_cs = ds[i]
+        tags = f"\\k{duration_cs}{shake_tag}{blur_tag}"
+        kline_parts.append(f"{{{tags}}}{word_text}")
+
+    kline = (initial_block + (" " if initial_block else "")) + " ".join(kline_parts)
+
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -1066,11 +1032,7 @@ Style: Base,{fontname},{fontsize},{_to_ass(KARAOKE_INACTIVE)},{_to_ass(KARAOKE_A
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad{shadow}}}{kline}
 """
-
-    # Debug log
-    effect_status = f"{effect_style} effects" if use_effects else "no effects"
-    print(f"   🎵 Karaoke: {n} words | seg={seg_dur:.2f}s | target={target_cs/100:.2f}s | scale={scale:.3f} | {effect_status}")
-
+    print(f"   🎵 Karaoke: {n} words | seg={seg_dur:.2f}s | target={target_cs/100:.2f}s")
     return ass
 
 def draw_capcut_text(seg: str, text: str, color: str, font: str, outp: str, is_hook: bool=False, words: Optional[List[Tuple[str,float]]]=None):
@@ -2072,6 +2034,48 @@ def _rank_and_dedup(
         out.append((vid, link))
     return out
 
+def download_pool_videos(pool: List[Tuple[int, str]], tmpdir: str) -> Dict[int, str]:
+    """
+    Havuzdan SADECE video dosyalarını indirir.
+    - URL uzantısı .mp4/.mov/.m4v/.webm değilse atlar
+    - Content-Type video/* değilse atlar (CDN'ler bazen image/jpeg döndürür → elenir)
+    """
+    import re, pathlib, requests
+
+    def _is_video_url(u: str) -> Optional[str]:
+        m = re.search(r"\.(mp4|mov|m4v|webm)(?:$|\?)", (u or ""), re.I)
+        return ("." + m.group(1).lower()) if m else None
+
+    downloads: Dict[int, str] = {}
+    print("⬇️ Download pool (videos only)…")
+
+    for idx, (vid, link) in enumerate(pool):
+        ext = _is_video_url(link)
+        if not ext:
+            # uzantısı belli değilse hiç uğraşma; foto olma ihtimali yüksek
+            continue
+        try:
+            with requests.get(link, stream=True, timeout=120) as rr:
+                rr.raise_for_status()
+                ctype = (rr.headers.get("Content-Type") or "").lower()
+                if ctype and not ctype.startswith("video/"):
+                    # örn: image/jpeg, text/html → geç
+                    continue
+                out_path = str(pathlib.Path(tmpdir) / f"pool_{idx:02d}_{vid}{ext}")
+                with open(out_path, "wb") as w:
+                    for ch in rr.iter_content(8192):
+                        w.write(ch)
+                # küçük placeholderları ele
+                if pathlib.Path(out_path).stat().st_size > 300_000:
+                    downloads[vid] = out_path
+        except Exception as e:
+            print(f"⚠️ download skip ({vid}): {e}")
+
+    if not downloads:
+        raise RuntimeError("Pexels pool empty after downloads (videos-only filter).")
+    print(f"   Downloaded unique video clips: {len(downloads)}")
+    return downloads
+
 def _url_tokens(s: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
 
@@ -2917,21 +2921,7 @@ def main():
         print(f"⚠️ NoveltyGuard Pexels filter skipped: {e}")
 
     # 4) İndir ve dağıt
-    downloads: Dict[int,str] = {}
-    print("⬇️ Download pool…")
-    for idx, (vid, link) in enumerate(pool):
-        try:
-            f = str(pathlib.Path(tmp) / f"pool_{idx:02d}_{vid}.mp4")
-            with requests.get(link, stream=True, timeout=120) as rr:
-                rr.raise_for_status()
-                with open(f, "wb") as w:
-                    for ch in rr.iter_content(8192): w.write(ch)
-            if pathlib.Path(f).stat().st_size > 300_000:
-                downloads[vid] = f
-        except Exception as e:
-            print(f"⚠️ download fail ({vid}): {e}")
-    if not downloads: raise RuntimeError("Pexels pool empty after downloads.")
-    print(f"   Downloaded unique clips: {len(downloads)}")
+    downloads = download_pool_videos(pool, tmp)
 
     # Yeterli benzersiz klip yoksa otomatik doldur
     if not PEXELS_ALLOW_REUSE and len(downloads) < len(metas):
@@ -2940,38 +2930,31 @@ def main():
         need_more = len(metas) - len(downloads)
         page = 1
         tried = set(downloads.keys())
+    
         while need_more > 0 and page <= 4:
-            pops = _pexels_popular(locale, page=page, per_page=50)
+            pops = _pexels_popular(locale, page=page, per_page=50)  # (vid, link, w, h, dur)
             page += 1
-            for vid, link, w,h,dur, page_url in pops:
-                if vid in tried: continue
-                try:
-                    f = str(pathlib.Path(tmp) / f"pop_{vid}.mp4")
-                    with requests.get(link, stream=True, timeout=120) as rr:
-                        rr.raise_for_status()
-                        with open(f, "wb") as wfd:
-                            for ch in rr.iter_content(8192): wfd.write(ch)
-                    if pathlib.Path(f).stat().st_size > 300_000:
-                        downloads[vid] = f; tried.add(vid); need_more -= 1
-                        if need_more <= 0: break
-                except Exception:
-                    continue
-        # Pixabay fallback
+            extra_pool = [(vid, link) for (vid, link, w, h, dur) in pops if vid not in tried]
+            extra = download_pool_videos(extra_pool, tmp)  # yine sadece video
+            for vid, pathv in extra.items():
+                if vid not in downloads:
+                    downloads[vid] = pathv
+                    tried.add(vid)
+                    need_more -= 1
+                    if need_more <= 0:
+                        break
+    
+        # Pixabay fallback (gerekirse)
         if need_more > 0:
-            pix = _pixabay_fallback("interior lighting", need_more, locale)
-            for vid, link in pix:
-                try:
-                    f = str(pathlib.Path(tmp) / f"pix_{vid}.mp4")
-                    with requests.get(link, stream=True, timeout=120) as rr:
-                        rr.raise_for_status()
-                        with open(f, "wb") as wfd:
-                            for ch in rr.iter_content(8192): wfd.write(ch)
-                    if pathlib.Path(f).stat().st_size > 300_000:
-                        downloads[vid] = f
-                        need_more -= 1
-                        if need_more <= 0: break
-                except Exception:
-                    pass
+            pix = _pixabay_fallback("interior lighting", need_more, locale)  # List[(vid, link)]
+            extra = download_pool_videos(pix, tmp)
+            for vid, pathv in extra.items():
+                if vid not in downloads:
+                    downloads[vid] = pathv
+                    need_more -= 1
+                    if need_more <= 0:
+                        break
+    
         print(f"   After backfill uniques: {len(downloads)}")
 
     usage = {vid:0 for vid in downloads.keys()}
@@ -3145,6 +3128,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
