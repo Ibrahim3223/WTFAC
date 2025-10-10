@@ -139,12 +139,18 @@ def _sanitize_privacy(val: Optional[str]) -> str:
 KARAOKE_OFFSET_MS = int(os.getenv("KARAOKE_OFFSET_MS", "0"))
 KARAOKE_SPEED = float(os.getenv("KARAOKE_SPEED", "1.0"))
 
+# Satır ~485 civarı - _adj_time fonksiyonunu değiştir:
+
 def _adj_time(t_seconds: float) -> float:
     """
-    Vurgu zamanlarını topluca öne/al ve çok küçük bir hız düzeltmesi uygula.
-    Negatif offset => daha erken vurgu.
+    Vurgu zamanlarını topluca öne/geri al ve çok küçük bir hız düzeltmesi uygula.
+    Pozitif offset => daha GEÇ vurgu (önerilen).
     """
-    return max(0.0, (t_seconds + KARAOKE_OFFSET_MS / 1000.0) / max(KARAOKE_SPEED, 1e-6))
+    offset_ms = int(os.getenv("KARAOKE_OFFSET_MS", "50"))  # ⭐ Varsayılan +50ms
+    speed = float(os.getenv("KARAOKE_SPEED", "1.0"))
+    
+    adjusted = (t_seconds + offset_ms / 1000.0) / max(speed, 1e-6)
+    return max(0.0, adjusted)
 
 
 # ==================== ENV / constants ====================
@@ -805,7 +811,29 @@ def quantize_to_frames(seconds: float, fps: int = TARGET_FPS) -> Tuple[int, floa
     return frames, frames / float(fps)
 
 def make_segment(src: str, dur_s: float, outp: str):
-    """Universal motion effects (adapts to any content)"""
+    """Segment with optional zoom/pan for visual interest"""
+    
+    # ⭐ Check if source is image (common extensions)
+    is_image = any(src.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp'])
+    
+    if is_image:
+        # Image'ları video'ya çevir (ken burns effect)
+        print(f"   ⚠️ Converting image to video: {src}")
+        # Ken burns: slow zoom in
+        frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
+        run([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-loop", "1", "-i", src,
+            "-vf", f"scale=1080:1920:force_original_aspect_ratio=increase,"
+                   f"crop=1080:1920,"
+                   f"zoompan=z='min(1.2,1+0.0008*on)':d={frames}:s=1080x1920,"
+                   f"setsar=1,fps={TARGET_FPS}",
+            "-t", f"{qdur:.3f}",
+            "-c:v", "libx264", "-preset", "fast", "-crf", str(CRF_VISUAL),
+            "-pix_fmt", "yuv420p",
+            outp
+        ])
+        return
     frames, qdur = quantize_to_frames(dur_s, TARGET_FPS)
     fade = max(0.05, min(0.12, qdur/8.0))
     fade_out_st = max(0.0, qdur - fade)
@@ -1001,7 +1029,7 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
     
     # Build karaoke line with effects
     initial = scale_in if scale_in else ""
-    kline = initial
+    kline = ""  # Initial'ı string'e ekle
     
     for i in range(n):
         word_text = words_upper[i][0]
@@ -1009,7 +1037,18 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
         
         # Hook words get extra effect, normal words get blur only
         effect_this = shake if (is_hook and use_effects and shake) else ""
+        
+        # ⭐ Doğru ASS syntax (escaping)
         kline += f"{{\\k{duration_cs}{effect_this}{blur}}}{word_text} "
+    
+    # İlk kelimeye initial ekle
+    if initial and kline:
+        # İlk kelimeyi bul ve initial'ı önüne ekle
+        first_word_start = kline.find("{")
+        if first_word_start == 0:
+            kline = initial + kline
+        else:
+            kline = initial + kline
     
     kline = kline.strip()
 
@@ -1673,6 +1712,7 @@ def _entity_synonyms(ent: str, lang: str) -> list[str]:
             "japonya": ["japonya", "tokyo", "kyoto", "fuji dağı", "japon tapınağı"],
             "ahtapot": ["ahtapot", "kafadan bacaklı", "deniz canavarı"],
             "kartal": ["kartal", "yırtıcı kuş", "şahin", "atmaca"],
+            "gıda": ["gıda israfı", "kompost", "yemek artıkları", "organik atık"],
         }
         for k, vals in table_tr.items():
             if k in e:
@@ -1688,12 +1728,22 @@ def _entity_synonyms(ent: str, lang: str) -> list[str]:
         "italy": ["italy", "rome", "venice", "colosseum", "venetian canal"],
         "eagle": ["eagle", "raptor", "bird of prey", "hawk"],
         "bridge": ["suspension bridge", "cable stayed bridge", "arch bridge"],
-        "ocean": ["ocean", "sea", "waves", "marine", "underwater"],
-        "lightning": ["lightning", "storm", "thunder", "electric storm"],
-        "volcano": ["volcano", "volcanic", "lava", "magma", "eruption"],
+        
+        # ⭐ FOOD/WASTE/ECO patterns
+        "food": ["food waste", "composting", "leftovers", "organic waste", "kitchen scraps"],
+        "reducing food": ["food waste", "composting", "zero waste kitchen", "leftovers", "organic waste"],
+        "kitchen": ["kitchen waste", "composting", "food scraps", "organic recycling"],
+        "waste": ["food waste", "composting", "recycling", "zero waste"],
+        "compost": ["composting", "food waste", "organic matter", "garden compost"],
+        "scraps": ["kitchen scraps", "food scraps", "composting", "organic waste"],
+        "regrowing": ["regrowing vegetables", "kitchen garden", "hydroponics", "plant propagation"],
+        "vinegar": ["white vinegar", "cleaning supplies", "natural cleaner"],
+        "reuse": ["reusable containers", "upcycling", "repurposing", "zero waste"],
     }
+    
+    # Partial matching için
     for k, vals in table_en.items():
-        if k in e:
+        if k in e or e in k:
             return list(dict.fromkeys(vals + base))
 
     return list(dict.fromkeys(base))
@@ -2420,17 +2470,22 @@ CTA_STYLE      = os.getenv("CTA_STYLE", "soft_comment")
 LOOP_HINT      = os.getenv("LOOP_HINT", "1") == "1"
 
 def _polish_hook_cta(sentences: List[str]) -> List[str]:
-    if not sentences: return sentences
+    """
+    Polish hook and CTA sentences (without comment bait in TTS)
+    """
+    if not sentences: 
+        return sentences
+    
     ss = sentences[:]
 
-    # HOOK: ilk cümle ≤ 10 kelime ve POWER WORDS ile başlasın
+    # HOOK: ilk cümle ≤ 8 kelime ve vurucu olsun
     hook = clean_caption_text(ss[0])
     words = hook.split()
     
     # Power patterns - bunlardan biri yoksa ekle
     power_starters = [
         (r"^\d+", ""),  # Sayı ile başlıyorsa zaten güçlü
-        (r"^(Why|How|What|When|Where)", ""),  # Soru kelimeleri
+        (r"^(Why|What|How|When|Where|Which)", ""),  # Soru kelimeleri
         (r"^(Secret|Hidden|Unknown|Rare)", ""),  # Merak uyandıran
         (r"^(Never|Always|Only|Just)", ""),  # Mutlak ifadeler
     ]
@@ -2438,30 +2493,49 @@ def _polish_hook_cta(sentences: List[str]) -> List[str]:
     has_power = any(re.search(pattern, hook, re.IGNORECASE) for pattern, _ in power_starters)
     
     if not has_power and len(words) > 3:
-        # Güçlü bir başlangıç ekle
         first_word = words[0].lower()
         if first_word not in ["the", "a", "an", "this", "that"]:
-            # Sayı varsa öne çıkar
             numbers = re.findall(r'\d+', hook)
             if numbers:
                 hook = f"{numbers[0]} {hook}"
-            # Yoksa "How" veya "Why" ekle
             elif "?" not in hook:
-                hook = f"How {hook.lower()}"
+                hook = f"What if {hook.lower()}"
             elif not hook.endswith("?"):
                 hook = hook.rstrip(".!") + "?"
     
     # Maksimum kelime sınırı
-    if len(words) > HOOK_MAX_WORDS:
-        hook = " ".join(words[:HOOK_MAX_WORDS])
+    max_words = int(os.getenv("HOOK_MAX_WORDS", "8"))
+    if len(words) > max_words:
+        hook = " ".join(words[:max_words])
         if not re.search(r"[?!]$", hook):
             hook = hook.rstrip(".") + "?"
     
     ss[0] = hook
 
-    # CTA temiz ve noktalı
-    if ss and not re.search(r'[.!?]$', ss[-1].strip()):
-        ss[-1] = ss[-1].strip() + '.'
+    # ⭐ CTA: Son cümleyi temizle (TTS'e girecek, comment bait YOK)
+    if len(ss) >= 2:
+        # Son cümle kısa ve net olsun (TTS için)
+        last = ss[-1].strip()
+        
+        # "Comment", "subscribe", "like" gibi kelimeler varsa temizle
+        meta_words = ["comment", "subscribe", "like", "share", "follow", "below"]
+        last_lower = last.lower()
+        
+        if any(w in last_lower for w in meta_words):
+            # Meta-free alternative
+            alternatives = [
+                "Worth a try, right?",
+                "Works every time.",
+                "Simple as that.",
+                "Now you know.",
+                "That's the trick.",
+                "Easy win.",
+            ]
+            ss[-1] = random.choice(alternatives)
+        
+        # Noktalama kontrolü
+        if not re.search(r'[.!?]$', ss[-1].strip()):
+            ss[-1] = ss[-1].strip() + '.'
     
     return ss
 
@@ -3071,6 +3145,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
