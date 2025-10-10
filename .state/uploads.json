@@ -224,19 +224,19 @@
     "ts": "2025-10-10T16:51:49.210165"
   },
   {
-    "channel": "Focus Rituals",
+    "channel": "Kitchen Logic Lab",
     "entity": "think",
-    "content_hash": "97bc700a80351b37626ea48e4eaf05353ce19d95",
-    "title": "You think you need more to focus effectively 🔥",
-    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251010_165746.mp4",
-    "ts": "2025-10-10T16:57:49.162392"
+    "content_hash": "0a3f3d9d0a91cb43a70517ed142e25000cf7ddff",
+    "title": "60 Things About Practical That'll Blow Your Mind ✨",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251010_165825.mp4",
+    "ts": "2025-10-10T16:58:28.576224"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "plant",
-    "content_hash": "3939d8dc5dfe4f7eae683ecb68c8cbbd5a7bb768",
-    "title": "What if plants moved faster than you think 💡",
-    "video_path": "out/Timelapse Lab_Visual_Science_Through_Time_20251010_170413.mp4",
-    "ts": "2025-10-10T17:04:17.171883"
+    "channel": "Orderly Home 60",
+    "entity": "step",
+    "content_hash": "d02c14ef383e0525af7020abebd85a4e792903a3",
+    "title": "3 Things About One-Minute That'll Blow Your Mind 👀",
+    "video_path": "out/Orderly Home 60_One_Minute_Home_Organization_20251010_170546.mp4",
+    "ts": "2025-10-10T17:05:49.616517"
   }
 ]
