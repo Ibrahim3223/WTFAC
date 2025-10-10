@@ -200,11 +200,11 @@
     "ts": "2025-10-10T16:30:03.491697"
   },
   {
-    "channel": "NextGen Update",
-    "entity": "all",
-    "content_hash": "6d75f5269be2caa899446ec2149b91876ff63d8f",
-    "title": "3 Things About Latest That'll Blow Your Mind ⚡",
-    "video_path": "out/NextGen Update_Latest_Technology_Breakthroughs_Innovations_20251010_163634.mp4",
-    "ts": "2025-10-10T16:36:37.331830"
+    "channel": "CritterFact",
+    "entity": "told",
+    "content_hash": "753eeeea3a41e24a2390b14d722135eb53ed5fd4",
+    "title": "What if I told you this ocean creature ✨",
+    "video_path": "out/CritterFact_Interesting_Visual_Explainers_20251010_163708.mp4",
+    "ts": "2025-10-10T16:37:11.651730"
   }
 ]
