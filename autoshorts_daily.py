@@ -804,22 +804,22 @@ def _build_karaoke_ass(text: str, seg_dur: float, words: List[Tuple[str,float]],
 
     # --- global hız düzeltmeleri ---
     try:
-        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "3.0"))
+        speedup_pct = float(os.getenv("KARAOKE_SPEEDUP_PCT", "2.0"))  # ⭐ varsayılan 3.0 → 2.0
     except Exception:
-        speedup_pct = 1.5
-    speedup_pct = max(-5.0, min(5.0, speedup_pct))
+        speedup_pct = 2.0  # ⭐ düşük tutun
+    speedup_pct = max(-2.0, min(5.0, speedup_pct))  # ⭐ maks %5
 
     try:
-        early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "80"))
+        early_end_ms = int(os.getenv("KARAOKE_EARLY_END_MS", "50"))  # ⭐ varsayılan 80 → 50
     except Exception:
-        early_end_ms = 80
+        early_end_ms = 50
     early_end_cs = max(0, int(round(early_end_ms / 10.0)))
 
     try:
-        ramp_pct = float(os.getenv("KARAOKE_RAMP_PCT", "1.0"))
+        ramp_pct = float(os.getenv("KARAOKE_RAMP_PCT", "0.5"))  # ⭐ varsayılan 1.0 → 0.5
     except Exception:
-        ramp_pct = 1.0
-    ramp_pct = max(0.0, min(5.0, ramp_pct))
+        ramp_pct = 0.5
+    ramp_pct = max(0.0, min(3.0, ramp_pct))
 
     target_cs = int(round(total_cs * (1.0 - (speedup_pct / 100.0)))) - early_end_cs
     target_cs = max(5 * n, target_cs)
@@ -2673,6 +2673,7 @@ def _dump_debug_meta(path: str, obj: dict):
 
 if __name__ == "__main__":
     main()
+
 
 
 
