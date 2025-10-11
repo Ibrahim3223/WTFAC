@@ -328,11 +328,19 @@
     "ts": "2025-10-11T02:43:22.621988"
   },
   {
-    "channel": "World Briefing",
-    "entity": "know",
-    "content_hash": "265b5d5f3e5135fbb077c047e75eeeb9f76a0f5a",
-    "title": "Nobody knows how global events truly connect... until 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251011_162014.mp4",
-    "ts": "2025-10-11T16:20:17.409474"
+    "channel": "TaxWise USA",
+    "entity": "too",
+    "content_hash": "7a856134f8cdd141b091bc8d5461fe97c3ffe4d0",
+    "title": "Paying too much tax is NOT inevitable. Here's 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251011_161807.mp4",
+    "ts": "2025-10-11T16:18:10.085603"
+  },
+  {
+    "channel": "Flashback Minute",
+    "entity": "knew",
+    "content_hash": "cbb741520e42b4ba2cd84d80bb3e79c7868e7a2e",
+    "title": "Nobody knew what ancient treasures lay hidden deep 🔥",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251011_162622.mp4",
+    "ts": "2025-10-11T16:26:26.166491"
   }
 ]
