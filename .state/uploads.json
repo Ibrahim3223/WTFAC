@@ -400,11 +400,11 @@
     "ts": "2025-10-11T17:14:20.510255"
   },
   {
-    "channel": "World Briefing",
-    "entity": "you",
-    "content_hash": "337052225e2890ca7c5c168769fd587e6eca4b82",
-    "title": "What if you could see today's world in 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251012_015616.mp4",
-    "ts": "2025-10-12T01:56:19.805939"
+    "channel": "WT Facts About Countries",
+    "entity": "picchu",
+    "content_hash": "b8fa1fddcce77dfa11aa26476e3d345895b58d28",
+    "title": "Did you know Machu Picchu, Peru's iconic Inca 👀",
+    "video_path": "out/WT Facts About Countries_Amazing_Country_Secrets_Cultural_Facts_20251012_015715.mp4",
+    "ts": "2025-10-12T01:57:18.865889"
   }
 ]
