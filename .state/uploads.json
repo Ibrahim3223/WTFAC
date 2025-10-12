@@ -440,19 +440,27 @@
     "ts": "2025-10-12T02:22:24.202036"
   },
   {
-    "channel": "TrailScape 60",
-    "entity": "this",
-    "content_hash": "fed313cb7af520ac03604bc833795546acf71fd0",
-    "title": "60 Things About Beautiful That'll Blow Your Mind 💡",
-    "video_path": "out/TrailScape 60_Beautiful_Trails_Landmarks_in_60s_20251012_023003.mp4",
-    "ts": "2025-10-12T02:30:06.890220"
+    "channel": "Kitchen Logic Lab",
+    "entity": "you",
+    "content_hash": "cf8b0b600db1776cb36f258fb770a38aa079c547",
+    "title": "60 Things About Practical That'll Blow Your Mind ✨",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251012_022827.mp4",
+    "ts": "2025-10-12T02:28:30.408915"
   },
   {
-    "channel": "Hidden Math IRL",
-    "entity": "know",
-    "content_hash": "359fc8ba5ae5429ab258a84a1269d44df0f9c620",
-    "title": "Nobody knows why spiral staircases feel so perfect 🤯",
-    "video_path": "out/Hidden Math IRL_Geometry_Ratios_Found_in_Real_Scenes_20251012_023728.mp4",
-    "ts": "2025-10-12T02:37:31.753996"
+    "channel": "Timelapse Lab",
+    "entity": "all",
+    "content_hash": "4ee60027f99af2c9bd7d2e42a1ed95e14459c5bd",
+    "title": "3 Things About Visual That'll Blow Your Mind 💡",
+    "video_path": "out/Timelapse Lab_Visual_Science_Through_Time_20251012_023330.mp4",
+    "ts": "2025-10-12T02:33:33.332158"
+  },
+  {
+    "channel": "Mechanism Minute",
+    "entity": "cam",
+    "content_hash": "525c61043c6ea634d5aad4c7b8b5fba9c1de3c4b",
+    "title": "Nobody knows why this simple shape creates complex 🎯",
+    "video_path": "out/Mechanism Minute_How_Everyday_Mechanisms_Work_20251012_024009.mp4",
+    "ts": "2025-10-12T02:40:13.216125"
   }
 ]
