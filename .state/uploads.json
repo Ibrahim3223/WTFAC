@@ -512,11 +512,11 @@
     "ts": "2025-10-12T16:50:32.156649"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "one",
-    "content_hash": "b82d9aa9b29fd1228a5233a0f8bd96734cdc4c03",
-    "title": "60 Things About Practical That'll Blow Your Mind ✨",
-    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251012_165653.mp4",
-    "ts": "2025-10-12T16:56:59.803259"
+    "channel": "Weather Window 60",
+    "entity": "storm",
+    "content_hash": "91b8a3b2696f3f44160ecfb34914f65d3db18c19",
+    "title": "You think you see a tornado forming. You 😱",
+    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251012_165704.mp4",
+    "ts": "2025-10-12T16:57:08.064793"
   }
 ]
