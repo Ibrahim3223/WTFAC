@@ -544,27 +544,27 @@
     "ts": "2025-10-12T17:18:45.423370"
   },
   {
-    "channel": "TaxWise USA",
+    "channel": "Famous Quotes Explained",
     "entity": "think",
-    "content_hash": "a6edb799149480842119bf5c1e6bddabd278994d",
-    "title": "You think you're maximizing tax deductions? Think again 🔥",
-    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251013_015959.mp4",
-    "ts": "2025-10-13T02:00:02.486090"
+    "content_hash": "9da68eb31584b2373578f29c3e87d64e425958b6",
+    "title": "You think wisdom is having all answers. It's 😱",
+    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251013_020019.mp4",
+    "ts": "2025-10-13T02:00:21.941867"
   },
   {
-    "channel": "CritterFact",
-    "entity": "they",
-    "content_hash": "9d26c084c15958bf1d1ba28dbd3d03dc65217837",
-    "title": "You think chameleons change color to blend in ✨",
-    "video_path": "out/CritterFact_Interesting_Visual_Explainers_20251013_021012.mp4",
-    "ts": "2025-10-13T02:10:15.291680"
+    "channel": "Cinematic Echo",
+    "entity": "scene",
+    "content_hash": "1afe3439efddcfa599f3dbd734ce9061fe0d9f92",
+    "title": "You think the clapperboard is just for 'action!' 💡",
+    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251013_020831.mp4",
+    "ts": "2025-10-13T02:08:34.385744"
   },
   {
-    "channel": "Gods Unleashed",
-    "entity": "primal",
-    "content_hash": "c5c98dfa2b4918b8423417d90dee2eed99c1963e",
-    "title": "What if primal gods clashed for dominion 😱",
-    "video_path": "out/Gods Unleashed_Epic_Mythological_Battles_Divine_Encounters_20251013_021603.mp4",
-    "ts": "2025-10-13T02:16:06.558983"
+    "channel": "BeyondAxis",
+    "entity": "think",
+    "content_hash": "1e6b296f123b4f099d304790d3b0802d95422b1e",
+    "title": "You think flying cars are decades away? Think 🎯",
+    "video_path": "out/BeyondAxis_Future_Utopian_Technology_Tomorrow_s_Innovations_20251013_021632.mp4",
+    "ts": "2025-10-13T02:16:35.755166"
   }
 ]
