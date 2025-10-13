@@ -544,27 +544,35 @@
     "ts": "2025-10-12T17:18:45.423370"
   },
   {
-    "channel": "Famous Quotes Explained",
-    "entity": "think",
-    "content_hash": "9da68eb31584b2373578f29c3e87d64e425958b6",
-    "title": "You think wisdom is having all answers. It's 😱",
-    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251013_020019.mp4",
-    "ts": "2025-10-13T02:00:21.941867"
+    "channel": "World Briefing",
+    "entity": "truly",
+    "content_hash": "be5132c81420995e4aa92fdbb5b4a529f75694e4",
+    "title": "Nobody truly sees how global news connects... until 🤯",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251013_015913.mp4",
+    "ts": "2025-10-13T01:59:16.606082"
   },
   {
-    "channel": "Cinematic Echo",
-    "entity": "scene",
-    "content_hash": "1afe3439efddcfa599f3dbd734ce9061fe0d9f92",
-    "title": "You think the clapperboard is just for 'action!' 💡",
-    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251013_020831.mp4",
-    "ts": "2025-10-13T02:08:34.385744"
+    "channel": "Flashback Minute",
+    "entity": "ago",
+    "content_hash": "61cb88dae63c577aa15741607144affab8981a52",
+    "title": "66 Things About This That'll Blow Your Mind 🔥",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251013_020536.mp4",
+    "ts": "2025-10-13T02:05:39.429826"
   },
   {
-    "channel": "One Day Inside",
-    "entity": "know",
-    "content_hash": "d65648a0ed6c5ac28d0813e5b782684336548cf0",
-    "title": "Nobody knows why they left the towers... until 🎯",
-    "video_path": "out/One Day Inside_Post_Apocalyptic_Survival_Stories_Future_Scenarios_20251013_021648.mp4",
-    "ts": "2025-10-13T02:16:52.028252"
+    "channel": "WildWonderCaps",
+    "entity": "you",
+    "content_hash": "732a09466b4f1c6584c48271d77f00d5472269f0",
+    "title": "What if you think you know camouflage. you don't 🎯",
+    "video_path": "out/WildWonderCaps_Incredible_Wildlife_Moments_Animal_Wonders_20251013_021215.mp4",
+    "ts": "2025-10-13T02:12:18.620830"
+  },
+  {
+    "channel": "Microworld Stories",
+    "entity": "nobody",
+    "content_hash": "68ff648c06ee164511a4a89cdb447803a1896044",
+    "title": "What if nobody knows what's hiding inside a tiny seed 👀",
+    "video_path": "out/Microworld Stories_Fun_Educational_Stories_for_Young_Minds_20251013_021846.mp4",
+    "ts": "2025-10-13T02:18:49.109876"
   }
 ]
