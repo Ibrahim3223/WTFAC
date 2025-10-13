@@ -576,27 +576,27 @@
     "ts": "2025-10-13T02:26:06.805476"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "fridge",
-    "content_hash": "1b8332d379ce3c0aa33aa07638054a955f2a4464",
-    "title": "60 Things About Practical That'll Blow Your Mind ✨",
-    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251013_023234.mp4",
-    "ts": "2025-10-13T02:32:36.643220"
+    "channel": "Weather Window 60",
+    "entity": "even",
+    "content_hash": "c76b86c446ed8248521a422ac93d82ee6920d371",
+    "title": "You think it's a giant tsunami wave. It's 😱",
+    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251013_023332.mp4",
+    "ts": "2025-10-13T02:33:35.493609"
   },
   {
-    "channel": "Timelapse Lab",
+    "channel": "Wild Pattern Atlas",
+    "entity": "think",
+    "content_hash": "94b2d53f500ae9ed00c5e246220ea66436a5fb8b",
+    "title": "You think sand is just sand? Think again ⚡",
+    "video_path": "out/Wild Pattern Atlas_The_Science_of_Natural_Textures_20251013_024031.mp4",
+    "ts": "2025-10-13T02:40:34.298763"
+  },
+  {
+    "channel": "Object Origins",
     "entity": "know",
-    "content_hash": "f725a30bf06caaa64df450c9bde665fd049b62d0",
-    "title": "Nobody knows why clouds look like this... until 💡",
-    "video_path": "out/Timelapse Lab_Visual_Science_Through_Time_20251013_023900.mp4",
-    "ts": "2025-10-13T02:39:03.542012"
-  },
-  {
-    "channel": "LightCraft Studio",
-    "entity": "told",
-    "content_hash": "5a75119a5178b34112900662689187ff712515c1",
-    "title": "What if I told you one LED strip ⚡",
-    "video_path": "out/LightCraft Studio_One_Minute_Lighting_for_Real_Rooms_20251013_024502.mp4",
-    "ts": "2025-10-13T02:45:04.828599"
+    "content_hash": "d0fb45e615e70d93a79070a2eebc7c1d93dd92aa",
+    "title": "Nobody knows why old clocks tick so perfectly 🎯",
+    "video_path": "out/Object Origins_Interesting_Visual_Explainers_20251013_024633.mp4",
+    "ts": "2025-10-13T02:46:36.368195"
   }
 ]
