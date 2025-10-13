@@ -656,11 +656,19 @@
     "ts": "2025-10-13T17:01:06.348627"
   },
   {
-    "channel": "Hidden Math IRL",
-    "entity": "think",
-    "content_hash": "a383edb95db92aa75f58ee1aea0fe4ba41904eab",
-    "title": "You think spiral staircases are just steps, right 🤯",
-    "video_path": "out/Hidden Math IRL_Geometry_Ratios_Found_in_Real_Scenes_20251013_170815.mp4",
-    "ts": "2025-10-13T17:08:18.186887"
+    "channel": "Wild Pattern Atlas",
+    "entity": "know",
+    "content_hash": "a189d479f7155c05cbd7ef99b09415e09408f891",
+    "title": "Nobody knows why desert sands form perfect ripples ⚡",
+    "video_path": "out/Wild Pattern Atlas_The_Science_of_Natural_Textures_20251013_170628.mp4",
+    "ts": "2025-10-13T17:06:31.178289"
+  },
+  {
+    "channel": "Epic Mundane",
+    "entity": "hidden",
+    "content_hash": "d32ea654b9fd645a84ffb23e5676c25a8bb42c2f",
+    "title": "The hidden force behind every breakfast ritual 🤯",
+    "video_path": "out/Epic Mundane_Overdramatic_Narration_for_Ordinary_Things_20251013_171443.mp4",
+    "ts": "2025-10-13T17:14:46.089992"
   }
 ]
