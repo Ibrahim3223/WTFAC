@@ -600,11 +600,11 @@
     "ts": "2025-10-13T02:43:05.059442"
   },
   {
-    "channel": "Corporate Jargon Translator",
-    "entity": "think",
-    "content_hash": "3ec648f12d31446a441ab5124c859f570e094df1",
-    "title": "You think 'deep dive' means a serious analysis ✨",
-    "video_path": "out/Corporate Jargon Translator_Buzzwords_into_Plain_English_20251013_024949.mp4",
-    "ts": "2025-10-13T02:49:52.522579"
+    "channel": "Pet Inner Monologue",
+    "entity": "you",
+    "content_hash": "4dfafb43a6667f03d6413bbfac2897ec95d1d4da",
+    "title": "POV: You just discovered an impostor in your ✨",
+    "video_path": "out/Pet Inner Monologue_Cats_Dogs_Captioned_Thoughts_20251013_025013.mp4",
+    "ts": "2025-10-13T02:50:17.147177"
   }
 ]
