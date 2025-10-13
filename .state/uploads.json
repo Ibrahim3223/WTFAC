@@ -552,19 +552,19 @@
     "ts": "2025-10-13T02:00:02.486090"
   },
   {
-    "channel": "If They Lived Today",
-    "entity": "ancient",
-    "content_hash": "191b916f683cbc0ec237f9c0cb9acbce51fb1bfc",
-    "title": "What if an ancient conqueror saw a smartphone 😱",
-    "video_path": "out/If They Lived Today_Historical_Figures_in_Modern_Times_20251013_020632.mp4",
-    "ts": "2025-10-13T02:06:35.527822"
+    "channel": "CritterFact",
+    "entity": "they",
+    "content_hash": "9d26c084c15958bf1d1ba28dbd3d03dc65217837",
+    "title": "You think chameleons change color to blend in ✨",
+    "video_path": "out/CritterFact_Interesting_Visual_Explainers_20251013_021012.mp4",
+    "ts": "2025-10-13T02:10:15.291680"
   },
   {
-    "channel": "NextGen Update",
-    "entity": "one",
-    "content_hash": "48df2a634a9adc925c72d615e881ebd67e4ef277",
-    "title": "What if one quantum chip changes computing forever ⚡",
-    "video_path": "out/NextGen Update_Latest_Technology_Breakthroughs_Innovations_20251013_021428.mp4",
-    "ts": "2025-10-13T02:14:31.175586"
+    "channel": "Gods Unleashed",
+    "entity": "primal",
+    "content_hash": "c5c98dfa2b4918b8423417d90dee2eed99c1963e",
+    "title": "What if primal gods clashed for dominion 😱",
+    "video_path": "out/Gods Unleashed_Epic_Mythological_Battles_Divine_Encounters_20251013_021603.mp4",
+    "ts": "2025-10-13T02:16:06.558983"
   }
 ]
