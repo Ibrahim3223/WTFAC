@@ -608,11 +608,11 @@
     "ts": "2025-10-13T02:51:40.952157"
   },
   {
-    "channel": "World Briefing",
-    "entity": "you",
-    "content_hash": "1fde87d77a76dcaf07dc97626787ae99f701f94d",
-    "title": "POV: You just stepped into the nerve center 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251013_162248.mp4",
-    "ts": "2025-10-13T16:22:51.675139"
+    "channel": "Flashback Minute",
+    "entity": "told",
+    "content_hash": "04f013a5d73dc90e796d09a8e917f9a4aa5bac7a",
+    "title": "What if I told you Pompeii's tragedy preserved ⚡",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251013_162612.mp4",
+    "ts": "2025-10-13T16:26:15.623159"
   }
 ]
