@@ -552,11 +552,11 @@
     "ts": "2025-10-13T02:00:21.941867"
   },
   {
-    "channel": "GalacticUpdate",
-    "entity": "told",
-    "content_hash": "0f7f227ddfec77d57eac677edb207eedca8bfcb4",
-    "title": "What if I told you the ISS is ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251013_020755.mp4",
-    "ts": "2025-10-13T02:07:58.926580"
+    "channel": "Cinematic Echo",
+    "entity": "scene",
+    "content_hash": "1afe3439efddcfa599f3dbd734ce9061fe0d9f92",
+    "title": "You think the clapperboard is just for 'action!' 💡",
+    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251013_020831.mp4",
+    "ts": "2025-10-13T02:08:34.385744"
   }
 ]
