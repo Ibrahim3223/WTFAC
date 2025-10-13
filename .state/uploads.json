@@ -632,19 +632,11 @@
     "ts": "2025-10-13T16:40:30.951426"
   },
   {
-    "channel": "FixIt Fast",
-    "entity": "drip",
-    "content_hash": "8c2a11b1491e58cbc72a8f4806ed7508a5632a74",
-    "title": "3 Things About Quick That'll Blow Your Mind 🤯",
-    "video_path": "out/FixIt Fast_Quick_DIY_Repair_Tips_Household_Solutions_20251013_164643.mp4",
-    "ts": "2025-10-13T16:46:47.096844"
-  },
-  {
-    "channel": "Eco Habit Hacks",
-    "entity": "food",
-    "content_hash": "e73ba528feab7b430bb02c7af3935685e9c51047",
-    "title": "3 Things About One-Minute That'll Blow Your Mind ✨",
-    "video_path": "out/Eco Habit Hacks_One_Minute_Sustainable_Living_Tips_20251013_165310.mp4",
-    "ts": "2025-10-13T16:53:13.750518"
+    "channel": "GameDay 60",
+    "entity": "all",
+    "content_hash": "5c74a463c599dbe2e005e085018a8c98ff81a2e2",
+    "title": "3 Things About Daily That'll Blow Your Mind 💡",
+    "video_path": "out/GameDay 60_Daily_Sports_Updates_Athletic_Highlights_20251013_165039.mp4",
+    "ts": "2025-10-13T16:50:41.988868"
   }
 ]
