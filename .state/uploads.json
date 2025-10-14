@@ -704,19 +704,27 @@
     "ts": "2025-10-14T02:12:03.979023"
   },
   {
-    "channel": "Planet Snapshot",
-    "entity": "street",
-    "content_hash": "8cc48e659340ce58299d0c72c6d44d4e64911e7d",
-    "title": "Imagine a city where streets are made of 👀",
-    "video_path": "out/Planet Snapshot_Fast_Geography_Country_Curiosities_20251014_022332.mp4",
-    "ts": "2025-10-14T02:23:36.547673"
+    "channel": "CityFrame Stories",
+    "entity": "you",
+    "content_hash": "ccddf42f99ff17035067101446ec3ff0f60c1e8b",
+    "title": "What if you think skyscrapers are perfectly still. they're not 🔥",
+    "video_path": "out/CityFrame Stories_Urban_Facts_Skyline_Insights_20251014_021910.mp4",
+    "ts": "2025-10-14T02:19:13.286534"
   },
   {
-    "channel": "Orderly Home 60",
-    "entity": "know",
-    "content_hash": "198c077625930ae09dcd6e2fb94fb1149a45e97b",
-    "title": "Nobody knows the secret to truly invisible desk 👀",
-    "video_path": "out/Orderly Home 60_One_Minute_Home_Organization_20251014_023030.mp4",
-    "ts": "2025-10-14T02:30:33.255569"
+    "channel": "Weather Window 60",
+    "entity": "true",
+    "content_hash": "3d2268d9210e4d5ec921239cc5c27289dd40bf02",
+    "title": "The true secret behind these terrifying sky waves 😱",
+    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251014_022709.mp4",
+    "ts": "2025-10-14T02:27:13.147434"
+  },
+  {
+    "channel": "Wild Pattern Atlas",
+    "entity": "think",
+    "content_hash": "0943409ab2ab6ab653b0b80adc500ae269e6b740",
+    "title": "You think you know how sand dunes form ✨",
+    "video_path": "out/Wild Pattern Atlas_The_Science_of_Natural_Textures_20251014_023307.mp4",
+    "ts": "2025-10-14T02:33:10.276485"
   }
 ]
