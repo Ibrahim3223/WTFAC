@@ -744,11 +744,19 @@
     "ts": "2025-10-14T16:22:41.083880"
   },
   {
-    "channel": "If They Lived Today",
-    "entity": "legendary",
-    "content_hash": "20a96c435e07832f5ca087c5acd99607d90fb448",
-    "title": "What if a legendary strategist navigated our modern 😱",
-    "video_path": "out/If They Lived Today_Historical_Figures_in_Modern_Times_20251014_163148.mp4",
-    "ts": "2025-10-14T16:31:52.022483"
+    "channel": "GalacticUpdate",
+    "entity": "the",
+    "content_hash": "0930eda3974653192c057cb7b6c1f31569f5e645",
+    "title": "What if Earth is not the only habitable ✨",
+    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251014_162953.mp4",
+    "ts": "2025-10-14T16:29:56.541926"
+  },
+  {
+    "channel": "CritterFact",
+    "entity": "chameleon",
+    "content_hash": "8ab6f8b80e6b32e5253f5ddc42988fce6b0da1e1",
+    "title": "The chameleon's secret? It's not just about blending ✨",
+    "video_path": "out/CritterFact_Interesting_Visual_Explainers_20251014_163515.mp4",
+    "ts": "2025-10-14T16:35:19.110208"
   }
 ]
