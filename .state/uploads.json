@@ -704,11 +704,19 @@
     "ts": "2025-10-14T02:12:03.979023"
   },
   {
-    "channel": "Planet Snapshot",
-    "entity": "street",
-    "content_hash": "8cc48e659340ce58299d0c72c6d44d4e64911e7d",
-    "title": "Imagine a city where streets are made of 👀",
-    "video_path": "out/Planet Snapshot_Fast_Geography_Country_Curiosities_20251014_022332.mp4",
-    "ts": "2025-10-14T02:23:36.547673"
+    "channel": "CityFrame Stories",
+    "entity": "you",
+    "content_hash": "ccddf42f99ff17035067101446ec3ff0f60c1e8b",
+    "title": "What if you think skyscrapers are perfectly still. they're not 🔥",
+    "video_path": "out/CityFrame Stories_Urban_Facts_Skyline_Insights_20251014_021910.mp4",
+    "ts": "2025-10-14T02:19:13.286534"
+  },
+  {
+    "channel": "Focus Rituals",
+    "entity": "tell",
+    "content_hash": "e385f324502a71cbe7bed855b195eba443de028b",
+    "title": "Nobody tells you the true power of a 🔥",
+    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251014_022557.mp4",
+    "ts": "2025-10-14T02:26:00.496172"
   }
 ]
