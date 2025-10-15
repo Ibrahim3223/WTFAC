@@ -912,11 +912,19 @@
     "ts": "2025-10-15T16:46:04.545816"
   },
   {
-    "channel": "Pocket Tech Tricks",
-    "entity": "phone",
-    "content_hash": "3149ea1c70a80df36f565672163d38904ec6f24d",
-    "title": "POV: Your phone is lagging, but you don't 😱",
-    "video_path": "out/Pocket Tech Tricks_One_Minute_Fixes_for_Everyday_Tech_20251015_165834.mp4",
-    "ts": "2025-10-15T16:58:37.457645"
+    "channel": "Planet Snapshot",
+    "entity": "picchu",
+    "content_hash": "fa996cecbc6fb7f97e60fe6cff813e99aab69c14",
+    "title": "Ever wondered about a city in the clouds, 👀",
+    "video_path": "out/Planet Snapshot_Fast_Geography_Country_Curiosities_20251015_165532.mp4",
+    "ts": "2025-10-15T16:55:35.758018"
+  },
+  {
+    "channel": "Kitchen Logic Lab",
+    "entity": "told",
+    "content_hash": "a72c286d43b188fe9307d4c872e5a635bc3ca925",
+    "title": "60 Things About Practical That'll Blow Your Mind ✨",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251015_170127.mp4",
+    "ts": "2025-10-15T17:01:30.925650"
   }
 ]
