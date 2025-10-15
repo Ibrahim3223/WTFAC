@@ -848,11 +848,11 @@
     "ts": "2025-10-15T02:23:56.855405"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "cloud",
-    "content_hash": "39a63ed754fb54390f714833a719a5e46f09ef4a",
-    "title": "You think this wall of cloud means a 😱",
-    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251015_022957.mp4",
-    "ts": "2025-10-15T02:30:00.549729"
+    "channel": "Focus Rituals",
+    "entity": "simple",
+    "content_hash": "419b54c62873374c5628312e2874a5b3331bb68c",
+    "title": "What if a simple desk change unlocks deep 💡",
+    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251015_023025.mp4",
+    "ts": "2025-10-15T02:30:29.016802"
   }
 ]
