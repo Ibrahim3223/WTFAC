@@ -880,11 +880,19 @@
     "ts": "2025-10-15T02:49:14.014726"
   },
   {
-    "channel": "World Briefing",
-    "entity": "you",
-    "content_hash": "89c70748796c1e626a6fe3b5e12a669f5bd75657",
-    "title": "POV: You're stepping into the global news command 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251015_162253.mp4",
-    "ts": "2025-10-15T16:22:56.109195"
+    "channel": "Famous Quotes Explained",
+    "entity": "true",
+    "content_hash": "835eb748810ffc610295c4b2aa8b7b0d8118b137",
+    "title": "What if true wisdom begins with admitting ignorance 😱",
+    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251015_162017.mp4",
+    "ts": "2025-10-15T16:20:20.722568"
+  },
+  {
+    "channel": "Flashback Minute",
+    "entity": "know",
+    "content_hash": "b0475ff33eee282f2faff1eff576efb70013085f",
+    "title": "Nobody knows why Pompeii remained a ghost city 🔥",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251015_162831.mp4",
+    "ts": "2025-10-15T16:28:34.565454"
   }
 ]
