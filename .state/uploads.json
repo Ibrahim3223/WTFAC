@@ -1024,27 +1024,35 @@
     "ts": "2025-10-16T02:52:50.175948"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "lost",
-    "content_hash": "2524a4b84fe951cb23845c48aa8daccd062c802d",
-    "title": "Three lost texts hint at a civilization nobody 👀",
-    "video_path": "out/Tales of The Forgotten Realms_Forgotten_Historical_Tales_Lost_Stories_20251016_162323.mp4",
-    "ts": "2025-10-16T16:23:26.980910"
-  },
-  {
-    "channel": "GalacticUpdate",
-    "entity": "know",
-    "content_hash": "58751da13f61221ee92a0fd84f1dbdd46c373562",
-    "title": "Nobody knows why black holes spin so fast ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251016_163256.mp4",
-    "ts": "2025-10-16T16:33:00.128261"
-  },
-  {
-    "channel": "BehindTheFame",
+    "channel": "Famous Quotes Explained",
     "entity": "the",
-    "content_hash": "26e8818322c4a0b28538c2cbc89470a94927310a",
-    "title": "POV: You step into that blinding spotlight for 🔥",
-    "video_path": "out/BehindTheFame_Celebrity_Success_Stories_Behind_the_Fame_Tales_20251016_163937.mp4",
-    "ts": "2025-10-16T16:39:40.558207"
+    "content_hash": "a36ca66dac7bb748ed6b7000e35aa06d70e036ac",
+    "title": "What if the longest journey starts with just 😱",
+    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251016_162154.mp4",
+    "ts": "2025-10-16T16:21:57.603163"
+  },
+  {
+    "channel": "Flashback Minute",
+    "entity": "division",
+    "content_hash": "07ddb39a20ee88b54611e731edb87937308eb670",
+    "title": "28 Things About This That'll Blow Your Mind ⚡",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251016_162745.mp4",
+    "ts": "2025-10-16T16:27:48.670085"
+  },
+  {
+    "channel": "Cinematic Echo",
+    "entity": "know",
+    "content_hash": "8198ef9f2a8e3bac5aa498e035e850ea447ae90b",
+    "title": "Nobody knows why the clapperboard has stripes... until 💡",
+    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251016_163544.mp4",
+    "ts": "2025-10-16T16:35:47.296790"
+  },
+  {
+    "channel": "One Day Inside",
+    "entity": "this",
+    "content_hash": "24a286de4342371ce0ba223defe9c2f340b5c9b8",
+    "title": "What if this abandoned skyscraper hides a chilling 🎯",
+    "video_path": "out/One Day Inside_Post_Apocalyptic_Survival_Stories_Future_Scenarios_20251016_164208.mp4",
+    "ts": "2025-10-16T16:42:10.823541"
   }
 ]
