@@ -1024,35 +1024,35 @@
     "ts": "2025-10-16T02:52:50.175948"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "lost",
-    "content_hash": "2524a4b84fe951cb23845c48aa8daccd062c802d",
-    "title": "Three lost texts hint at a civilization nobody 👀",
-    "video_path": "out/Tales of The Forgotten Realms_Forgotten_Historical_Tales_Lost_Stories_20251016_162323.mp4",
-    "ts": "2025-10-16T16:23:26.980910"
-  },
-  {
-    "channel": "GalacticUpdate",
-    "entity": "know",
-    "content_hash": "58751da13f61221ee92a0fd84f1dbdd46c373562",
-    "title": "Nobody knows why black holes spin so fast ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251016_163256.mp4",
-    "ts": "2025-10-16T16:33:00.128261"
-  },
-  {
-    "channel": "BehindTheFame",
+    "channel": "Famous Quotes Explained",
     "entity": "the",
-    "content_hash": "26e8818322c4a0b28538c2cbc89470a94927310a",
-    "title": "POV: You step into that blinding spotlight for 🔥",
-    "video_path": "out/BehindTheFame_Celebrity_Success_Stories_Behind_the_Fame_Tales_20251016_163937.mp4",
-    "ts": "2025-10-16T16:39:40.558207"
+    "content_hash": "a36ca66dac7bb748ed6b7000e35aa06d70e036ac",
+    "title": "What if the longest journey starts with just 😱",
+    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251016_162154.mp4",
+    "ts": "2025-10-16T16:21:57.603163"
   },
   {
-    "channel": "FixIt Fast",
-    "entity": "all",
-    "content_hash": "3164f761724d9bd523232753a519583ec1c752f1",
-    "title": "3 Things About Quick That'll Blow Your Mind ✨",
-    "video_path": "out/FixIt Fast_Quick_DIY_Repair_Tips_Household_Solutions_20251016_164729.mp4",
-    "ts": "2025-10-16T16:47:32.203577"
+    "channel": "Universe Jumper",
+    "entity": "medieval",
+    "content_hash": "d4b1c2ca4df41ab466234fa36d73e46083e7baae",
+    "title": "What if a medieval knight found a cosmic 🎯",
+    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251016_162924.mp4",
+    "ts": "2025-10-16T16:29:27.262250"
+  },
+  {
+    "channel": "NextGen Update",
+    "entity": "think",
+    "content_hash": "3f05ee88bccc05c81ee656b49f3be13dc1c05600",
+    "title": "You think AI is fast. New processors are ⚡",
+    "video_path": "out/NextGen Update_Latest_Technology_Breakthroughs_Innovations_20251016_163620.mp4",
+    "ts": "2025-10-16T16:36:25.035841"
+  },
+  {
+    "channel": "Gods Unleashed",
+    "entity": "primordial",
+    "content_hash": "cdd6cf92e77365ad57fa745c5a0f05720cf79a6e",
+    "title": "What if primordial elemental powers clashed ⚡",
+    "video_path": "out/Gods Unleashed_Epic_Mythological_Battles_Divine_Encounters_20251016_164736.mp4",
+    "ts": "2025-10-16T16:47:39.493513"
   }
 ]
