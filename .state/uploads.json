@@ -992,11 +992,19 @@
     "ts": "2025-10-16T02:25:03.328539"
   },
   {
-    "channel": "Ocean Pulse",
-    "entity": "ocean",
-    "content_hash": "d686cef5187cffca24b6aac801163add5bebfc72",
-    "title": "What if I told you this powerful wave 😱",
-    "video_path": "out/Ocean Pulse_One_Minute_Ocean_Coast_Science_20251016_023529.mp4",
-    "ts": "2025-10-16T02:35:33.070208"
+    "channel": "Focus Rituals",
+    "entity": "cluttered",
+    "content_hash": "f7783b2ebb69a4fc2e3380d8674adebe969c8d3b",
+    "title": "Your cluttered desk is killing your focus. Here's 🔥",
+    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251016_023057.mp4",
+    "ts": "2025-10-16T02:30:59.615570"
+  },
+  {
+    "channel": "Orderly Home 60",
+    "entity": "find",
+    "content_hash": "8fde9de2b13cbbbe6d4ee7ce6061a50ffe265df2",
+    "title": "Try to find the power strip hidden in 👀",
+    "video_path": "out/Orderly Home 60_One_Minute_Home_Organization_20251016_023731.mp4",
+    "ts": "2025-10-16T02:37:34.608023"
   }
 ]
