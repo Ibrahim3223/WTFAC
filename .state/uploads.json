@@ -952,43 +952,43 @@
     "ts": "2025-10-15T17:25:29.466754"
   },
   {
-    "channel": "Famous Quotes Explained",
-    "entity": "you",
-    "content_hash": "a867aa3206e5c0694794418d74367b7e1bddb5a3",
-    "title": "What if you think life is constant. it's not 😱",
-    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251016_015535.mp4",
-    "ts": "2025-10-16T01:55:37.994255"
-  },
-  {
-    "channel": "GalacticUpdate",
-    "entity": "hole",
-    "content_hash": "38c04b655d651d9598495bada583d3be94906455",
-    "title": "What if nobody truly understands black holes... until now ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251016_020534.mp4",
-    "ts": "2025-10-16T02:05:37.830672"
-  },
-  {
-    "channel": "BehindTheFame",
-    "entity": "know",
-    "content_hash": "4e7ab33059354f2d9dd2b435a2d0464a0f0df720",
-    "title": "Nobody knows the true cost of chasing the 🔥",
-    "video_path": "out/BehindTheFame_Celebrity_Success_Stories_Behind_the_Fame_Tales_20251016_021219.mp4",
-    "ts": "2025-10-16T02:12:22.272735"
-  },
-  {
-    "channel": "FixIt Fast",
-    "entity": "can",
-    "content_hash": "2e19432f08223cdb536d998c70a6db5c1f7272a8",
-    "title": "3 Things About Quick That'll Blow Your Mind ✨",
-    "video_path": "out/FixIt Fast_Quick_DIY_Repair_Tips_Household_Solutions_20251016_021947.mp4",
-    "ts": "2025-10-16T02:19:50.550293"
-  },
-  {
-    "channel": "SpaceVista 60",
+    "channel": "TaxWise USA",
     "entity": "told",
-    "content_hash": "394b3af5306d79c7e0e558983f652add1f12ddf2",
-    "title": "90 Things About Fast That'll Blow Your Mind 😱",
-    "video_path": "out/SpaceVista 60_Fast_Clear_Space_Explainers_20251016_022712.mp4",
-    "ts": "2025-10-16T02:27:14.957689"
+    "content_hash": "68b0ac48ba253a7230b4ba65b0d46621c282b1bc",
+    "title": "What if I told you your tax refund 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251016_015408.mp4",
+    "ts": "2025-10-16T01:54:11.272203"
+  },
+  {
+    "channel": "Rewind Retro Media",
+    "entity": "old",
+    "content_hash": "56d4f06b2cd2d5234802a1f8a4194d1be26410a9",
+    "title": "The secret comfort of old CRT TVs goes ⚡",
+    "video_path": "out/Rewind Retro Media_Nostalgic_Memories_Retro_Culture_20251016_020220.mp4",
+    "ts": "2025-10-16T02:02:24.334796"
+  },
+  {
+    "channel": "BeyondAxis",
+    "entity": "think",
+    "content_hash": "dacee7e22463f38d4f6ec515de4dbcb546d4003e",
+    "title": "You think holograms are just for sci-fi movies 🎯",
+    "video_path": "out/BeyondAxis_Future_Utopian_Technology_Tomorrow_s_Innovations_20251016_020937.mp4",
+    "ts": "2025-10-16T02:09:40.528264"
+  },
+  {
+    "channel": "Bot Gone Wild",
+    "entity": "know",
+    "content_hash": "ce6ea55b67840af3b443a8d49d8b21189bd78164",
+    "title": "Nobody knows how deep AI truly goes... until 🎯",
+    "video_path": "out/Bot Gone Wild_AI_Integration_in_Daily_Life_Future_Scenarios_20251016_021749.mp4",
+    "ts": "2025-10-16T02:17:51.789850"
+  },
+  {
+    "channel": "Pocket Tech Tricks",
+    "entity": "all",
+    "content_hash": "dc8109e5a3d00e6ad3a6ca7e27840d3ffc79fd1d",
+    "title": "3 Things About One-Minute That'll Blow Your Mind 😱",
+    "video_path": "out/Pocket Tech Tricks_One_Minute_Fixes_for_Everyday_Tech_20251016_022500.mp4",
+    "ts": "2025-10-16T02:25:03.328539"
   }
 ]
