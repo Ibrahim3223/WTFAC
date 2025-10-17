@@ -1,386 +1,358 @@
-# -*- coding: utf-8 -*-
 """
-Gemini AI client for content generation.
-Handles API calls, prompt templates, and content parsing.
-With retry mechanism for reliability.
+Gemini API Client for Content Generation
+Uses Google's official genai SDK
 """
-import re
+
 import json
 import time
-import requests
-from typing import Dict, List, Any, Optional
+import logging
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
 
-from autoshorts.config import settings
+from google import genai
+from google.genai import types
+
+logger = logging.getLogger(__name__)
 
 
-# ==================== TEMPLATES ====================
-
-ENHANCED_GEMINI_TEMPLATES = {
-    "_default": """Create a viral 25-40s YouTube Short that STOPS THE SCROLL.
-
-Return STRICT JSON: topic, focus, sentences (7-8), search_terms (4-10), title, description, tags.
-
-🎯 FOCUS RULE:
-- ONE specific, visual, filmable subject
-- Must have abundant stock footage
-- Physical subjects only (no abstract concepts)
-
-🔥 HOOK FORMULA (Sentence 1 - First 3 Seconds):
-Pick the BEST pattern for your topic:
-
-**Pattern A: Number + Shock**
-"[Number] seconds/ways/reasons [subject] [unexpected action]"
-Examples: "3 seconds is all this takes" | "5 reasons nobody tells you"
-
-**Pattern B: Contradiction**
-"[Common belief] is wrong. Here's why"
-Examples: "You think you know this. You don't" | "Everything you learned is backwards"
-
-**Pattern C: Question Hook**
-"What if [surprising claim]?"
-Examples: "What if I told you this changes everything?"
-
-**Pattern D: Challenge**
-"Try to [action] before [time/condition]"
-Examples: "Try to spot the difference" | "Find the hidden detail"
-
-**Pattern E: POV/Relatability**
-"POV: You just [discovered/learned/realized] [X]"
-Examples: "POV: You finally understand" | "When you realize"
-
-**Pattern F: Mystery/Gap**
-"Nobody knows why [X]... until now"
-Examples: "The secret behind" | "What they don't show you"
-
-🧲 RETENTION ARCHITECTURE (Sentences 2-7):
-
-**Early (2-3): Build Intrigue**
-- Plant a question you'll answer later
-- Use: "But here's the crazy part"
-- Introduce contrast/surprise
-
-**Middle (4-5): Pattern Interrupt**
-- Break expected flow
-- Use: "Wait", "Stop", "Watch closely"
-- Visual cue: "Look at [specific element]"
-
-**Late (6-7): Climax**
-- Deliver on hook promise
-- Peak surprise/payoff
-- Use: "And that's not even..."
-
-📝 CTA (Sentence 8 - Last 3 Seconds):
-
-**Comment Bait** (universal):
-- "Which one surprised you?"
-- "A or B? Comment below"
-- "Did you catch it? Drop your answer"
-- "Agree or disagree?"
-
-⚡ UNIVERSAL RULES:
-- 6-12 words per sentence
-- Every sentence = ONE filmable action
-- NO: "it's interesting", "you won't believe", "subscribe/like"
-- Build: tension → peak → satisfying end
-- End HIGH (not fade out)
-
-Language: {lang}
-""",
-
-    "country_facts": """Create viral geographic/cultural facts.
-
-[Same structure as default but with]:
-- Focus on visual landmarks OR cultural elements
-- Hook patterns adapted for places/culture
-- Everything else stays universal
-
-Language: {lang}
-"""
-}
+@dataclass
+class ContentResponse:
+    """Structured response from content generation"""
+    hook: str
+    script: List[str]
+    cta: str
+    search_queries: List[str]
+    metadata: Dict[str, Any]
 
 
 class GeminiClient:
-    """Handles all Gemini API interactions with retry mechanism."""
+    """Client for Gemini API interactions using official SDK"""
     
-    def __init__(self):
-        """Initialize client with API key from settings."""
-        if not settings.GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY not found in environment")
-        
-        self.api_key = settings.GEMINI_API_KEY
-        self.model = settings.GEMINI_MODEL
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-        
-        print(f"[Gemini] Using model: {self.model}")
+    # Available models
+    MODELS = {
+        "flash": "gemini-2.0-flash-exp",
+        "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
+        "pro": "gemini-1.5-pro-latest",
+        "flash-8b": "gemini-1.5-flash-8b-latest"
+    }
     
-    def generate(
-        self, 
-        topic: str, 
-        mode: str, 
-        lang: str,
-        user_terms: Optional[List[str]] = None,
-        banlist: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "flash",
+        max_retries: int = 3,
+        timeout: int = 60
+    ):
         """
-        Generate content from Gemini.
+        Initialize Gemini client
         
         Args:
-            topic: Main topic for the video
-            mode: Content mode (country_facts, etc.)
-            lang: Language code
-            user_terms: Optional seed search terms
-            banlist: Topics to avoid
+            api_key: Gemini API key
+            model: Model to use (flash, pro, flash-8b, flash-thinking)
+            max_retries: Maximum retry attempts
+            timeout: Request timeout in seconds
+        """
+        if not api_key:
+            raise ValueError("Gemini API key is required")
+        
+        # Initialize the official client
+        self.client = genai.Client(api_key=api_key)
+        
+        # Map short names to full model names
+        if model in self.MODELS:
+            self.model = self.MODELS[model]
+        else:
+            # If full model name provided, use it directly
+            self.model = model
+            
+        self.max_retries = max_retries
+        self.timeout = timeout
+        
+        logger.info(f"[Gemini] Using model: {self.model}")
+    
+    def generate(
+        self,
+        topic: str,
+        style: str,
+        duration: int,
+        additional_context: Optional[str] = None
+    ) -> ContentResponse:
+        """
+        Generate video content using Gemini
+        
+        Args:
+            topic: Video topic/niche
+            style: Content style
+            duration: Target duration in seconds
+            additional_context: Optional additional instructions
             
         Returns:
-            Dict with: topic, focus, sentences, search_terms, title, description, tags
+            ContentResponse with generated content
         """
-        # Select template
-        template_key = self._select_template(mode)
-        template = ENHANCED_GEMINI_TEMPLATES.get(template_key, ENHANCED_GEMINI_TEMPLATES["_default"])
+        prompt = self._build_prompt(topic, style, duration, additional_context)
         
-        # Build prompt
-        prompt = self._build_prompt(
-            template=template,
-            topic=topic,
-            lang=lang,
-            user_terms=user_terms or [],
-            banlist=banlist or []
-        )
-        
-        # Call API with retry
-        raw_response = self._call_api_with_retry(prompt)
-        
-        # Parse response
-        parsed = self._parse_response(raw_response)
-        
-        # Post-process
-        parsed = self._post_process(parsed, topic, user_terms)
-        
-        return parsed
-    
-    def _select_template(self, mode: str) -> str:
-        """Select appropriate template based on mode."""
-        mode_lower = (mode or "").lower()
-        
-        if any(k in mode_lower for k in ["country", "geograph", "city"]):
-            return "country_facts"
-        
-        return "_default"
+        try:
+            raw_response = self._call_api_with_retry(prompt)
+            content = self._parse_response(raw_response)
+            
+            logger.info("[Gemini] Content generated successfully")
+            return content
+            
+        except Exception as e:
+            logger.error(f"[Gemini] Generation failed: {e}")
+            raise
     
     def _build_prompt(
-        self, 
-        template: str, 
-        topic: str, 
-        lang: str,
-        user_terms: List[str],
-        banlist: List[str]
+        self,
+        topic: str,
+        style: str,
+        duration: int,
+        additional_context: Optional[str] = None
     ) -> str:
-        """Build complete prompt from template."""
-        # Format template
-        prompt = template.format(lang=lang)
+        """Build the generation prompt"""
         
-        # Add context
-        avoid = "\n".join(f"- {b}" for b in banlist[:15]) if banlist else "(none)"
-        terms_hint = ", ".join(user_terms[:10]) if user_terms else "(none)"
+        # Calculate approximate word count (150 words per minute of speech)
+        words_per_minute = 150
+        target_words = int((duration / 60) * words_per_minute)
         
-        extra = ""
-        if settings.GEMINI_PROMPT:
-            extra = f"\n\nADDITIONAL STYLE:\n{settings.GEMINI_PROMPT}"
+        # Adjust for different durations
+        if duration <= 30:
+            hook_length = "1 sentence"
+            script_sentences = "3-4"
+        elif duration <= 45:
+            hook_length = "1-2 sentences"
+            script_sentences = "5-6"
+        else:
+            hook_length = "2 sentences"
+            script_sentences = "7-8"
         
-        guardrails = """
-RULES (MANDATORY):
-- STAY ON TOPIC exactly as provided.
-- Return ONLY JSON, no prose/markdown.
-- Keys required: topic, focus, sentences, search_terms, title, description, tags.
+        prompt = f"""Create a {duration}-second YouTube Short script about: {topic}
 
-🎯 FOCUS SELECTION GUIDE:
-- Pick ONE visual subject with abundant stock footage
-- Good: "chameleon", "Tokyo tower", "lightning storm", "gears"
-- Bad: "innovation", "happiness", "success" (too abstract)
-- Must be filmable from multiple angles
-"""
-        
-        full_prompt = f"""{prompt}
+Style: {style}
+Target length: Approximately {target_words} words total
 
-Channel: {settings.CHANNEL_NAME}
-Language: {lang}
-TOPIC (hard lock): {topic}
-Seed search terms (use and expand): {terms_hint}
-Avoid overlap for 180 days:
-{avoid}{extra}
-{guardrails}
-"""
-        return full_prompt
+CRITICAL REQUIREMENTS:
+1. Hook must grab attention in {hook_length}
+2. Script must be exactly {script_sentences} clear sentences
+3. Each sentence should be one complete thought
+4. CTA must be engaging and natural
+5. Search queries must be specific and visual
+
+{additional_context or ''}
+
+OUTPUT FORMAT (valid JSON only):
+{{
+    "hook": "Attention-grabbing opening line",
+    "script": [
+        "First sentence of main content",
+        "Second sentence with key point",
+        "Third sentence with details",
+        ...
+    ],
+    "cta": "Call to action",
+    "search_queries": [
+        "specific visual query 1",
+        "specific visual query 2",
+        "specific visual query 3"
+    ],
+    "metadata": {{
+        "title": "Catchy video title (max 60 chars)",
+        "description": "SEO-optimized description",
+        "tags": ["tag1", "tag2", "tag3"]
+    }}
+}}
+
+IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
+        
+        return prompt
     
-    def _call_api_with_retry(self, prompt: str, max_retries: int = 3) -> str:
-        """Call API with retry mechanism for transient errors."""
+    def _call_api_with_retry(self, prompt: str) -> str:
+        """Call API with retry logic"""
+        
         last_error = None
         
-        for attempt in range(max_retries):
+        for attempt in range(1, self.max_retries + 1):
             try:
                 return self._call_api(prompt)
                 
             except Exception as e:
                 last_error = e
-                error_str = str(e).lower()
+                logger.warning(f"[Gemini] Attempt {attempt}/{self.max_retries} failed: {e}")
                 
-                # Check if retryable error
-                is_retryable = any(code in error_str for code in [
-                    '503', '429', '500', '502', '504',
-                    'service unavailable', 'rate limit', 'timeout'
-                ])
+                if attempt == self.max_retries:
+                    raise last_error
                 
-                if is_retryable and attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 2  # 2s, 4s, 6s
-                    print(f"   ⚠️ Gemini API error (attempt {attempt+1}/{max_retries}): {str(e)[:100]}")
-                    print(f"   ⏳ Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    # Not retryable or last attempt
-                    raise
+                # Exponential backoff
+                wait_time = 2 ** attempt
+                logger.info(f"[Gemini] Retrying in {wait_time}s...")
+                time.sleep(wait_time)
         
-        # All retries failed
         raise last_error
     
     def _call_api(self, prompt: str) -> str:
-        """Make API call to Gemini."""
-        url = f"{self.base_url}/models/{self.model}:generateContent"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": self.api_key
-        }
-        
-        # Add temperature jitter
-        jitter = ((settings.ROTATION_SEED or 0) % 13) * 0.01
-        temp = max(0.6, min(1.2, settings.GEMINI_TEMP + (jitter - 0.06)))
-        
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": temp}
-        }
+        """Make actual API call using official SDK"""
         
         try:
-            r = requests.post(url, headers=headers, json=payload, timeout=60)
-            r.raise_for_status()
-            
-            data = r.json()
-            text = data["candidates"][0]["content"]["parts"][0]["text"]
-            return text
-            
-        except requests.exceptions.HTTPError as e:
-            # Include response body in error for debugging
-            error_detail = ""
-            try:
-                error_detail = e.response.text[:200]
-            except:
-                pass
-            
-            raise RuntimeError(
-                f"Gemini API HTTP {e.response.status_code}: {str(e)}\n"
-                f"Model: {self.model}\n"
-                f"Detail: {error_detail}"
+            # Configure generation settings
+            config = types.GenerateContentConfig(
+                temperature=0.9,
+                top_k=40,
+                top_p=0.95,
+                max_output_tokens=2048,
+                safety_settings=[
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_HATE_SPEECH',
+                        threshold='BLOCK_NONE'
+                    ),
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_HARASSMENT',
+                        threshold='BLOCK_NONE'
+                    ),
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_SEXUALLY_EXPLICIT',
+                        threshold='BLOCK_NONE'
+                    ),
+                    types.SafetySetting(
+                        category='HARM_CATEGORY_DANGEROUS_CONTENT',
+                        threshold='BLOCK_NONE'
+                    )
+                ]
             )
+            
+            # Make the API call
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=config
+            )
+            
+            # Extract text from response
+            if response.text:
+                return response.text
+            
+            raise RuntimeError(f"Empty response from Gemini API")
+            
         except Exception as e:
-            raise RuntimeError(f"Gemini API error: {str(e)[:300]}")
+            raise RuntimeError(f"Gemini API call failed: {e}")
     
-    def _parse_response(self, raw_text: str) -> Dict[str, Any]:
-        """Parse JSON from Gemini response."""
-        # Extract JSON block
-        match = re.search(r"\{(?:.|\n)*\}", raw_text)
-        if not match:
-            raise RuntimeError("No JSON found in Gemini response")
+    def _parse_response(self, raw_text: str) -> ContentResponse:
+        """Parse API response into structured content"""
         
-        json_text = match.group(0).strip()
-        
-        # Remove markdown code blocks
-        json_text = re.sub(r"^```json\s*|\s*```$", "", json_text, flags=re.MULTILINE)
-        
-        # Parse
         try:
-            return json.loads(json_text)
+            # Clean the response (remove markdown code blocks if present)
+            cleaned = raw_text.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            
+            # Parse JSON
+            data = json.loads(cleaned)
+            
+            # Validate required fields
+            required = ["hook", "script", "cta", "search_queries"]
+            missing = [f for f in required if f not in data]
+            if missing:
+                raise ValueError(f"Missing required fields: {missing}")
+            
+            # Validate types
+            if not isinstance(data["script"], list):
+                raise ValueError("script must be a list")
+            if not isinstance(data["search_queries"], list):
+                raise ValueError("search_queries must be a list")
+            
+            # Ensure metadata exists
+            if "metadata" not in data:
+                data["metadata"] = {
+                    "title": f"Amazing {data.get('hook', 'Video')[:40]}",
+                    "description": "Check out this amazing short!",
+                    "tags": ["shorts", "viral", "trending"]
+                }
+            
+            return ContentResponse(
+                hook=data["hook"].strip(),
+                script=[s.strip() for s in data["script"]],
+                cta=data["cta"].strip(),
+                search_queries=[q.strip() for q in data["search_queries"]],
+                metadata=data["metadata"]
+            )
+            
         except json.JSONDecodeError as e:
-            raise RuntimeError(f"Invalid JSON from Gemini: {e}")
+            logger.error(f"[Gemini] JSON parse error: {e}")
+            logger.error(f"[Gemini] Raw response: {raw_text[:500]}")
+            raise RuntimeError(f"Failed to parse Gemini response as JSON: {e}")
+        except (KeyError, ValueError) as e:
+            logger.error(f"[Gemini] Content validation error: {e}")
+            raise RuntimeError(f"Invalid content structure: {e}")
     
-    def _post_process(
-        self, 
-        data: Dict[str, Any], 
-        topic: str,
-        user_terms: Optional[List[str]]
-    ) -> Dict[str, Any]:
-        """Clean and normalize parsed data."""
-        from autoshorts.content.text_utils import (
-            clean_caption_text,
-            simplify_query
+    def test_connection(self) -> bool:
+        """Test API connection and credentials"""
+        
+        try:
+            logger.info("[Gemini] Testing API connection...")
+            
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents="Say 'Hello' in JSON format: {\"message\": \"Hello\"}"
+            )
+            
+            if response.text:
+                logger.info("[Gemini] ✅ API connection successful")
+                return True
+            
+            logger.error("[Gemini] ❌ Empty response from API")
+            return False
+            
+        except Exception as e:
+            logger.error(f"[Gemini] ❌ API connection failed: {e}")
+            return False
+
+
+# Test function
+if __name__ == "__main__":
+    import sys
+    import os
+    
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s'
+    )
+    
+    # Test with API key from environment
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        logger.error("GEMINI_API_KEY environment variable not set")
+        sys.exit(1)
+    
+    client = GeminiClient(api_key=api_key, model="flash")
+    
+    # Test connection
+    if not client.test_connection():
+        sys.exit(1)
+    
+    # Test content generation
+    try:
+        content = client.generate(
+            topic="Amazing facts about coffee",
+            style="Educational and engaging",
+            duration=30
         )
         
-        # Topic (use original)
-        data['topic'] = topic
+        print("\n" + "="*50)
+        print("Generated Content:")
+        print("="*50)
+        print(f"\nHook: {content.hook}")
+        print(f"\nScript ({len(content.script)} sentences):")
+        for i, sentence in enumerate(content.script, 1):
+            print(f"  {i}. {sentence}")
+        print(f"\nCTA: {content.cta}")
+        print(f"\nSearch Queries: {', '.join(content.search_queries)}")
+        print(f"\nMetadata: {json.dumps(content.metadata, indent=2)}")
         
-        # Sentences
-        sentences = data.get("sentences", [])
-        if isinstance(sentences, str):
-            sentences = [sentences]
-        sentences = [clean_caption_text(s) for s in sentences if s]
-        data['sentences'] = sentences[:8]
-        
-        # Search terms
-        terms = data.get("search_terms", [])
-        if isinstance(terms, str):
-            terms = [terms]
-        terms = self._normalize_terms(terms)
-        
-        # Add user terms
-        if user_terms:
-            seed = self._normalize_terms(user_terms)
-            terms = self._normalize_terms(seed + terms)
-        
-        data['search_terms'] = terms
-        
-        # Focus extraction
-        focus = (data.get("focus") or "").strip()
-        if not focus:
-            focus = (data.get("title") or topic or (terms[0] if terms else "")).strip()
-        
-        focus = simplify_query(focus, keep=2)
-        
-        # Fallback if focus is generic
-        if not focus or focus in ["great", "thing", "concept", "idea", "topic", "story"]:
-            focus = (terms[0] if terms else simplify_query(topic, keep=1)) or "macro detail"
-        
-        data['focus'] = focus
-        
-        # Title, description, tags
-        data['title'] = (data.get("title") or "").strip()
-        data['description'] = (data.get("description") or "").strip()
-        
-        tags = data.get("tags", [])
-        if isinstance(tags, str):
-            tags = [tags]
-        data['tags'] = [t.strip() for t in tags if isinstance(t, str) and t.strip()]
-        
-        return data
-    
-    def _normalize_terms(self, terms: List[str]) -> List[str]:
-        """Normalize search terms."""
-        BAD = {"great", "nice", "good", "bad", "things", "stuff", 
-               "concept", "concepts", "idea", "ideas"}
-        
-        out = []
-        seen = set()
-        
-        for t in terms or []:
-            # Clean
-            tt = re.sub(r"[^A-Za-z0-9 ]+", " ", str(t)).strip().lower()
-            tt = " ".join([w for w in tt.split() if w and len(w) > 2 and w not in BAD])
-            tt = tt[:64]
-            
-            if not tt:
-                continue
-            
-            if tt not in seen:
-                seen.add(tt)
-                out.append(tt)
-        
-        return out[:12]
+    except Exception as e:
+        logger.error(f"Test failed: {e}")
+        sys.exit(1)
