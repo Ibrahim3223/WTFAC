@@ -223,7 +223,7 @@ jobs:
           echo "TOPIC=${TOPIC}"
           echo "LANG=${LANG}"
           echo "SEARCH_TERMS=${SEARCH_TERMS}"
-          python autoshorts_daily.py 2>&1 | tee "build_${CHANNEL_NAME}.log"
+          python main.py 2>&1 | tee "build_${CHANNEL_NAME}.log"
 
       - name: Upload artifact (mp4)
         if: always()
