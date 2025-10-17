@@ -1,319 +1,342 @@
-# -*- coding: utf-8 -*-
 """
-Main orchestrator - coordinates all modules.
+Orchestrator - Main pipeline coordinator
+Manages the full flow: content → TTS → video → upload
 """
-import os
-import time
-import shutil
-import tempfile
-import pathlib
-import datetime
-import hashlib
-from typing import Optional, Dict, Any
 
-from autoshorts.config import settings
-from autoshorts.content.gemini_client import GeminiClient
-from autoshorts.content.quality_scorer import QualityScorer
-from autoshorts.tts.edge_handler import TTSHandler
-from autoshorts.video.pexels_client import PexelsClient
-from autoshorts.video.downloader import VideoDownloader
-from autoshorts.video.segment_maker import SegmentMaker
-from autoshorts.captions.renderer import CaptionRenderer
-from autoshorts.audio.bgm_manager import BGMManager
-from autoshorts.upload.youtube_uploader import YouTubeUploader
-from autoshorts.state.novelty_guard import NoveltyGuard
-from autoshorts.state.state_guard import StateGuard
-from autoshorts.utils.ffmpeg_utils import run, ffprobe_duration
+import os
+import tempfile
+import shutil
+import logging
+from typing import Optional, Dict, Any, List
+
+from .config import settings
+from .content.gemini_client import GeminiClient
+from .content.quality_scorer import QualityScorer
+from .tts.tts_handler import TTSHandler
+from .video.pexels_client import PexelsClient
+from .video.video_downloader import VideoDownloader
+from .video.segment_maker import SegmentMaker
+from .captions.caption_renderer import CaptionRenderer
+from .audio.bgm_manager import BGMManager
+from .audio.audio_mixer import AudioMixer
+from .upload.youtube_uploader import YouTubeUploader
+from .state.novelty_guard import NoveltyGuard
+from .state.state_guard import StateGuard
+
+logger = logging.getLogger(__name__)
 
 
 class ShortsOrchestrator:
-    """Orchestrate the complete shorts generation pipeline."""
+    """Main orchestrator for the YouTube Shorts pipeline."""
     
     def __init__(self):
-        """Initialize all modules."""
+        """Initialize all components with proper API keys."""
         self.channel = settings.CHANNEL_NAME
         self.temp_dir = None
         
-        # Modules
-        self.gemini = GeminiClient()
+        # Get API keys from environment
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise ValueError(
+                "GEMINI_API_KEY not found in environment variables. "
+                "Please set it in GitHub Secrets or your .env file."
+            )
+        
+        pexels_api_key = os.getenv("PEXELS_API_KEY", "")
+        pixabay_api_key = os.getenv("PIXABAY_API_KEY", "")
+        
+        # Initialize modules with API keys
+        logger.info(f"[Gemini] Using model: {settings.GEMINI_MODEL}")
+        self.gemini = GeminiClient(
+            api_key=gemini_api_key,
+            model=settings.GEMINI_MODEL,
+            max_retries=3
+        )
+        
         self.quality_scorer = QualityScorer()
         self.tts = TTSHandler()
-        self.pexels = PexelsClient()
+        
+        self.pexels = PexelsClient(
+            pexels_key=pexels_api_key,
+            pixabay_key=pixabay_api_key
+        )
+        
         self.downloader = VideoDownloader()
         self.segment_maker = SegmentMaker()
         self.caption_renderer = CaptionRenderer()
         self.bgm_manager = BGMManager()
+        self.audio_mixer = AudioMixer()
+        self.uploader = YouTubeUploader()
         
-        if settings.UPLOAD_TO_YT:
-            self.uploader = YouTubeUploader()
-        
-        # State
+        # State management
         self.novelty_guard = NoveltyGuard(
             state_dir=settings.STATE_DIR,
             window_days=settings.ENTITY_COOLDOWN_DAYS
         )
         self.state_guard = StateGuard(channel=self.channel)
         
-        print(f"🚀 Orchestrator ready: {self.channel}")
+        logger.info(f"🚀 Orchestrator ready: {self.channel}")
     
     def run(self) -> Optional[str]:
-        """Execute full pipeline. Returns YouTube video ID or None."""
+        """
+        Execute the full pipeline.
+        Returns: YouTube video ID or None on failure.
+        """
         self.temp_dir = tempfile.mkdtemp(prefix="shorts_")
         
+        max_attempts = settings.MAX_GENERATION_ATTEMPTS
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(f"   Attempt {attempt}/{max_attempts}")
+                
+                # Phase 1: Content Generation
+                logger.info("📝 Phase 1: Content generation...")
+                content = self._generate_content()
+                if not content:
+                    logger.error("❌ Content generation failed")
+                    continue
+                
+                # Phase 2: TTS
+                logger.info("🎤 Phase 2: Text-to-speech...")
+                audio_segments = self._generate_tts(content)
+                if not audio_segments:
+                    logger.error("❌ TTS generation failed")
+                    continue
+                
+                # Phase 3: Video
+                logger.info("🎬 Phase 3: Video production...")
+                video_path = self._produce_video(audio_segments, content)
+                if not video_path:
+                    logger.error("❌ Video production failed")
+                    continue
+                
+                # Phase 4: Upload
+                logger.info("📤 Phase 4: Uploading to YouTube...")
+                if settings.UPLOAD_TO_YT:
+                    video_id = self._upload(video_path, content)
+                    logger.info(f"✅ Success! Video ID: {video_id}")
+                    return video_id
+                else:
+                    logger.info(f"⏭️ Upload skipped. Video saved: {video_path}")
+                    return None
+                    
+            except Exception as e:
+                logger.error(f"❌ Pipeline failed: {e}")
+                if attempt == max_attempts:
+                    raise
+                logger.info(f"🔄 Retrying... ({attempt}/{max_attempts})")
+        
+        logger.error(f"❌ All {max_attempts} attempts failed")
+        return None
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup."""
+        self.cleanup()
+    
+    def cleanup(self):
+        """Clean up temporary files."""
+        if self.temp_dir and os.path.exists(self.temp_dir):
+            try:
+                shutil.rmtree(self.temp_dir)
+                logger.info("🧹 Cleaned temp files")
+            except Exception as e:
+                logger.warning(f"⚠️ Cleanup warning: {e}")
+    
+    def _generate_content(self) -> Optional[Dict[str, Any]]:
+        """
+        Generate content with quality checks and novelty guard.
+        Returns: Content dict or None on failure.
+        """
         try:
-            # Phase 1: Content
-            print("\n📝 Phase 1: Content generation...")
-            content = self._generate_content()
-            if not content:
-                return None
-            
-            # Phase 2: TTS
-            print("\n🎤 Phase 2: Text-to-speech...")
-            audio_segments = self._generate_tts(content['sentences'])
-            if not audio_segments:
-                return None
-            
-            # Phase 3: Video
-            print("\n🎬 Phase 3: Video production...")
-            video_path = self._produce_video(
-                audio_segments,
-                content['focus'],
-                content['search_terms']
+            # Generate content using Gemini
+            content = self.gemini.generate(
+                topic=settings.CHANNEL_TOPIC,
+                style=settings.CONTENT_STYLE,
+                duration=settings.TARGET_DURATION,
+                additional_context=settings.ADDITIONAL_PROMPT_CONTEXT
             )
-            if not video_path:
+            
+            # Combine all text for quality scoring
+            full_text = " ".join([
+                content.hook,
+                *content.script,
+                content.cta
+            ])
+            
+            # Quality check
+            score = self.quality_scorer.score_content(full_text)
+            logger.info(f"   Quality score: {score:.2f}")
+            
+            if score < settings.MIN_QUALITY_SCORE:
+                logger.warning(f"   ⚠️ Quality too low: {score:.2f} < {settings.MIN_QUALITY_SCORE}")
                 return None
             
-            # Phase 4: Upload
-            if settings.UPLOAD_TO_YT:
-                print("\n📤 Phase 4: Upload...")
-                video_id = self._upload(video_path, content)
-                print(f"✅ Success! https://youtube.com/watch?v={video_id}")
+            # Novelty check
+            if not self.novelty_guard.is_novel(full_text):
+                logger.warning("   ⚠️ Content not novel enough (too similar to recent videos)")
+                return None
+            
+            # Prepare structured content
+            structured_content = {
+                "hook": content.hook,
+                "script": content.script,
+                "cta": content.cta,
+                "search_queries": content.search_queries,
+                "metadata": content.metadata,
+                "sentences": [content.hook] + content.script + [content.cta],
+                "quality_score": score
+            }
+            
+            logger.info(f"   ✅ Content generated: {len(structured_content['sentences'])} sentences")
+            return structured_content
+            
+        except Exception as e:
+            logger.error(f"   ❌ Content generation error: {e}")
+            return None
+    
+    def _generate_tts(self, content: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        """
+        Generate TTS for all sentences.
+        Returns: List of audio segments or None on failure.
+        """
+        try:
+            sentences = content["sentences"]
+            audio_segments = []
+            
+            for i, sentence in enumerate(sentences, 1):
+                logger.info(f"   Processing sentence {i}/{len(sentences)}")
+                
+                segment = self.tts.generate(
+                    text=sentence,
+                    output_dir=self.temp_dir,
+                    voice=settings.TTS_VOICE,
+                    rate=settings.TTS_RATE,
+                    pitch=settings.TTS_PITCH
+                )
+                
+                if segment:
+                    audio_segments.append(segment)
+                else:
+                    logger.error(f"   ❌ TTS failed for sentence {i}")
+                    return None
+            
+            logger.info(f"   ✅ Generated {len(audio_segments)} audio segments")
+            return audio_segments
+            
+        except Exception as e:
+            logger.error(f"   ❌ TTS error: {e}")
+            return None
+    
+    def _produce_video(
+        self,
+        audio_segments: List[Dict[str, Any]],
+        content: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Produce the final video.
+        Returns: Path to final video or None on failure.
+        """
+        try:
+            # Step 1: Search and download videos
+            logger.info("   🔍 Searching for videos...")
+            video_clips = self.pexels.search_videos(
+                queries=content["search_queries"],
+                min_duration=settings.TARGET_DURATION
+            )
+            
+            if not video_clips:
+                logger.error("   ❌ No suitable videos found")
+                return None
+            
+            logger.info(f"   📥 Downloading {len(video_clips)} videos...")
+            downloaded = self.downloader.download_videos(
+                video_clips,
+                output_dir=self.temp_dir
+            )
+            
+            if not downloaded:
+                logger.error("   ❌ Video download failed")
+                return None
+            
+            # Step 2: Create video segments
+            logger.info("   ✂️ Creating video segments...")
+            video_segments = self.segment_maker.create_segments(
+                video_files=downloaded,
+                audio_segments=audio_segments,
+                output_dir=self.temp_dir
+            )
+            
+            if not video_segments:
+                logger.error("   ❌ Segment creation failed")
+                return None
+            
+            # Step 3: Add captions
+            logger.info("   📝 Adding captions...")
+            captioned_segments = self.caption_renderer.render_captions(
+                video_segments=video_segments,
+                audio_segments=audio_segments,
+                output_dir=self.temp_dir
+            )
+            
+            if not captioned_segments:
+                logger.error("   ❌ Caption rendering failed")
+                return None
+            
+            # Step 4: Add BGM and mix audio
+            logger.info("   🎵 Adding background music...")
+            bgm_path = self.bgm_manager.get_bgm(
+                duration=settings.TARGET_DURATION,
+                output_dir=self.temp_dir
+            )
+            
+            final_video = self.audio_mixer.mix(
+                video_segments=captioned_segments,
+                bgm_path=bgm_path,
+                output_dir=self.temp_dir
+            )
+            
+            if not final_video:
+                logger.error("   ❌ Audio mixing failed")
+                return None
+            
+            logger.info(f"   ✅ Video produced: {final_video}")
+            return final_video
+            
+        except Exception as e:
+            logger.error(f"   ❌ Video production error: {e}")
+            return None
+    
+    def _upload(self, video_path: str, content: Dict[str, Any]) -> Optional[str]:
+        """
+        Upload video to YouTube.
+        Returns: Video ID or None on failure.
+        """
+        try:
+            metadata = content["metadata"]
+            
+            video_id = self.uploader.upload(
+                video_path=video_path,
+                title=metadata.get("title", "Amazing Short"),
+                description=metadata.get("description", ""),
+                tags=metadata.get("tags", []),
+                category_id="22",  # People & Blogs
+                privacy_status="public"
+            )
+            
+            if video_id:
+                # Record in state
+                self.state_guard.record_upload(video_id, content)
+                logger.info(f"   ✅ Uploaded: https://youtube.com/watch?v={video_id}")
                 return video_id
             else:
-                print(f"⏭️ Upload disabled. Saved: {video_path}")
+                logger.error("   ❌ Upload failed")
                 return None
                 
         except Exception as e:
-            print(f"❌ Pipeline failed: {e}")
-            raise
-        finally:
-            if self.temp_dir and os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
-    
-    def _generate_content(self) -> Optional[Dict[str, Any]]:
-        """Generate content with quality and novelty checks."""
-        attempts = 0
-        best = None
-        best_score = -1.0
-        
-        while attempts < settings.NOVELTY_RETRIES:
-            attempts += 1
-            print(f"   Attempt {attempts}/{settings.NOVELTY_RETRIES}")
-            
-            # Generate
-            content = self.gemini.generate(
-                topic=settings.TOPIC,
-                mode=settings.MODE,
-                lang=settings.LANG
-            )
-            
-            # Quality check
-            scores = self.quality_scorer.score(content['sentences'], content['title'])
-            overall = scores['overall']
-            
-            print(f"   Q={scores['quality']:.1f} V={scores['viral']:.1f} R={scores['retention']:.1f} → {overall:.1f}")
-            
-            # Novelty check
-            decision = self.novelty_guard.check_novelty(
-                channel=self.channel,
-                title=content['title'],
-                script=" ".join(content['sentences']),
-                search_term=content.get('selected_term'),
-                category=settings.MODE,
-                mode=settings.MODE,
-                lang=settings.LANG
-            )
-            
-            if not decision.ok:
-                print(f"   ⚠️ {decision.reason}")
-                continue
-            
-            # Accept if good enough
-            if overall >= settings.MIN_OVERALL_SCORE:
-                best = content
-                break
-            
-            # Track best
-            if overall > best_score:
-                best = content
-                best_score = overall
-        
-        if best:
-            # Register
-            self.novelty_guard.register_item(
-                channel=self.channel,
-                title=best['title'],
-                script=" ".join(best['sentences']),
-                search_term=best.get('selected_term'),
-                category=settings.MODE,
-                mode=settings.MODE,
-                lang=settings.LANG,
-                topic=best['topic']
-            )
-        
-        return best
-    
-    def _generate_tts(self, sentences):
-        """Generate TTS for all sentences."""
-        audio_segments = []
-        
-        for i, text in enumerate(sentences):
-            wav_path = os.path.join(self.temp_dir, f"sent_{i:02d}.wav")
-            duration, words = self.tts.synthesize(text, wav_path)
-            
-            audio_segments.append({
-                'text': text,
-                'wav_path': wav_path,
-                'duration': duration,
-                'words': words
-            })
-            
-            print(f"   {i+1}/{len(sentences)}: {duration:.2f}s")
-        
-        return audio_segments
-    
-    def _produce_video(self, audio_segments, focus, search_terms):
-        """Produce final video."""
-        # Get video pool
-        print("   🔎 Pexels search...")
-        pool = self.pexels.build_pool(focus, search_terms, len(audio_segments))
-        
-        if not pool:
+            logger.error(f"   ❌ Upload error: {e}")
             return None
-        
-        # Download
-        print("   ⬇️ Download...")
-        downloads = self.downloader.download(pool, self.temp_dir)
-        
-        # Create segments with captions
-        print("   🎨 Segments...")
-        segments = []
-        video_files = list(downloads.values())[:len(audio_segments)]
-        
-        for i, audio in enumerate(audio_segments):
-            video_src = video_files[i] if i < len(video_files) else video_files[-1]
-            
-            segment = self.segment_maker.create(
-                video_src=video_src,
-                duration=audio['duration'],
-                temp_dir=self.temp_dir,
-                index=i
-            )
-            
-            segment_with_caption = self.caption_renderer.render(
-                video_path=segment,
-                text=audio['text'],
-                words=audio['words'],
-                is_hook=(i == 0),
-                temp_dir=self.temp_dir
-            )
-            
-            segments.append(segment_with_caption)
-        
-        # Concat video
-        video_concat = os.path.join(self.temp_dir, "video.mp4")
-        self._concat_videos(segments, video_concat)
-        
-        # Concat audio
-        audio_concat = os.path.join(self.temp_dir, "audio.wav")
-        self._concat_audios([a['wav_path'] for a in audio_segments], audio_concat)
-        
-        # BGM
-        if settings.BGM_ENABLE:
-            print("   🎧 BGM...")
-            audio_dur = ffprobe_duration(audio_concat)
-            audio_concat = self.bgm_manager.add_bgm(audio_concat, audio_dur, self.temp_dir)
-        
-        # Mux
-        print("   🔄 Mux...")
-        ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        final = os.path.join(settings.OUT_DIR, f"{self.channel}_{ts}.mp4")
-        os.makedirs(settings.OUT_DIR, exist_ok=True)
-        
-        self._mux(video_concat, audio_concat, final)
-        
-        return final
-    
-    def _concat_videos(self, files, output):
-        """Concatenate video files."""
-        inputs = []
-        filters = []
-        
-        for i, p in enumerate(files):
-            inputs += ["-i", p]
-            filters.append(f"[{i}:v]setsar=1,fps={settings.TARGET_FPS},settb=AVTB[v{i}]")
-        
-        filtergraph = ";".join(filters) + ";" + "".join(f"[v{i}]" for i in range(len(files))) + f"concat=n={len(files)}:v=1:a=0[v]"
-        
-        run([
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            *inputs,
-            "-filter_complex", filtergraph,
-            "-map", "[v]",
-            "-r", str(settings.TARGET_FPS), "-vsync", "cfr",
-            "-c:v", "libx264", "-preset", "medium", "-crf", str(settings.CRF_VISUAL),
-            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-            output
-        ])
-    
-    def _concat_audios(self, files, output):
-        """Concatenate audio files."""
-        lst = output.replace(".wav", ".txt")
-        with open(lst, "w") as f:
-            for p in files:
-                f.write(f"file '{p}'\n")
-        
-        run([
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-f", "concat", "-safe", "0", "-i", lst,
-            "-c", "copy",
-            output
-        ])
-        
-        os.unlink(lst)
-    
-    def _mux(self, video, audio, output):
-        """Mux video and audio."""
-        run([
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-i", video, "-i", audio,
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "256k",
-            "-movflags", "+faststart",
-            output
-        ])
-    
-    def _upload(self, video_path, content):
-        """Upload to YouTube."""
-        metadata = {
-            'title': content['title'],
-            'description': content['description'],
-            'tags': content['tags'],
-            'privacy': settings.VISIBILITY,
-            'defaultLanguage': settings.LANG,
-            'defaultAudioLanguage': settings.LANG
-        }
-        
-        video_id = self.uploader.upload(video_path, metadata)
-        
-        # Mark uploaded
-        self.state_guard.mark_uploaded(
-            entity=content.get('focus', ''),
-            script_text=" ".join(content['sentences']),
-            content_hash=hashlib.md5(content['title'].encode()).hexdigest(),
-            video_path=video_path,
-            title=content['title']
-        )
-        
-        return video_id
