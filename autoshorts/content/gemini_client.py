@@ -201,6 +201,9 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
         """Make actual API call using official SDK"""
         
         try:
+            # Log which model we're using
+            logger.info(f"[Gemini] Making API call with model: {self.model}")
+            
             # Configure generation settings
             config = types.GenerateContentConfig(
                 temperature=0.9,
@@ -229,18 +232,20 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
             
             # Make the API call
             response = self.client.models.generate_content(
-                model=self.model,
+                model=self.model,  # Should be gemini-2.5-flash
                 contents=prompt,
                 config=config
             )
             
             # Extract text from response
             if response.text:
+                logger.info(f"[Gemini] ✅ API call successful")
                 return response.text
             
             raise RuntimeError(f"Empty response from Gemini API")
             
         except Exception as e:
+            logger.error(f"[Gemini] ❌ API call failed with model {self.model}: {e}")
             raise RuntimeError(f"Gemini API call failed: {e}")
     
     def _parse_response(self, raw_text: str) -> ContentResponse:
