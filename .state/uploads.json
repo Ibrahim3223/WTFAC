@@ -1152,11 +1152,11 @@
     "ts": "2025-10-17T02:29:06.209443"
   },
   {
-    "channel": "Orderly Home 60",
-    "entity": "untangle",
-    "content_hash": "9e427141cf0dcc3c41056c30c430c223f29e8f30",
-    "title": "Try to untangle this cable spaghetti in under 👀",
-    "video_path": "out/Orderly Home 60_One_Minute_Home_Organization_20251017_023550.mp4",
-    "ts": "2025-10-17T02:35:53.400997"
+    "channel": "RoadVista 60",
+    "entity": "true",
+    "content_hash": "521452cfc01686815039f897de77203e91ba3699",
+    "title": "You think you know scenic mountain roads. You're 👀",
+    "video_path": "out/RoadVista 60_Scenic_Road_Mini_Guides_20251017_023603.mp4",
+    "ts": "2025-10-17T02:36:06.091780"
   }
 ]
