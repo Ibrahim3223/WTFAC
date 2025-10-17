@@ -6,9 +6,41 @@ Run this file to generate a YouTube Short.
 """
 import sys
 import os
+import shutil
 
-# CRITICAL: Add project root to Python path
-# This ensures autoshorts module can be imported
+# CRITICAL: Clear Python cache before starting
+def clear_cache():
+    """Clear all Python cache files"""
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    autoshorts_path = os.path.join(project_root, 'autoshorts')
+    
+    if os.path.exists(autoshorts_path):
+        for root, dirs, files in os.walk(autoshorts_path):
+            # Remove __pycache__ directories
+            if '__pycache__' in dirs:
+                cache_dir = os.path.join(root, '__pycache__')
+                try:
+                    shutil.rmtree(cache_dir)
+                    print(f"[CACHE] Cleared: {cache_dir}")
+                except Exception as e:
+                    print(f"[CACHE] Warning: Could not clear {cache_dir}: {e}")
+            
+            # Remove .pyc files
+            for file in files:
+                if file.endswith('.pyc'):
+                    pyc_file = os.path.join(root, file)
+                    try:
+                        os.remove(pyc_file)
+                        print(f"[CACHE] Removed: {pyc_file}")
+                    except Exception as e:
+                        print(f"[CACHE] Warning: Could not remove {pyc_file}: {e}")
+
+# Clear cache first
+print("[CACHE] Clearing Python cache...")
+clear_cache()
+print("[CACHE] Cache cleared successfully\n")
+
+# Add project root to Python path
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -58,29 +90,34 @@ def main():
         
         if video_id:
             print("\n" + "=" * 60)
-            print(f"✅ SUCCESS!")
-            print(f"🔗 https://youtube.com/watch?v={video_id}")
+            print(f"✅ SUCCESS! Video ID: {video_id}")
+            print(f"   Watch: https://youtube.com/watch?v={video_id}")
             print("=" * 60)
             return 0
         else:
             print("\n" + "=" * 60)
-            print("⏭️ Video created but not uploaded")
+            print("❌ Video generation failed")
             print("=" * 60)
-            return 0
+            return 1
             
     except KeyboardInterrupt:
         print("\n\n⚠️ Interrupted by user")
-        return 1
+        return 130
         
     except Exception as e:
         print("\n" + "=" * 60)
         print(f"❌ ERROR: {e}")
         print("=" * 60)
         
+        # Print detailed traceback in debug mode
         import traceback
-        traceback.print_exc()
+        if os.getenv("DEBUG", "").lower() in ("1", "true", "yes"):
+            print("\n[DEBUG] Full traceback:")
+            traceback.print_exc()
+        
         return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    exit_code = main()
+    sys.exit(exit_code)
