@@ -163,7 +163,12 @@ NOVELTY_RETRIES = _env_int("NOVELTY_RETRIES", 6)
 # QUALITY SETTINGS
 # ============================================================
 
-MIN_QUALITY_SCORE = _env_float("MIN_QUALITY_SCORE", 5.0)  # Lowered from 6.5
+# Note: Lower threshold for more content acceptance
+# Quality scores range from 0-10, where:
+# - 5.0+ = Good quality
+# - 6.5+ = High quality  
+# - 8.0+ = Excellent quality
+MIN_QUALITY_SCORE = _env_float("MIN_QUALITY_SCORE", 5.0)
 MAX_GENERATION_ATTEMPTS = _env_int("MAX_GENERATION_ATTEMPTS", 4)
 
 # ============================================================
