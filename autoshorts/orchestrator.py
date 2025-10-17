@@ -215,15 +215,22 @@ class ShortsOrchestrator:
             for i, sentence in enumerate(sentences, 1):
                 logger.info(f"   Processing sentence {i}/{len(sentences)}")
                 
-                segment = self.tts.generate(
+                # Generate audio file path
+                audio_file = os.path.join(self.temp_dir, f"sentence_{i}.wav")
+                
+                # Synthesize with edge TTS
+                duration, word_timings = self.tts.synthesize(
                     text=sentence,
-                    output_dir=self.temp_dir,
-                    voice=settings.TTS_VOICE,
-                    rate=settings.TTS_RATE,
-                    pitch=settings.TTS_PITCH
+                    wav_out=audio_file
                 )
                 
-                if segment:
+                if duration and os.path.exists(audio_file):
+                    segment = {
+                        "text": sentence,
+                        "audio_path": audio_file,
+                        "duration": duration,
+                        "word_timings": word_timings
+                    }
                     audio_segments.append(segment)
                 else:
                     logger.error(f"   ❌ TTS failed for sentence {i}")
