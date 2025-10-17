@@ -95,6 +95,9 @@ VIDEO_HEIGHT = 1920
 TARGET_FPS = _env_int("TARGET_FPS", 30)
 CRF_VISUAL = _env_int("CRF_VISUAL", 20)
 
+# Video motion effects
+VIDEO_MOTION = _env_bool("VIDEO_MOTION", True)  # Enable Ken Burns and motion effects
+
 # ============================================================
 # TTS SETTINGS
 # ============================================================
