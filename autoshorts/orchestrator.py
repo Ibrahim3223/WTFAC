@@ -262,14 +262,40 @@ class ShortsOrchestrator:
         try:
             # Step 1: Search and download videos
             logger.info("   🔍 Searching for videos...")
+            
+            # If search queries are too specific or abstract, use generic fallback
+            search_queries = content["search_queries"]
+            
+            # Filter out bad queries
+            bad_terms = ["minute", "second", "hour", "day", "week", "month", "year", 
+                        "time", "concept", "idea", "thought", "feeling"]
+            filtered_queries = [
+                q for q in search_queries 
+                if not any(bad in q.lower() for bad in bad_terms)
+            ]
+            
+            # If all queries filtered out, use generic terms based on topic
+            if not filtered_queries:
+                logger.warning("   ⚠️ Search queries too abstract, using generic fallback")
+                topic_lower = settings.CHANNEL_TOPIC.lower()
+                if "eco" in topic_lower or "nature" in topic_lower:
+                    filtered_queries = ["nature landscape", "green forest", "ocean waves"]
+                elif "tech" in topic_lower or "science" in topic_lower:
+                    filtered_queries = ["technology", "modern city", "innovation"]
+                else:
+                    filtered_queries = ["lifestyle", "daily routine", "people working"]
+            
+            logger.info(f"   Using queries: {filtered_queries}")
+            
             video_pool = self.pexels.build_pool(
                 focus=content.get("metadata", {}).get("title", ""),
-                search_terms=content["search_queries"],
-                need=len(audio_segments) + 2  # Extra clips for variety
+                search_terms=filtered_queries,
+                need=len(audio_segments) + 2
             )
             
             if not video_pool:
                 logger.error("   ❌ No suitable videos found")
+                logger.info("   💡 Tip: Check PEXELS_API_KEY or try broader search terms")
                 return None
             
             # Extract video URLs for download
