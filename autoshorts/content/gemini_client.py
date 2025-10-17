@@ -140,12 +140,13 @@ CRITICAL REQUIREMENTS:
 
 {additional_context or ''}
 
-SEARCH QUERY RULES:
-- Use CONCRETE, VISUAL nouns (clock, nature, city, people, hands, water)
-- NEVER use abstract concepts (time, ideas, concepts, minute, second)
-- NEVER use text/numbers that appear in script ("1 minute" ❌, "clock" ✅)
-- Each query should return 100+ stock videos on Pexels
-- Examples: "sunset ocean", "busy city street", "person working laptop"
+SEARCH QUERY RULES - CRITICAL:
+- Use ONLY physical, tangible things you can FILM (nature, city, people, hands, water, sky, buildings)
+- NEVER use: time, minute, second, why, how, boost, unlock, master, effect, concept, idea, thought
+- NEVER use verbs or actions as main terms (use nouns!)
+- Think "what b-roll footage exists on stock video sites?"
+- Good examples: "mountain sunset", "busy street", "coffee cup", "typing hands"
+- Bad examples: "why time", "boost focus", "interleaving effect", "mastering habits"
 
 OUTPUT FORMAT (valid JSON only):
 {{
