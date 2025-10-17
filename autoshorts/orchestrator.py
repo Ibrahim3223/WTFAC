@@ -48,11 +48,14 @@ class ShortsOrchestrator:
         else:
             logger.info(f"✅ Pexels API key found: {pexels_api_key[:10]}...")
         
+        # Get Gemini model from settings (defaults to "flash" → gemini-2.5-flash)
+        gemini_model = settings.GEMINI_MODEL
+        logger.info(f"📝 Configured Gemini model: {gemini_model}")
+        
         # Initialize modules with API keys
-        logger.info(f"[Gemini] Using model: {settings.GEMINI_MODEL}")
         self.gemini = GeminiClient(
             api_key=gemini_api_key,
-            model=settings.GEMINI_MODEL,
+            model=gemini_model,  # ✅ settings'ten gelen model
             max_retries=3
         )
         
