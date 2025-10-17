@@ -41,9 +41,6 @@ class ShortsOrchestrator:
                 "Please set it in GitHub Secrets or your .env file."
             )
         
-        pexels_api_key = os.getenv("PEXELS_API_KEY", "")
-        pixabay_api_key = os.getenv("PIXABAY_API_KEY", "")
-        
         # Initialize modules with API keys
         logger.info(f"[Gemini] Using model: {settings.GEMINI_MODEL}")
         self.gemini = GeminiClient(
@@ -54,11 +51,7 @@ class ShortsOrchestrator:
         
         self.quality_scorer = QualityScorer()
         self.tts = TTSHandler()
-        
-        self.pexels = PexelsClient(
-            pexels_key=pexels_api_key,
-            pixabay_key=pixabay_api_key
-        )
+        self.pexels = PexelsClient()
         
         self.downloader = VideoDownloader()
         self.segment_maker = SegmentMaker()
