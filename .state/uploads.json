@@ -1104,27 +1104,19 @@
     "ts": "2025-10-16T17:23:40.387875"
   },
   {
-    "channel": "TaxWise USA",
-    "entity": "that",
-    "content_hash": "28541a3f94c25c8e3fbe2845f754123a4526bc04",
-    "title": "3 Things About Tax That'll Blow Your Mind 🔥",
-    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251017_015219.mp4",
-    "ts": "2025-10-17T01:52:22.711097"
+    "channel": "Flashback Minute",
+    "entity": "know",
+    "content_hash": "751f29c5b2371fd653d7a0e2dca647bd731ff857",
+    "title": "Nobody knows the real story behind the Berlin ⚡",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251017_015741.mp4",
+    "ts": "2025-10-17T01:57:45.008953"
   },
   {
-    "channel": "Universe Jumper",
-    "entity": "jumping",
-    "content_hash": "35b192df074bb669b5c9b3ad281bde585d844482",
-    "title": "What if jumping dimensions isn't a choice 🎯",
-    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251017_020029.mp4",
-    "ts": "2025-10-17T02:00:31.925381"
-  },
-  {
-    "channel": "CritterFact",
-    "entity": "think",
-    "content_hash": "be1c660bac78c875dfe35f08264893722358a2a5",
-    "title": "You think you know this mammal? Think again ✨",
-    "video_path": "out/CritterFact_Interesting_Visual_Explainers_20251017_020517.mp4",
-    "ts": "2025-10-17T02:05:20.173745"
+    "channel": "Cinematic Echo",
+    "entity": "this",
+    "content_hash": "351bf837dbbcd86453e1990e584a58a3d4a6db67",
+    "title": "You think you know this iconic film prop 💡",
+    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251017_020543.mp4",
+    "ts": "2025-10-17T02:05:46.495496"
   }
 ]
