@@ -136,9 +136,16 @@ CRITICAL REQUIREMENTS:
 2. Script must be exactly {script_sentences} clear sentences
 3. Each sentence should be one complete thought
 4. CTA must be engaging and natural
-5. Search queries must be specific and visual
+5. Search queries MUST be VISUAL and GENERIC - things you can SEE in stock videos
 
 {additional_context or ''}
+
+SEARCH QUERY RULES:
+- Use CONCRETE, VISUAL nouns (clock, nature, city, people, hands, water)
+- NEVER use abstract concepts (time, ideas, concepts, minute, second)
+- NEVER use text/numbers that appear in script ("1 minute" ❌, "clock" ✅)
+- Each query should return 100+ stock videos on Pexels
+- Examples: "sunset ocean", "busy city street", "person working laptop"
 
 OUTPUT FORMAT (valid JSON only):
 {{
@@ -151,9 +158,9 @@ OUTPUT FORMAT (valid JSON only):
     ],
     "cta": "Call to action",
     "search_queries": [
-        "specific visual query 1",
-        "specific visual query 2",
-        "specific visual query 3"
+        "visual concrete noun 1",
+        "visual concrete noun 2", 
+        "visual concrete noun 3"
     ],
     "metadata": {{
         "title": "Catchy video title (max 60 chars)",
