@@ -163,7 +163,7 @@ NOVELTY_RETRIES = _env_int("NOVELTY_RETRIES", 6)
 # QUALITY SETTINGS
 # ============================================================
 
-MIN_QUALITY_SCORE = _env_float("MIN_QUALITY_SCORE", 0.6)
+MIN_QUALITY_SCORE = _env_float("MIN_QUALITY_SCORE", 5.0)  # Lowered from 6.5
 MAX_GENERATION_ATTEMPTS = _env_int("MAX_GENERATION_ATTEMPTS", 4)
 
 # ============================================================
