@@ -108,7 +108,11 @@ CRF_VISUAL = 22
 
 USE_GEMINI = _env_bool("USE_GEMINI", True)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+
+# ⭐ FIX: Use correct Gemini model name
+# gemini-2.5-flash doesn't exist - using stable model
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+
 GEMINI_PROMPT = os.getenv("GEMINI_PROMPT", "").strip()
 GEMINI_TEMP = _env_float("GEMINI_TEMP", 0.85)
 
@@ -184,6 +188,19 @@ BGM_DUCK_THRESH = _env_float("BGM_DUCK_THRESH", 0.035)
 BGM_DUCK_RATIO = _env_float("BGM_DUCK_RATIO", 10.0)
 BGM_DUCK_ATTACK_MS = _env_int("BGM_DUCK_ATTACK_MS", 6)
 BGM_DUCK_RELEASE_MS = _env_int("BGM_DUCK_RELEASE_MS", 180)
+
+# Parse BGM_URLS from ENV
+_bgm_urls_raw = os.getenv("BGM_URLS", "").strip()
+if _bgm_urls_raw:
+    try:
+        import json
+        BGM_URLS = json.loads(_bgm_urls_raw)
+        if not isinstance(BGM_URLS, list):
+            BGM_URLS = []
+    except:
+        BGM_URLS = [u.strip() for u in _bgm_urls_raw.split(',') if u.strip()]
+else:
+    BGM_URLS = []
 
 # ==================== YouTube ====================
 
