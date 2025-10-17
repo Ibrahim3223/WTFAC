@@ -160,7 +160,11 @@ class ShortsOrchestrator:
             ])
             
             # Quality check
-            score = self.quality_scorer.score_content(full_text)
+            score_result = self.quality_scorer.score(
+                sentences=[content.hook] + content.script + [content.cta],
+                title=content.metadata.get("title", "")
+            )
+            score = score_result.get("overall", 0.0)
             logger.info(f"   Quality score: {score:.2f}")
             
             if score < settings.MIN_QUALITY_SCORE:
