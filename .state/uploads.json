@@ -1176,19 +1176,27 @@
     "ts": "2025-10-17T02:50:23.681351"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "know",
-    "content_hash": "91bf80f8b08a2c4b911bb4ec1e1bedb1a4ae6c2d",
-    "title": "Nobody knows why these massive ancient cities vanished 😱",
-    "video_path": "out/Tales of The Forgotten Realms_Forgotten_Historical_Tales_Lost_Stories_20251017_162224.mp4",
-    "ts": "2025-10-17T16:22:27.445368"
+    "channel": "TaxWise USA",
+    "entity": "all",
+    "content_hash": "805094fb2d7ddc6e93cbfd0bb172c72aad2a1340",
+    "title": "3 Things About Tax That'll Blow Your Mind 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251017_162114.mp4",
+    "ts": "2025-10-17T16:21:17.348574"
   },
   {
-    "channel": "Universe Jumper",
-    "entity": "legendary",
-    "content_hash": "aeb759db24d1fbf3d6d9dfb6960793791eeecb05",
-    "title": "What if a legendary hero awoke in a 🎯",
-    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251017_163123.mp4",
-    "ts": "2025-10-17T16:31:27.059352"
+    "channel": "Flashback Minute",
+    "entity": "9th",
+    "content_hash": "32324e6315fc8f5802769e0a8b1821360214156e",
+    "title": "9 Things About This That'll Blow Your Mind 🔥",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251017_162743.mp4",
+    "ts": "2025-10-17T16:27:46.006741"
+  },
+  {
+    "channel": "Cinematic Echo",
+    "entity": "told",
+    "content_hash": "6cb84c12497642b8cd4252220d73df5a79e293c6",
+    "title": "What if I told you every cinematic punch 💡",
+    "video_path": "out/Cinematic Echo_Hidden_Movie_Facts_Behind_the_Scenes_Secrets_20251017_163505.mp4",
+    "ts": "2025-10-17T16:35:08.313747"
   }
 ]
