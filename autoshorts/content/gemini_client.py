@@ -64,11 +64,11 @@ class GeminiClient:
         else:
             # If full model name provided, use it directly
             self.model = model
-            
+        
         self.max_retries = max_retries
         self.timeout = timeout
         
-        logger.info(f"[Gemini] Using model: {self.model}")
+        logger.info(f"[Gemini] Initialized with model: {self.model}")  # ✅ Debug log eklendi
     
     def generate(
         self,
