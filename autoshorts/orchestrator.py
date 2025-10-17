@@ -172,8 +172,17 @@ class ShortsOrchestrator:
                 return None
             
             # Novelty check
-            if not self.novelty_guard.is_novel(full_text):
-                logger.warning("   ⚠️ Content not novel enough (too similar to recent videos)")
+            decision = self.novelty_guard.check_novelty(
+                channel=self.channel,
+                title=content.metadata.get("title", ""),
+                script=full_text,
+                search_term=content.search_queries[0] if content.search_queries else None,
+                category=settings.CHANNEL_TOPIC,
+                lang=settings.LANG
+            )
+            
+            if not decision.ok:
+                logger.warning(f"   ⚠️ Content not novel enough: {decision.reason}")
                 return None
             
             # Prepare structured content
@@ -342,6 +351,17 @@ class ShortsOrchestrator:
             if video_id:
                 # Record in state
                 self.state_guard.record_upload(video_id, content)
+                
+                # Register with novelty guard
+                self.novelty_guard.register_item(
+                    channel=self.channel,
+                    title=metadata.get("title", ""),
+                    script=" ".join([content.get("hook", "")] + content.get("script", []) + [content.get("cta", "")]),
+                    search_term=content.get("search_queries", [""])[0] if content.get("search_queries") else None,
+                    topic=settings.CHANNEL_TOPIC,
+                    pexels_ids=[]  # Can be populated if tracked
+                )
+                
                 logger.info(f"   ✅ Uploaded: https://youtube.com/watch?v={video_id}")
                 return video_id
             else:
