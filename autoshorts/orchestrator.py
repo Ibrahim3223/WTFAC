@@ -266,24 +266,27 @@ class ShortsOrchestrator:
             # If search queries are too specific or abstract, use generic fallback
             search_queries = content["search_queries"]
             
-            # Filter out bad queries
-            bad_terms = ["minute", "second", "hour", "day", "week", "month", "year", 
-                        "time", "concept", "idea", "thought", "feeling"]
+            # Filter out bad queries (abstract terms that won't find stock footage)
+            bad_terms = [
+                "minute", "second", "hour", "day", "week", "month", "year", 
+                "time", "concept", "idea", "thought", "feeling", "effect",
+                "boost", "unlock", "master", "why", "how", "interleaving"
+            ]
             filtered_queries = [
                 q for q in search_queries 
                 if not any(bad in q.lower() for bad in bad_terms)
             ]
             
-            # If all queries filtered out, use generic terms based on topic
+            # If all queries filtered out or empty, use ultra-generic fallback
             if not filtered_queries:
-                logger.warning("   ⚠️ Search queries too abstract, using generic fallback")
-                topic_lower = settings.CHANNEL_TOPIC.lower()
-                if "eco" in topic_lower or "nature" in topic_lower:
-                    filtered_queries = ["nature landscape", "green forest", "ocean waves"]
-                elif "tech" in topic_lower or "science" in topic_lower:
-                    filtered_queries = ["technology", "modern city", "innovation"]
-                else:
-                    filtered_queries = ["lifestyle", "daily routine", "people working"]
+                logger.warning("   ⚠️ Search queries too abstract, using ultra-generic fallback")
+                filtered_queries = [
+                    "nature mountains",
+                    "city lights",
+                    "ocean sunset",
+                    "forest trees",
+                    "people lifestyle"
+                ]
             
             logger.info(f"   Using queries: {filtered_queries}")
             
@@ -292,6 +295,16 @@ class ShortsOrchestrator:
                 search_terms=filtered_queries,
                 need=len(audio_segments) + 2
             )
+            
+            # If still no videos, try absolute fallback with most popular terms
+            if not video_pool:
+                logger.warning("   ⚠️ No videos found, trying absolute fallback...")
+                fallback_queries = ["nature", "city", "ocean", "sunset", "people"]
+                video_pool = self.pexels.build_pool(
+                    focus="",
+                    search_terms=fallback_queries,
+                    need=len(audio_segments) + 2
+                )
             
             if not video_pool:
                 logger.error("   ❌ No suitable videos found")
