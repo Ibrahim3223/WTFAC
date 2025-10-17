@@ -165,10 +165,17 @@ class ShortsOrchestrator:
                 title=content.metadata.get("title", "")
             )
             score = score_result.get("overall", 0.0)
-            logger.info(f"   Quality score: {score:.2f}")
             
-            if score < settings.MIN_QUALITY_SCORE:
-                logger.warning(f"   ⚠️ Quality too low: {score:.2f} < {settings.MIN_QUALITY_SCORE}")
+            # Log all scores for debugging
+            logger.info(f"   Quality: {score_result.get('quality', 0):.2f} | "
+                       f"Viral: {score_result.get('viral', 0):.2f} | "
+                       f"Retention: {score_result.get('retention', 0):.2f} | "
+                       f"Overall: {score:.2f}")
+            
+            min_score = settings.MIN_QUALITY_SCORE
+            if score < min_score:
+                logger.warning(f"   ⚠️ Quality too low: {score:.2f} < {min_score}")
+                logger.info(f"   💡 Tip: Lower MIN_QUALITY_SCORE in settings or channels.yml if this happens often")
                 return None
             
             # Novelty check
@@ -255,14 +262,18 @@ class ShortsOrchestrator:
         try:
             # Step 1: Search and download videos
             logger.info("   🔍 Searching for videos...")
-            video_clips = self.pexels.search_videos(
-                queries=content["search_queries"],
-                min_duration=settings.TARGET_DURATION
+            video_pool = self.pexels.build_pool(
+                focus=content.get("metadata", {}).get("title", ""),
+                search_terms=content["search_queries"],
+                need=len(audio_segments) + 2  # Extra clips for variety
             )
             
-            if not video_clips:
+            if not video_pool:
                 logger.error("   ❌ No suitable videos found")
                 return None
+            
+            # Extract video URLs for download
+            video_clips = [{"url": url, "id": vid} for vid, url in video_pool]
             
             logger.info(f"   📥 Downloading {len(video_clips)} videos...")
             downloaded = self.downloader.download_videos(
