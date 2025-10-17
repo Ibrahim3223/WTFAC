@@ -316,15 +316,36 @@ class ShortsOrchestrator:
             
             # Step 2: Create video segments
             logger.info("   ✂️ Creating video segments...")
-            video_segments = self.segment_maker.create_segments(
-                video_files=video_files,
-                audio_segments=audio_segments,
-                output_dir=self.temp_dir
-            )
+            video_segments = []
+            
+            # Match videos with audio segments
+            for i, audio_segment in enumerate(audio_segments):
+                # Cycle through available videos if needed
+                video_file = video_files[i % len(video_files)]
+                
+                try:
+                    segment_path = self.segment_maker.create(
+                        video_src=video_file,
+                        duration=audio_segment["duration"],
+                        temp_dir=self.temp_dir,
+                        index=i
+                    )
+                    
+                    if segment_path and os.path.exists(segment_path):
+                        video_segments.append(segment_path)
+                    else:
+                        logger.error(f"   ❌ Segment {i} creation failed")
+                        return None
+                        
+                except Exception as e:
+                    logger.error(f"   ❌ Segment {i} error: {e}")
+                    return None
             
             if not video_segments:
-                logger.error("   ❌ Segment creation failed")
+                logger.error("   ❌ No video segments created")
                 return None
+            
+            logger.info(f"   ✅ Created {len(video_segments)} video segments")
             
             # Step 3: Add captions
             logger.info("   📝 Adding captions...")
