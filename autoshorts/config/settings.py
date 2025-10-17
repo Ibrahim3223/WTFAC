@@ -97,6 +97,7 @@ CRF_VISUAL = _env_int("CRF_VISUAL", 20)
 
 # Video motion effects
 VIDEO_MOTION = _env_bool("VIDEO_MOTION", True)  # Enable Ken Burns and motion effects
+MOTION_INTENSITY = _env_float("MOTION_INTENSITY", 1.18)  # Zoom intensity for Ken Burns (1.0 = no zoom, 1.2 = 20% zoom)
 
 # ============================================================
 # TTS SETTINGS
