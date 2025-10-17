@@ -314,18 +314,26 @@ class ShortsOrchestrator:
             # Extract video URLs for download
             video_clips = [{"url": url, "id": vid} for vid, url in video_pool]
             
-            logger.info(f"   📥 Downloading {len(video_clips)} videos...")
+            logger.info(f"   📥 Downloading {len(video_pool)} videos...")
             downloaded = self.downloader.download(
                 pool=video_pool,
                 temp_dir=self.temp_dir
             )
             
             if not downloaded:
-                logger.error("   ❌ Video download failed")
+                logger.error("   ❌ Video download failed - no videos downloaded")
+                logger.info(f"   💡 Debug: video_pool had {len(video_pool)} items")
                 return None
             
-            # Convert downloaded dict to list of paths for segment maker
-            video_files = list(downloaded.values())
+            # Convert downloaded dict to list of paths
+            video_files = [path for path in downloaded.values() if isinstance(path, str)]
+            
+            if not video_files:
+                logger.error("   ❌ No valid video file paths after download")
+                logger.info(f"   💡 Debug: downloaded dict: {list(downloaded.items())[:3]}")
+                return None
+            
+            logger.info(f"   ✅ Ready to process {len(video_files)} video files")
             
             # Step 2: Create video segments
             logger.info("   ✂️ Creating video segments...")
