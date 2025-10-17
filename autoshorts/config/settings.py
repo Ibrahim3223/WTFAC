@@ -120,6 +120,9 @@ PEXELS_STRICT_VERTICAL = _env_bool("PEXELS_STRICT_VERTICAL", True)
 
 ALLOW_PIXABAY_FALLBACK = _env_bool("ALLOW_PIXABAY_FALLBACK", True)
 
+# Entity filtering for video search
+STRICT_ENTITY_FILTER = _env_bool("STRICT_ENTITY_FILTER", False)
+
 # ============================================================
 # CAPTION SETTINGS
 # ============================================================
