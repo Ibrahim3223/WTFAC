@@ -41,6 +41,13 @@ class ShortsOrchestrator:
                 "Please set it in GitHub Secrets or your .env file."
             )
         
+        # Check Pexels API key
+        pexels_api_key = os.getenv("PEXELS_API_KEY")
+        if not pexels_api_key:
+            logger.warning("⚠️ PEXELS_API_KEY not found - video search may fail")
+        else:
+            logger.info(f"✅ Pexels API key found: {pexels_api_key[:10]}...")
+        
         # Initialize modules with API keys
         logger.info(f"[Gemini] Using model: {settings.GEMINI_MODEL}")
         self.gemini = GeminiClient(
