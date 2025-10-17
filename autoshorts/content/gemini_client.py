@@ -2,9 +2,11 @@
 """
 Gemini AI client for content generation.
 Handles API calls, prompt templates, and content parsing.
+With retry mechanism for reliability.
 """
 import re
 import json
+import time
 import requests
 from typing import Dict, List, Any, Optional
 
@@ -98,7 +100,7 @@ Language: {lang}
 
 
 class GeminiClient:
-    """Handles all Gemini API interactions."""
+    """Handles all Gemini API interactions with retry mechanism."""
     
     def __init__(self):
         """Initialize client with API key from settings."""
@@ -108,6 +110,8 @@ class GeminiClient:
         self.api_key = settings.GEMINI_API_KEY
         self.model = settings.GEMINI_MODEL
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
+        
+        print(f"[Gemini] Using model: {self.model}")
     
     def generate(
         self, 
@@ -143,8 +147,8 @@ class GeminiClient:
             banlist=banlist or []
         )
         
-        # Call API
-        raw_response = self._call_api(prompt)
+        # Call API with retry
+        raw_response = self._call_api_with_retry(prompt)
         
         # Parse response
         parsed = self._parse_response(raw_response)
@@ -208,6 +212,37 @@ Avoid overlap for 180 days:
 """
         return full_prompt
     
+    def _call_api_with_retry(self, prompt: str, max_retries: int = 3) -> str:
+        """Call API with retry mechanism for transient errors."""
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                return self._call_api(prompt)
+                
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                
+                # Check if retryable error
+                is_retryable = any(code in error_str for code in [
+                    '503', '429', '500', '502', '504',
+                    'service unavailable', 'rate limit', 'timeout'
+                ])
+                
+                if is_retryable and attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 2  # 2s, 4s, 6s
+                    print(f"   ⚠️ Gemini API error (attempt {attempt+1}/{max_retries}): {str(e)[:100]}")
+                    print(f"   ⏳ Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Not retryable or last attempt
+                    raise
+        
+        # All retries failed
+        raise last_error
+    
     def _call_api(self, prompt: str) -> str:
         """Make API call to Gemini."""
         url = f"{self.base_url}/models/{self.model}:generateContent"
@@ -234,6 +269,19 @@ Avoid overlap for 180 days:
             text = data["candidates"][0]["content"]["parts"][0]["text"]
             return text
             
+        except requests.exceptions.HTTPError as e:
+            # Include response body in error for debugging
+            error_detail = ""
+            try:
+                error_detail = e.response.text[:200]
+            except:
+                pass
+            
+            raise RuntimeError(
+                f"Gemini API HTTP {e.response.status_code}: {str(e)}\n"
+                f"Model: {self.model}\n"
+                f"Detail: {error_detail}"
+            )
         except Exception as e:
             raise RuntimeError(f"Gemini API error: {str(e)[:300]}")
     
