@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, List
 from .config import settings
 from .content.gemini_client import GeminiClient
 from .content.quality_scorer import QualityScorer
-from .tts.edge_handler import EdgeTTSHandler
+from .tts.edge_handler import TTSHandler
 from .video.pexels_client import PexelsClient
 from .video.downloader import VideoDownloader
 from .video.segment_maker import SegmentMaker
@@ -53,7 +53,7 @@ class ShortsOrchestrator:
         )
         
         self.quality_scorer = QualityScorer()
-        self.tts = EdgeTTSHandler()
+        self.tts = TTSHandler()
         
         self.pexels = PexelsClient(
             pexels_key=pexels_api_key,
