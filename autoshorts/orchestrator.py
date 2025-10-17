@@ -354,10 +354,18 @@ class ShortsOrchestrator:
                 # Cycle through available videos if needed
                 video_file = video_files[i % len(video_files)]
                 
+                # Ensure video_file is string path, not float/int
+                if not isinstance(video_file, str):
+                    logger.error(f"   ❌ Invalid video file type at index {i}: {type(video_file)}")
+                    continue
+                
                 try:
+                    # Ensure duration is float
+                    duration = float(audio_segment["duration"])
+                    
                     segment_path = self.segment_maker.create(
                         video_src=video_file,
-                        duration=audio_segment["duration"],
+                        duration=duration,
                         temp_dir=self.temp_dir,
                         index=i
                     )
@@ -370,6 +378,8 @@ class ShortsOrchestrator:
                         
                 except Exception as e:
                     logger.error(f"   ❌ Segment {i} error: {e}")
+                    import traceback
+                    logger.debug(traceback.format_exc())
                     return None
             
             if not video_segments:
