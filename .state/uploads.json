@@ -1104,11 +1104,19 @@
     "ts": "2025-10-16T17:23:40.387875"
   },
   {
-    "channel": "Flashback Minute",
-    "entity": "know",
-    "content_hash": "751f29c5b2371fd653d7a0e2dca647bd731ff857",
-    "title": "Nobody knows the real story behind the Berlin ⚡",
-    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251017_015741.mp4",
-    "ts": "2025-10-17T01:57:45.008953"
+    "channel": "TaxWise USA",
+    "entity": "that",
+    "content_hash": "28541a3f94c25c8e3fbe2845f754123a4526bc04",
+    "title": "3 Things About Tax That'll Blow Your Mind 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251017_015219.mp4",
+    "ts": "2025-10-17T01:52:22.711097"
+  },
+  {
+    "channel": "If They Lived Today",
+    "entity": "ancient",
+    "content_hash": "8f9bd2bd9fbd8e2b420212b8fcd2eb0f569fc145",
+    "title": "What if ancient empires met towering cities 😱",
+    "video_path": "out/If They Lived Today_Historical_Figures_in_Modern_Times_20251017_015952.mp4",
+    "ts": "2025-10-17T01:59:55.318260"
   }
 ]
