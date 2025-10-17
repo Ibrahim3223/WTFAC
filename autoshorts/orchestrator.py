@@ -12,13 +12,12 @@ from typing import Optional, Dict, Any, List
 from .config import settings
 from .content.gemini_client import GeminiClient
 from .content.quality_scorer import QualityScorer
-from .tts.tts_handler import TTSHandler
+from .tts.edge_handler import EdgeTTSHandler
 from .video.pexels_client import PexelsClient
-from .video.video_downloader import VideoDownloader
+from .video.downloader import VideoDownloader
 from .video.segment_maker import SegmentMaker
-from .captions.caption_renderer import CaptionRenderer
+from .captions.renderer import CaptionRenderer
 from .audio.bgm_manager import BGMManager
-from .audio.audio_mixer import AudioMixer
 from .upload.youtube_uploader import YouTubeUploader
 from .state.novelty_guard import NoveltyGuard
 from .state.state_guard import StateGuard
@@ -54,7 +53,7 @@ class ShortsOrchestrator:
         )
         
         self.quality_scorer = QualityScorer()
-        self.tts = TTSHandler()
+        self.tts = EdgeTTSHandler()
         
         self.pexels = PexelsClient(
             pexels_key=pexels_api_key,
@@ -65,7 +64,6 @@ class ShortsOrchestrator:
         self.segment_maker = SegmentMaker()
         self.caption_renderer = CaptionRenderer()
         self.bgm_manager = BGMManager()
-        self.audio_mixer = AudioMixer()
         self.uploader = YouTubeUploader()
         
         # State management
@@ -287,21 +285,37 @@ class ShortsOrchestrator:
                 logger.error("   ❌ Caption rendering failed")
                 return None
             
-            # Step 4: Add BGM and mix audio
+            # Step 4: Add BGM and finalize
             logger.info("   🎵 Adding background music...")
             bgm_path = self.bgm_manager.get_bgm(
                 duration=settings.TARGET_DURATION,
                 output_dir=self.temp_dir
             )
             
-            final_video = self.audio_mixer.mix(
-                video_segments=captioned_segments,
-                bgm_path=bgm_path,
-                output_dir=self.temp_dir
-            )
+            # Concatenate all segments
+            final_video = os.path.join(self.temp_dir, "final_video.mp4")
             
-            if not final_video:
-                logger.error("   ❌ Audio mixing failed")
+            # Simple concatenation for now
+            concat_list = os.path.join(self.temp_dir, "concat_list.txt")
+            with open(concat_list, "w") as f:
+                for segment in captioned_segments:
+                    f.write(f"file '{segment}'\n")
+            
+            import subprocess
+            cmd = [
+                "ffmpeg", "-f", "concat", "-safe", "0",
+                "-i", concat_list,
+                "-c", "copy",
+                final_video
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.error(f"   ❌ FFmpeg error: {result.stderr}")
+                return None
+            
+            if not os.path.exists(final_video):
+                logger.error("   ❌ Final video not created")
                 return None
             
             logger.info(f"   ✅ Video produced: {final_video}")
@@ -324,7 +338,7 @@ class ShortsOrchestrator:
                 title=metadata.get("title", "Amazing Short"),
                 description=metadata.get("description", ""),
                 tags=metadata.get("tags", []),
-                category_id="22",  # People & Blogs
+                category_id="22",
                 privacy_status="public"
             )
             
