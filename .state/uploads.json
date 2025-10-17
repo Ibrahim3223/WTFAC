@@ -1176,11 +1176,19 @@
     "ts": "2025-10-17T02:50:23.681351"
   },
   {
-    "channel": "WT Facts About Countries",
-    "entity": "wondered",
-    "content_hash": "16513c4a6ba9fade923b9f340fd6a9f3de0aaa49",
-    "title": "Ever wondered about the hidden secret behind Venice's 🎯",
-    "video_path": "out/WT Facts About Countries_Amazing_Country_Secrets_Cultural_Facts_20251017_162316.mp4",
-    "ts": "2025-10-17T16:23:20.157737"
+    "channel": "TaxWise USA",
+    "entity": "all",
+    "content_hash": "805094fb2d7ddc6e93cbfd0bb172c72aad2a1340",
+    "title": "3 Things About Tax That'll Blow Your Mind 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251017_162114.mp4",
+    "ts": "2025-10-17T16:21:17.348574"
+  },
+  {
+    "channel": "Flashback Minute",
+    "entity": "9th",
+    "content_hash": "32324e6315fc8f5802769e0a8b1821360214156e",
+    "title": "9 Things About This That'll Blow Your Mind 🔥",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251017_162743.mp4",
+    "ts": "2025-10-17T16:27:46.006741"
   }
 ]
