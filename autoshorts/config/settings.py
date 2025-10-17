@@ -78,7 +78,7 @@ YT_REFRESH_TOKEN = os.getenv("YT_REFRESH_TOKEN", "")
 # GEMINI SETTINGS
 # ============================================================
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "flash")  # Default: gemini-2.5-flash (via mapping)
 USE_GEMINI = _env_bool("USE_GEMINI", True)
 ADDITIONAL_PROMPT_CONTEXT = os.getenv("ADDITIONAL_PROMPT_CONTEXT", "")
 
