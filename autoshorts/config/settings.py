@@ -100,6 +100,7 @@ CRF_VISUAL = _env_int("CRF_VISUAL", 20)
 # ============================================================
 
 TTS_VOICE = os.getenv("TTS_VOICE", "en-US-GuyNeural")
+VOICE = TTS_VOICE  # Alias for backward compatibility
 TTS_RATE = os.getenv("TTS_RATE", "+0%")
 TTS_PITCH = os.getenv("TTS_PITCH", "+0Hz")
 TTS_STYLE = os.getenv("TTS_STYLE", "narration-professional")
