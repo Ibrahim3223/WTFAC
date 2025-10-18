@@ -76,15 +76,35 @@ class SegmentMaker:
         if not settings.VIDEO_MOTION or duration < 2.0:
             return ""
         
-        intensity = settings.MOTION_INTENSITY.lower()
+        # ✅ DÜZELTME: MOTION_INTENSITY her türlü değeri kabul et
+        intensity_value = settings.MOTION_INTENSITY
         
+        # Intensity'yi kategorize et
+        try:
+            # Float veya string olabilir
+            if isinstance(intensity_value, str):
+                intensity = intensity_value.lower()
+            elif isinstance(intensity_value, (int, float)):
+                # Float değere göre kategori belirle
+                if intensity_value <= 1.10:
+                    intensity = "low"
+                elif intensity_value <= 1.18:
+                    intensity = "moderate"
+                else:
+                    intensity = "dynamic"
+            else:
+                intensity = "moderate"  # Default
+        except Exception:
+            intensity = "moderate"  # Safe fallback
+        
+        # Zoom ranges based on intensity
         zoom_range = (1.0, 1.12)
         speed = 0.001
         
-        if intensity == "moderate":
+        if intensity in ("moderate", "medium"):
             zoom_range = (1.0, 1.15)
             speed = 0.0015
-        elif intensity == "dynamic":
+        elif intensity in ("dynamic", "high", "strong"):
             zoom_range = (1.0, 1.20)
             speed = 0.002
         
