@@ -1248,67 +1248,75 @@
     "ts": "2025-10-17T17:20:34.119469"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "nobody",
-    "content_hash": "077d55f7cf86050ec090ca3d1595295003bc6a88",
-    "title": "What if nobody knows why great cities disappear... until now 👀",
-    "video_path": "out/Tales of The Forgotten Realms_Forgotten_Historical_Tales_Lost_Stories_20251018_015043.mp4",
-    "ts": "2025-10-18T01:50:46.004453"
+    "channel": "World Briefing",
+    "entity": "that",
+    "content_hash": "c8ade0fffb5b7af4bb6b1809526af9f4fcd5d14e",
+    "title": "Milliseconds. That's how fast global news travels across 🤯",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251018_014836.mp4",
+    "ts": "2025-10-18T01:48:40.021627"
   },
   {
-    "channel": "GalacticUpdate",
-    "entity": "international",
-    "content_hash": "1d6ab5d0cd12b32abf3e49fac1094d19541ae2b7",
-    "title": "The International Space Station hides a shocking secret ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251018_015753.mp4",
-    "ts": "2025-10-18T01:57:56.746777"
+    "channel": "Rewind Retro Media",
+    "entity": "knew",
+    "content_hash": "3d89e607e7710afbf8f831a4ee88ac328ad52d39",
+    "title": "Nobody knew why old screens felt so magical ⚡",
+    "video_path": "out/Rewind Retro Media_Nostalgic_Memories_Retro_Culture_20251018_015605.mp4",
+    "ts": "2025-10-18T01:56:07.921537"
   },
   {
-    "channel": "BeyondAxis",
-    "entity": "told",
-    "content_hash": "c0a3a446716fd208427fad16ce721d9aad47213e",
-    "title": "What if I told you farms could feed 👀",
-    "video_path": "out/BeyondAxis_Future_Utopian_Technology_Tomorrow_s_Innovations_20251018_020422.mp4",
-    "ts": "2025-10-18T02:04:24.785071"
-  },
-  {
-    "channel": "SkySynthLab",
-    "entity": "think",
-    "content_hash": "2643ff19ea65cd99c66e37185b62e792a7b98704",
-    "title": "You think AI is just code running. It's ✨",
-    "video_path": "out/SkySynthLab_AI_Development_Theories_Future_Possibilities_20251018_021204.mp4",
-    "ts": "2025-10-18T02:12:08.098948"
-  },
-  {
-    "channel": "SpaceVista 60",
-    "entity": "all",
-    "content_hash": "ca9e5bfc49bab9b93114bde58fdcc5c40ca7d831",
-    "title": "3 Things About Fast That'll Blow Your Mind 😱",
-    "video_path": "out/SpaceVista 60_Fast_Clear_Space_Explainers_20251018_022113.mp4",
-    "ts": "2025-10-18T02:21:15.900140"
-  },
-  {
-    "channel": "Ocean Pulse",
+    "channel": "NextGen Update",
     "entity": "know",
-    "content_hash": "0593cb5c619f7bd00a9b8690ad93768799865b6c",
-    "title": "Nobody knows why these tide pools explode with 😱",
-    "video_path": "out/Ocean Pulse_One_Minute_Ocean_Coast_Science_20251018_023006.mp4",
-    "ts": "2025-10-18T02:30:09.528046"
+    "content_hash": "efc957cb9a243c828e49ee6500d5aeb1934fbc7f",
+    "title": "Nobody knows the full power of these new ⚡",
+    "video_path": "out/NextGen Update_Latest_Technology_Breakthroughs_Innovations_20251018_020330.mp4",
+    "ts": "2025-10-18T02:03:34.089288"
   },
   {
-    "channel": "Hidden Math IRL",
-    "entity": "every",
-    "content_hash": "06905610357ea52f74906edd0b2f1f3d681ed50d",
-    "title": "What if every spiral staircase hides a cosmic 🤯",
-    "video_path": "out/Hidden Math IRL_Geometry_Ratios_Found_in_Real_Scenes_20251018_023638.mp4",
-    "ts": "2025-10-18T02:36:40.840006"
+    "channel": "Microworld Stories",
+    "entity": "seed",
+    "content_hash": "e9369bbbd3ea5511918a0afa07fc6705061a87a3",
+    "title": "What if a tiny seed held a giant 👀",
+    "video_path": "out/Microworld Stories_Fun_Educational_Stories_for_Young_Minds_20251018_021028.mp4",
+    "ts": "2025-10-18T02:10:31.679721"
   },
   {
-    "channel": "Corporate Jargon Translator",
-    "entity": "mean",
-    "content_hash": "d898cd6251e63f3010bb8bb906746e36e95e1177",
-    "title": "What if \"synergy\" means something totally different ✨",
-    "video_path": "out/Corporate Jargon Translator_Buzzwords_into_Plain_English_20251018_024252.mp4",
-    "ts": "2025-10-18T02:42:55.523989"
+    "channel": "GameDay 60",
+    "entity": "told",
+    "content_hash": "a6d7690d0b030db06991e0d67d27a5c5e65a9751",
+    "title": "What if I told you today's sports redefined 💡",
+    "video_path": "out/GameDay 60_Daily_Sports_Updates_Athletic_Highlights_20251018_021751.mp4",
+    "ts": "2025-10-18T02:17:53.998123"
+  },
+  {
+    "channel": "Kitchen Logic Lab",
+    "entity": "all",
+    "content_hash": "8ad9574351b30147d3d28befcba3804525d6b55e",
+    "title": "7 Things About Practical That'll Blow Your Mind ✨",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251018_022434.mp4",
+    "ts": "2025-10-18T02:24:37.784339"
+  },
+  {
+    "channel": "Orderly Home 60",
+    "entity": "not",
+    "content_hash": "b69e1984dd2f6cb1944d77f278aa2abe72371d7c",
+    "title": "Nobody knows why cables get so messy... until 🎯",
+    "video_path": "out/Orderly Home 60_One_Minute_Home_Organization_20251018_023101.mp4",
+    "ts": "2025-10-18T02:31:04.556075"
+  },
+  {
+    "channel": "LightCraft Studio",
+    "entity": "think",
+    "content_hash": "02634ff4c9ea7c8518965219cc1d39cde01d5221",
+    "title": "You think natural window light is perfect. It's 😱",
+    "video_path": "out/LightCraft Studio_One_Minute_Lighting_for_Real_Rooms_20251018_023824.mp4",
+    "ts": "2025-10-18T02:38:27.053452"
+  },
+  {
+    "channel": "Tiny Drama Dept.",
+    "entity": "second",
+    "content_hash": "4a8a712426e0532771a7b53c532485ba34a52ac5",
+    "title": "Three seconds. That's all it took to unleash 👀",
+    "video_path": "out/Tiny Drama Dept._Soap_Opera_Narration_for_Tiny_Problems_20251018_024506.mp4",
+    "ts": "2025-10-18T02:45:09.925714"
   }
 ]
