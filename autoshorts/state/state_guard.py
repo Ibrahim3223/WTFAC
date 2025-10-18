@@ -146,12 +146,13 @@ class StateGuard:
                 content.get("cta", "")
             ])
             
-            # Generate content hash
-            content_hash = self.make_content_hash(
+            # Generate content hash (use first 16 chars to avoid SQLite INTEGER overflow)
+            content_hash_full = self.make_content_hash(
                 script_text=script_text,
-                video_paths=[],  # We don't have video paths at this point
+                video_paths=[],
                 audio_path=None
             )
+            content_hash = content_hash_full[:16]  # ✅ DÜZELTME: Shorten hash to avoid SQLite issues
             
             # Extract main entity from title or first search query
             entity = title
@@ -171,6 +172,8 @@ class StateGuard:
             
         except Exception as e:
             logging.error(f"[state_guard] Failed to record upload: {e}")
+            import traceback
+            logging.debug(traceback.format_exc())
 
     def mark_uploaded(self, entity: str, script_text: str, content_hash: str,
                       video_path: str, title: str = ""):
