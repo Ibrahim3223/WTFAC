@@ -57,6 +57,9 @@ class GeminiClient:
         if not api_key:
             raise ValueError("Gemini API key is required")
         
+        # ✅ NEW: Log API key status (first/last chars only for security)
+        logger.info(f"[Gemini] API key provided: {api_key[:10]}...{api_key[-4:]}")
+        
         # Initialize the official client
         self.client = genai.Client(api_key=api_key)
         
@@ -137,7 +140,7 @@ CRITICAL REQUIREMENTS:
 1. Hook must grab attention in {hook_length}
 2. Script must be exactly {script_sentences} clear sentences
 3. Each sentence should be one complete thought
-4. CTA must be engaging and natural
+4. CTA must be engaging and natural (MAX 10 WORDS!)
 5. Search queries MUST be VISUAL and GENERIC - things you can SEE in stock videos
 
 {additional_context or ''}
@@ -152,27 +155,31 @@ SEARCH QUERY RULES - CRITICAL:
 
 OUTPUT FORMAT (valid JSON only):
 {{
-    "hook": "Attention-grabbing opening line",
+    "hook": "Attention-grabbing opening (1 sentence MAX)",
     "script": [
-        "First sentence of main content",
-        "Second sentence with key point",
-        "Third sentence with details",
-        ...
+        "First sentence",
+        "Second sentence",
+        "Third sentence"
     ],
-    "cta": "Call to action",
+    "cta": "Call to action (SHORT - max 10 words)",
     "search_queries": [
-        "visual concrete noun 1",
-        "visual concrete noun 2", 
-        "visual concrete noun 3"
+        "noun phrase 1",
+        "noun phrase 2", 
+        "noun phrase 3"
     ],
     "metadata": {{
-        "title": "Catchy video title (max 60 chars)",
-        "description": "SEO-optimized description",
+        "title": "Title (max 50 chars)",
+        "description": "Description (max 100 chars)",
         "tags": ["tag1", "tag2", "tag3"]
     }}
 }}
 
-IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
+IMPORTANT: 
+- Keep it CONCISE! 
+- Return ONLY valid JSON
+- NO markdown formatting
+- NO explanations
+- Complete all fields fully before ending response"""
         
         return prompt
     
@@ -206,12 +213,12 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
             # Log which model we're using
             logger.info(f"[Gemini] Making API call with model: {self.model}")
             
-            # Configure generation settings
+            # Configure generation settings - INCREASED max_output_tokens!
             config = types.GenerateContentConfig(
                 temperature=0.9,
                 top_k=40,
                 top_p=0.95,
-                max_output_tokens=2048,
+                max_output_tokens=4096,  # ✅ ARTTIRILDI: 2048 → 4096
                 safety_settings=[
                     types.SafetySetting(
                         category='HARM_CATEGORY_HATE_SPEECH',
@@ -251,7 +258,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
             raise RuntimeError(f"Gemini API call failed: {e}")
     
     def _parse_response(self, raw_text: str) -> ContentResponse:
-        """Parse API response into structured content"""
+        """Parse API response into structured content with better error handling"""
         
         try:
             # Clean the response (remove markdown code blocks if present)
@@ -263,6 +270,12 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
             if cleaned.endswith("```"):
                 cleaned = cleaned[:-3]
             cleaned = cleaned.strip()
+            
+            # ✅ NEW: Try to fix incomplete JSON
+            if not cleaned.endswith("}"):
+                logger.warning("[Gemini] Response appears incomplete, attempting to fix...")
+                # Try to close any open strings and objects
+                cleaned = self._fix_incomplete_json(cleaned)
             
             # Parse JSON
             data = json.loads(cleaned)
@@ -302,6 +315,28 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
         except (KeyError, ValueError) as e:
             logger.error(f"[Gemini] Content validation error: {e}")
             raise RuntimeError(f"Invalid content structure: {e}")
+    
+    def _fix_incomplete_json(self, text: str) -> str:
+        """Try to fix incomplete JSON by closing open structures"""
+        
+        # Count open braces and brackets
+        open_braces = text.count("{") - text.count("}")
+        open_brackets = text.count("[") - text.count("]")
+        
+        # Count quotes to see if string is open
+        quotes = text.count('"')
+        if quotes % 2 != 0:
+            # Odd number of quotes - close the string
+            text += '"'
+        
+        # Close any open brackets
+        text += "]" * open_brackets
+        
+        # Close any open braces
+        text += "}" * open_braces
+        
+        logger.info(f"[Gemini] Fixed JSON by adding {open_braces} braces and {open_brackets} brackets")
+        return text
     
     def test_connection(self) -> bool:
         """Test API connection and credentials"""
