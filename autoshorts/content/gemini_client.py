@@ -28,9 +28,11 @@ class ContentResponse:
 class GeminiClient:
     """Client for Gemini API interactions using official SDK"""
     
-    # Available models
+    # Available models - UPDATED!
     MODELS = {
-        "flash": "gemini-2.0-flash-exp",
+        "flash": "gemini-2.5-flash",  # ✅ DÜZELTİLDİ - Artık doğru model!
+        "gemini-2.5-flash": "gemini-2.5-flash",  # ✅ EKLENDİ - Tam ad da çalışır
+        "flash-2.0": "gemini-2.0-flash-exp",
         "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
         "pro": "gemini-1.5-pro-latest",
         "flash-8b": "gemini-1.5-flash-8b-latest"
@@ -68,7 +70,7 @@ class GeminiClient:
         self.max_retries = max_retries
         self.timeout = timeout
         
-        logger.info(f"[Gemini] Initialized with model: {self.model}")  # ✅ Debug log eklendi
+        logger.info(f"[Gemini] Initialized with model: {self.model}")
     
     def generate(
         self,
@@ -232,7 +234,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanations."""
             
             # Make the API call
             response = self.client.models.generate_content(
-                model=self.model,  # Should be gemini-2.5-flash
+                model=self.model,  # Now correctly uses gemini-2.5-flash
                 contents=prompt,
                 config=config
             )
