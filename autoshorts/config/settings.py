@@ -65,14 +65,15 @@ CONTENT_STYLE = os.getenv("CONTENT_STYLE", "Educational and engaging")
 # API KEYS (from environment)
 # ============================================================
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
-PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY", "")
+# ✅ DÜZELTME: Empty string yerine None - validation'ı orchestrator'a bırakıyoruz
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or ""
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY") or ""
+PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY") or ""
 
 # YouTube OAuth
-YT_CLIENT_ID = os.getenv("YT_CLIENT_ID", "")
-YT_CLIENT_SECRET = os.getenv("YT_CLIENT_SECRET", "")
-YT_REFRESH_TOKEN = os.getenv("YT_REFRESH_TOKEN", "")
+YT_CLIENT_ID = os.getenv("YT_CLIENT_ID") or ""
+YT_CLIENT_SECRET = os.getenv("YT_CLIENT_SECRET") or ""
+YT_REFRESH_TOKEN = os.getenv("YT_REFRESH_TOKEN") or ""
 
 # ============================================================
 # GEMINI SETTINGS
@@ -206,34 +207,9 @@ if BGM_ENABLE and BGM_DIR:
 
 
 # ============================================================
-# VALIDATION
+# VALIDATION - REMOVED! 
+# Validation now happens in orchestrator.py where it's actually used
+# This prevents circular import issues and gives better error messages
 # ============================================================
 
-def validate_settings():
-    """Validate critical settings."""
-    errors = []
-    
-    if not CHANNEL_NAME:
-        errors.append("CHANNEL_NAME is required")
-    
-    if USE_GEMINI and not GEMINI_API_KEY:
-        errors.append("GEMINI_API_KEY is required when USE_GEMINI is enabled")
-    
-    if not PEXELS_API_KEY and not PIXABAY_API_KEY:
-        errors.append("Either PEXELS_API_KEY or PIXABAY_API_KEY is required")
-    
-    if UPLOAD_TO_YT:
-        if not YT_CLIENT_ID or not YT_CLIENT_SECRET or not YT_REFRESH_TOKEN:
-            errors.append("YouTube credentials (YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN) are required for upload")
-    
-    if errors:
-        raise ValueError(f"Configuration errors:\n" + "\n".join(f"  - {e}" for e in errors))
-
-
-# Auto-validate on import (optional - can be disabled)
-if os.getenv("VALIDATE_SETTINGS", "1") == "1":
-    try:
-        validate_settings()
-    except ValueError as e:
-        import logging
-        logging.warning(f"Settings validation warning: {e}")
+# No auto-validation on import - let orchestrator handle it
