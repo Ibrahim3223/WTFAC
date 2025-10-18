@@ -22,6 +22,7 @@ class ContentResponse:
     script: List[str]
     cta: str
     search_queries: List[str]
+    main_visual_focus: str  # ✅ YENİ: 1-2 kelimelik ana konu
     metadata: Dict[str, Any]
 
 
@@ -30,8 +31,8 @@ class GeminiClient:
     
     # Available models - UPDATED!
     MODELS = {
-        "flash": "gemini-2.5-flash",  # ✅ DÜZELTİLDİ - Artık doğru model!
-        "gemini-2.5-flash": "gemini-2.5-flash",  # ✅ EKLENDİ - Tam ad da çalışır
+        "flash": "gemini-2.5-flash",
+        "gemini-2.5-flash": "gemini-2.5-flash",
         "flash-2.0": "gemini-2.0-flash-exp",
         "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
         "pro": "gemini-1.5-pro-latest",
@@ -45,29 +46,17 @@ class GeminiClient:
         max_retries: int = 3,
         timeout: int = 60
     ):
-        """
-        Initialize Gemini client
-        
-        Args:
-            api_key: Gemini API key
-            model: Model to use (flash, pro, flash-8b, flash-thinking)
-            max_retries: Maximum retry attempts
-            timeout: Request timeout in seconds
-        """
+        """Initialize Gemini client"""
         if not api_key:
             raise ValueError("Gemini API key is required")
         
-        # ✅ NEW: Log API key status (first/last chars only for security)
         logger.info(f"[Gemini] API key provided: {api_key[:10]}...{api_key[-4:]}")
         
-        # Initialize the official client
         self.client = genai.Client(api_key=api_key)
         
-        # Map short names to full model names
         if model in self.MODELS:
             self.model = self.MODELS[model]
         else:
-            # If full model name provided, use it directly
             self.model = model
         
         self.max_retries = max_retries
@@ -82,18 +71,7 @@ class GeminiClient:
         duration: int,
         additional_context: Optional[str] = None
     ) -> ContentResponse:
-        """
-        Generate video content using Gemini
-        
-        Args:
-            topic: Video topic/niche
-            style: Content style
-            duration: Target duration in seconds
-            additional_context: Optional additional instructions
-            
-        Returns:
-            ContentResponse with generated content
-        """
+        """Generate video content using Gemini"""
         prompt = self._build_prompt(topic, style, duration, additional_context)
         
         try:
@@ -116,11 +94,9 @@ class GeminiClient:
     ) -> str:
         """Build the generation prompt"""
         
-        # Calculate approximate word count (150 words per minute of speech)
         words_per_minute = 150
         target_words = int((duration / 60) * words_per_minute)
         
-        # Adjust for different durations
         if duration <= 30:
             hook_length = "1 sentence"
             script_sentences = "3-4"
@@ -141,17 +117,17 @@ CRITICAL REQUIREMENTS:
 2. Script must be exactly {script_sentences} clear sentences
 3. Each sentence should be one complete thought
 4. CTA must be engaging and natural (MAX 10 WORDS!)
-5. Search queries MUST be VISUAL and GENERIC - things you can SEE in stock videos
+5. main_visual_focus must be 1-2 words for stock video search (e.g. "hoopoe bird", "ocean waves")
 
 {additional_context or ''}
 
-SEARCH QUERY RULES - CRITICAL:
-- Use ONLY physical, tangible things you can FILM (nature, city, people, hands, water, sky, buildings)
-- NEVER use: time, minute, second, why, how, boost, unlock, master, effect, concept, idea, thought
-- NEVER use verbs or actions as main terms (use nouns!)
-- Think "what b-roll footage exists on stock video sites?"
-- Good examples: "mountain sunset", "busy street", "coffee cup", "typing hands"
-- Bad examples: "why time", "boost focus", "interleaving effect", "mastering habits"
+MAIN_VISUAL_FOCUS RULES - CRITICAL:
+- This is THE SINGLE TOPIC for ALL video footage
+- Use 1-2 words only (e.g. "pangolin", "arctic fox", "coral reef")
+- Must be something that appears in stock video libraries
+- Will be used to search Pexels for ALL video clips
+- Good examples: "hoopoe bird", "pistol shrimp", "nature sunset", "city street"
+- Bad examples: "mind blowing facts", "unusual behaviors", "cognitive science"
 
 OUTPUT FORMAT (valid JSON only):
 {{
@@ -162,6 +138,7 @@ OUTPUT FORMAT (valid JSON only):
         "Third sentence"
     ],
     "cta": "Call to action (SHORT - max 10 words)",
+    "main_visual_focus": "1-2 word visual topic (e.g. 'hoopoe bird', 'pangolin animal', 'ocean waves')",
     "search_queries": [
         "noun phrase 1",
         "noun phrase 2", 
@@ -185,7 +162,6 @@ IMPORTANT:
     
     def _call_api_with_retry(self, prompt: str) -> str:
         """Call API with retry logic"""
-        
         last_error = None
         
         for attempt in range(1, self.max_retries + 1):
@@ -199,7 +175,6 @@ IMPORTANT:
                 if attempt == self.max_retries:
                     raise last_error
                 
-                # Exponential backoff
                 wait_time = 2 ** attempt
                 logger.info(f"[Gemini] Retrying in {wait_time}s...")
                 time.sleep(wait_time)
@@ -208,17 +183,14 @@ IMPORTANT:
     
     def _call_api(self, prompt: str) -> str:
         """Make actual API call using official SDK"""
-        
         try:
-            # Log which model we're using
             logger.info(f"[Gemini] Making API call with model: {self.model}")
             
-            # Configure generation settings - INCREASED max_output_tokens!
             config = types.GenerateContentConfig(
                 temperature=0.9,
                 top_k=40,
                 top_p=0.95,
-                max_output_tokens=4096,  # ✅ ARTTIRILDI: 2048 → 4096
+                max_output_tokens=4096,
                 safety_settings=[
                     types.SafetySetting(
                         category='HARM_CATEGORY_HATE_SPEECH',
@@ -239,14 +211,12 @@ IMPORTANT:
                 ]
             )
             
-            # Make the API call
             response = self.client.models.generate_content(
-                model=self.model,  # Now correctly uses gemini-2.5-flash
+                model=self.model,
                 contents=prompt,
                 config=config
             )
             
-            # Extract text from response
             if response.text:
                 logger.info(f"[Gemini] ✅ API call successful")
                 return response.text
@@ -258,10 +228,9 @@ IMPORTANT:
             raise RuntimeError(f"Gemini API call failed: {e}")
     
     def _parse_response(self, raw_text: str) -> ContentResponse:
-        """Parse API response into structured content with better error handling"""
-        
+        """Parse API response into structured content"""
         try:
-            # Clean the response (remove markdown code blocks if present)
+            # Clean the response
             cleaned = raw_text.strip()
             if cleaned.startswith("```json"):
                 cleaned = cleaned[7:]
@@ -271,13 +240,10 @@ IMPORTANT:
                 cleaned = cleaned[:-3]
             cleaned = cleaned.strip()
             
-            # ✅ NEW: Try to fix incomplete JSON
             if not cleaned.endswith("}"):
                 logger.warning("[Gemini] Response appears incomplete, attempting to fix...")
-                # Try to close any open strings and objects
                 cleaned = self._fix_incomplete_json(cleaned)
             
-            # Parse JSON
             data = json.loads(cleaned)
             
             # Validate required fields
@@ -285,6 +251,11 @@ IMPORTANT:
             missing = [f for f in required if f not in data]
             if missing:
                 raise ValueError(f"Missing required fields: {missing}")
+            
+            # ✅ YENİ: main_visual_focus opsiyonel ama tercih edilir
+            if "main_visual_focus" not in data:
+                data["main_visual_focus"] = data["search_queries"][0] if data["search_queries"] else "nature"
+                logger.warning(f"[Gemini] main_visual_focus missing, using fallback: {data['main_visual_focus']}")
             
             # Validate types
             if not isinstance(data["script"], list):
@@ -305,6 +276,7 @@ IMPORTANT:
                 script=[s.strip() for s in data["script"]],
                 cta=data["cta"].strip(),
                 search_queries=[q.strip() for q in data["search_queries"]],
+                main_visual_focus=data["main_visual_focus"].strip(),  # ✅ YENİ
                 metadata=data["metadata"]
             )
             
@@ -317,30 +289,22 @@ IMPORTANT:
             raise RuntimeError(f"Invalid content structure: {e}")
     
     def _fix_incomplete_json(self, text: str) -> str:
-        """Try to fix incomplete JSON by closing open structures"""
-        
-        # Count open braces and brackets
+        """Try to fix incomplete JSON"""
         open_braces = text.count("{") - text.count("}")
         open_brackets = text.count("[") - text.count("]")
         
-        # Count quotes to see if string is open
         quotes = text.count('"')
         if quotes % 2 != 0:
-            # Odd number of quotes - close the string
             text += '"'
         
-        # Close any open brackets
         text += "]" * open_brackets
-        
-        # Close any open braces
         text += "}" * open_braces
         
         logger.info(f"[Gemini] Fixed JSON by adding {open_braces} braces and {open_brackets} brackets")
         return text
     
     def test_connection(self) -> bool:
-        """Test API connection and credentials"""
-        
+        """Test API connection"""
         try:
             logger.info("[Gemini] Testing API connection...")
             
