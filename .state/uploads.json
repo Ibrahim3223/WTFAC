@@ -1288,11 +1288,11 @@
     "ts": "2025-10-18T02:17:53.998123"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "all",
-    "content_hash": "8ad9574351b30147d3d28befcba3804525d6b55e",
-    "title": "7 Things About Practical That'll Blow Your Mind ✨",
-    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251018_022434.mp4",
-    "ts": "2025-10-18T02:24:37.784339"
+    "channel": "Weather Window 60",
+    "entity": "cloud",
+    "content_hash": "14fa7b21b6b9dff53dda1871597d90fb0b3adabf",
+    "title": "Nobody knows why these massive shelf clouds appear 😱",
+    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251018_022610.mp4",
+    "ts": "2025-10-18T02:26:13.260537"
   }
 ]
