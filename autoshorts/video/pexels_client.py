@@ -4,10 +4,13 @@ Pexels API client for video search.
 """
 import re
 import random
+import logging
 from typing import List, Tuple, Set, Optional
 import requests
 
 from autoshorts.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class PexelsClient:
@@ -37,7 +40,7 @@ class PexelsClient:
         need: int
     ) -> List[Tuple[int, str]]:
         """
-        Build video pool using FOCUS-FIRST strategy.
+        Build video pool using FOCUS-FIRST strategy with smart fallbacks.
         
         Args:
             focus: Main visual keyword
@@ -49,63 +52,123 @@ class PexelsClient:
         """
         from autoshorts.content.text_utils import simplify_query
         
+        # ✅ ULTRA-GENERIC FALLBACK: Always have a backup plan
+        ultra_generic_queries = [
+            "nature landscape",
+            "city skyline",
+            "ocean waves",
+            "forest trees",
+            "sunset sky",
+            "mountains",
+            "coffee",
+            "technology",
+            "people lifestyle",
+            "abstract motion"
+        ]
+        
         # Prepare focus queries
-        main_focus = simplify_query(focus or (search_terms[0] if search_terms else "macro detail"), keep=2)
+        main_focus = simplify_query(
+            focus or (search_terms[0] if search_terms else ultra_generic_queries[0]), 
+            keep=2
+        )
         
         # Get synonyms
         syns = self._get_synonyms(main_focus, settings.LANG)
         syn_tokens = self._url_tokens(" ".join(syns + [main_focus]))
         
-        # Build query list
-        queries = [main_focus] + syns[:5]
+        # Build query list with smart fallbacks
+        queries = [main_focus] + syns[:3]  # Reduced from 5 to 3 for faster search
         queries = list(dict.fromkeys(queries))  # dedup
         
-        print(f"🎯 FOCUS-FIRST: '{main_focus}' | Synonyms: {syns[:3]}")
+        logger.info(f"🎯 FOCUS-FIRST: '{main_focus}' | Synonyms: {syns[:3]}")
         
         pool = []
-        target = need * 4
+        target = need * 3  # Reduced multiplier for efficiency
         
-        # Deep search on focus
+        # 1. Try specific queries first
         for q in queries:
             qtokens = self._url_tokens(q)
             merged = []
             
-            for page in range(1, 8):  # 7 pages deep
+            # Reduced pages for faster search
+            for page in range(1, 4):  # 3 pages instead of 7
                 results = self._search(q, page=page)
                 merged.extend(results)
                 
                 if len(merged) >= target:
                     break
             
-            # Rank with STRICT filtering
+            # Rank with relaxed filtering
             ranked = self._rank_and_dedup(
                 merged, 
                 qtokens, 
                 syn_tokens=syn_tokens,
-                strict=settings.STRICT_ENTITY_FILTER
+                strict=False  # ✅ Relaxed for better results
             )
             
             pool.extend(ranked)
-            print(f"   Query '{q}': {len(ranked)} clips")
+            logger.info(f"   Query '{q}': {len(ranked)} clips")
             
             if len(pool) >= target:
                 break
         
-        # Fallback to popular if needed
-        if len(pool) < need * 2:
-            print(f"   ⚠️ Need more, checking popular...")
+        # 2. Try broader terms if needed
+        if len(pool) < need:
+            logger.info(f"   ⚠️ Need more clips, trying broader terms...")
             
-            for page in range(1, 4):
+            # Extract single words from focus
+            words = main_focus.split()
+            for word in words:
+                if len(word) > 3:  # Skip short words
+                    results = self._search(word, page=1)
+                    ranked = self._rank_and_dedup(
+                        results,
+                        self._url_tokens(word),
+                        syn_tokens=syn_tokens,
+                        strict=False
+                    )
+                    pool.extend(ranked)
+                    logger.info(f"   Broader term '{word}': {len(ranked)} clips")
+                    
+                    if len(pool) >= need:
+                        break
+        
+        # 3. Try popular videos if still not enough
+        if len(pool) < need:
+            logger.info(f"   ⚠️ Still need more, checking popular...")
+            
+            for page in range(1, 3):  # Reduced from 4 to 3
                 pop = self._popular(page=page)
                 pop_ranked = self._rank_and_dedup(
                     pop,
                     syn_tokens,
                     syn_tokens=syn_tokens,
-                    strict=settings.STRICT_ENTITY_FILTER
+                    strict=False
                 )
                 pool.extend(pop_ranked)
+                
+                if len(pool) >= need:
+                    break
         
-        # Dedup
+        # 4. ULTRA-GENERIC FALLBACK: If still nothing, use guaranteed terms
+        if len(pool) < need:
+            logger.warning(f"   ⚠️ Emergency fallback to ultra-generic queries...")
+            
+            for generic_q in ultra_generic_queries[:5]:
+                results = self._search(generic_q, page=1)
+                ranked = self._rank_and_dedup(
+                    results,
+                    self._url_tokens(generic_q),
+                    syn_tokens=set(),  # No token matching
+                    strict=False
+                )
+                pool.extend(ranked)
+                logger.info(f"   Generic '{generic_q}': {len(ranked)} clips")
+                
+                if len(pool) >= need:
+                    break
+        
+        # Dedup final results
         seen = set()
         dedup = []
         for vid, link in pool:
@@ -114,9 +177,15 @@ class PexelsClient:
             seen.add(vid)
             dedup.append((vid, link))
         
-        final = dedup[:need * 2]
+        # Return at least 'need' videos, up to need*2 for variety
+        final = dedup[:max(need, need * 2)]
         
-        print(f"   ✅ Final pool: {len(final)} clips")
+        logger.info(f"   ✅ Final pool: {len(final)} clips")
+        
+        if len(final) < need:
+            logger.error(f"   ❌ WARNING: Only found {len(final)} clips, needed {need}")
+            logger.info(f"   💡 Consider: 1) Check API key validity, 2) Relax PEXELS_MIN_HEIGHT, 3) Set PEXELS_STRICT_VERTICAL=False")
+        
         return final
     
     def _search(
@@ -145,7 +214,8 @@ class PexelsClient:
         try:
             r = requests.get(url, headers=headers, params=params, timeout=30)
             r.raise_for_status()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"   ⚠️ Search failed for '{query}': {e}")
             return []
         
         data = r.json() or {}
@@ -199,7 +269,8 @@ class PexelsClient:
         try:
             r = requests.get(url, headers=headers, params=params, timeout=30)
             r.raise_for_status()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"   ⚠️ Popular videos fetch failed: {e}")
             return []
         
         data = r.json() or {}
@@ -258,13 +329,13 @@ class PexelsClient:
             page_url = self._page_urls.get(vid, "")
             tokens = self._url_tokens(link) | self._url_tokens(page_url)
             
-            # Strict mode: must match synonyms
+            # Strict mode: must match synonyms (only if syn_tokens provided)
             if strict and syn_tokens and not (tokens & syn_tokens):
                 continue
             
             # Score
             overlap_q = len(tokens & qtokens)
-            overlap_syn = len(tokens & syn_tokens)
+            overlap_syn = len(tokens & syn_tokens) if syn_tokens else 0
             
             score = (
                 (overlap_q * 1.0) + 
@@ -295,7 +366,7 @@ class PexelsClient:
         return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
     
     def _get_synonyms(self, entity: str, lang: str) -> List[str]:
-        """Get synonyms for entity."""
+        """Get synonyms for entity - expanded for better coverage."""
         e = (entity or "").lower().strip()
         if not e:
             return []
@@ -304,16 +375,22 @@ class PexelsClient:
         if e.endswith("s") and len(e) > 4:
             base.append(e[:-1])
         
-        # EN synonyms
+        # Expanded synonym table
         table_en = {
             "chameleon": ["chameleon", "lizard", "gecko", "iguana", "reptile"],
-            "dolphin": ["dolphin", "marine mammal", "bottlenose dolphin"],
+            "dolphin": ["dolphin", "marine mammal", "bottlenose dolphin", "ocean animal"],
             "octopus": ["octopus", "cephalopod", "tentacles", "sea creature"],
             "japan": ["japan", "tokyo", "kyoto", "mt fuji", "japanese temple"],
             "italy": ["italy", "rome", "venice", "colosseum", "venetian canal"],
             "eagle": ["eagle", "raptor", "bird of prey", "hawk"],
             "bridge": ["suspension bridge", "cable stayed bridge", "arch bridge"],
-            "food": ["food waste", "composting", "leftovers", "organic waste"],
+            "food": ["food", "meal", "cooking", "kitchen"],
+            "nature": ["nature", "landscape", "outdoor", "forest", "mountain"],
+            "city": ["city", "urban", "street", "downtown", "skyline"],
+            "ocean": ["ocean", "sea", "water", "waves", "beach"],
+            "people": ["people", "person", "human", "lifestyle"],
+            "abstract": ["abstract", "geometric", "pattern", "texture"],
+            "technology": ["technology", "computer", "digital", "tech"],
         }
         
         for k, vals in table_en.items():
