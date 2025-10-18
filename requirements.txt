@@ -39,3 +39,5 @@ tqdm>=4.66.0
 
 # Optional: For better logging
 colorlog>=6.8.0
+
+pyyaml>=6.0
