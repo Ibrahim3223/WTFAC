@@ -58,7 +58,29 @@ def _parse_list(s: str) -> List[str]:
 # ============================================================
 
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DefaultChannel")
-CHANNEL_TOPIC = os.getenv("TOPIC", "Interesting facts and knowledge")
+
+# ✅ YENİ: Load channel-specific settings from channels.yml
+try:
+    from .channel_loader import apply_channel_settings
+    _channel_settings = apply_channel_settings(CHANNEL_NAME)
+    CHANNEL_TOPIC = _channel_settings.get("CHANNEL_TOPIC", "Interesting facts and knowledge")
+    CHANNEL_MODE = _channel_settings.get("CHANNEL_MODE", "general")
+    CHANNEL_SEARCH_TERMS = _channel_settings.get("CHANNEL_SEARCH_TERMS", [])
+    CHANNEL_LANG_OVERRIDE = _channel_settings.get("CHANNEL_LANG", None)
+    CHANNEL_VISIBILITY_OVERRIDE = _channel_settings.get("CHANNEL_VISIBILITY", None)
+except Exception as e:
+    import logging
+    logging.warning(f"⚠️ Failed to load channel config: {e}")
+    CHANNEL_TOPIC = os.getenv("TOPIC", "Interesting facts and knowledge")
+    CHANNEL_MODE = "general"
+    CHANNEL_SEARCH_TERMS = []
+    CHANNEL_LANG_OVERRIDE = None
+    CHANNEL_VISIBILITY_OVERRIDE = None
+
+# Allow ENV override if specified
+if os.getenv("TOPIC"):
+    CHANNEL_TOPIC = os.getenv("TOPIC")
+
 CONTENT_STYLE = os.getenv("CONTENT_STYLE", "Educational and engaging")
 
 # ============================================================
