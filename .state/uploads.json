@@ -1376,11 +1376,19 @@
     "ts": "2025-10-18T16:42:58.005610"
   },
   {
-    "channel": "Eco Habit Hacks",
-    "entity": "home",
-    "content_hash": "af8c7c5d91cf4493d9e86be7172f06b61e833330",
-    "title": "What if cleaning your home didn't require harsh ⚡",
-    "video_path": "out/Eco Habit Hacks_One_Minute_Sustainable_Living_Tips_20251018_165052.mp4",
-    "ts": "2025-10-18T16:50:56.040813"
+    "channel": "Pocket Tech Tricks",
+    "entity": "told",
+    "content_hash": "e4c56dd603d7bc66e28a8f3da3c6a05533785b0e",
+    "title": "What if I told you your frozen phone 😱",
+    "video_path": "out/Pocket Tech Tricks_One_Minute_Fixes_for_Everyday_Tech_20251018_164834.mp4",
+    "ts": "2025-10-18T16:48:37.391721"
+  },
+  {
+    "channel": "Kitchen Logic Lab",
+    "entity": "nobody",
+    "content_hash": "b655c6ec6a8971240493babeb6938655152e46ba",
+    "title": "60 Things About Practical That'll Blow Your Mind ✨",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251018_165456.mp4",
+    "ts": "2025-10-18T16:54:58.998746"
   }
 ]
