@@ -1248,11 +1248,19 @@
     "ts": "2025-10-17T17:20:34.119469"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "nobody",
-    "content_hash": "077d55f7cf86050ec090ca3d1595295003bc6a88",
-    "title": "What if nobody knows why great cities disappear... until now 👀",
-    "video_path": "out/Tales of The Forgotten Realms_Forgotten_Historical_Tales_Lost_Stories_20251018_015043.mp4",
-    "ts": "2025-10-18T01:50:46.004453"
+    "channel": "World Briefing",
+    "entity": "that",
+    "content_hash": "c8ade0fffb5b7af4bb6b1809526af9f4fcd5d14e",
+    "title": "Milliseconds. That's how fast global news travels across 🤯",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251018_014836.mp4",
+    "ts": "2025-10-18T01:48:40.021627"
+  },
+  {
+    "channel": "Flashback Minute",
+    "entity": "think",
+    "content_hash": "7cd0c2505e1ce481c47f754c9be324c3354a5964",
+    "title": "You think you know the Berlin Wall? Its 🔥",
+    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251018_015419.mp4",
+    "ts": "2025-10-18T01:54:22.645787"
   }
 ]
