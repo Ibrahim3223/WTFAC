@@ -7,6 +7,7 @@ Run this file to generate a YouTube Short.
 import sys
 import os
 import shutil
+import logging
 
 # CRITICAL: Clear Python cache before starting
 def clear_cache():
@@ -84,8 +85,17 @@ def main():
     print("  YouTube Shorts Generator v2.0")
     print("=" * 60)
     
+    # ✅ Set up logging properly
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s'
+    )
+    
     try:
+        print("\n🔧 Creating orchestrator...")
         orchestrator = ShortsOrchestrator()
+        
+        print("\n🎬 Starting video generation...\n")
         video_id = orchestrator.run()
         
         if video_id:
@@ -109,11 +119,10 @@ def main():
         print(f"❌ ERROR: {e}")
         print("=" * 60)
         
-        # Print detailed traceback in debug mode
+        # Always print full traceback for debugging
         import traceback
-        if os.getenv("DEBUG", "").lower() in ("1", "true", "yes"):
-            print("\n[DEBUG] Full traceback:")
-            traceback.print_exc()
+        print("\n[DEBUG] Full traceback:")
+        traceback.print_exc()
         
         return 1
 
