@@ -1248,19 +1248,19 @@
     "ts": "2025-10-17T17:20:34.119469"
   },
   {
-    "channel": "World Briefing",
-    "entity": "that",
-    "content_hash": "c8ade0fffb5b7af4bb6b1809526af9f4fcd5d14e",
-    "title": "Milliseconds. That's how fast global news travels across 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251018_014836.mp4",
-    "ts": "2025-10-18T01:48:40.021627"
+    "channel": "TaxWise USA",
+    "entity": "tax",
+    "content_hash": "2ccabddb26837c61ef2729652fac81d2a34eb7bf",
+    "title": "3 Things About Tax That'll Blow Your Mind 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251018_014748.mp4",
+    "ts": "2025-10-18T01:47:51.578345"
   },
   {
-    "channel": "If They Lived Today",
-    "entity": "ancient",
-    "content_hash": "834d35af4306f1feccabb897a0482ae04ee567e7",
-    "title": "What if an ancient warrior appeared today 😱",
-    "video_path": "out/If They Lived Today_Historical_Figures_in_Modern_Times_20251018_015511.mp4",
-    "ts": "2025-10-18T01:55:14.561279"
+    "channel": "Universe Jumper",
+    "entity": "cosmic",
+    "content_hash": "a5b8912586a3ca09525173c4f92fc2b3b3c693c8",
+    "title": "What if a cosmic portal swapped entire worlds 🎯",
+    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251018_015513.mp4",
+    "ts": "2025-10-18T01:55:17.025800"
   }
 ]
