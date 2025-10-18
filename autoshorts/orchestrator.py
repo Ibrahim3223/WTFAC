@@ -7,6 +7,7 @@ import os
 import tempfile
 import shutil
 import logging
+import subprocess
 from typing import Optional, Dict, Any, List
 
 from .config import settings
@@ -435,7 +436,35 @@ class ShortsOrchestrator:
                 logger.error("   ❌ Caption rendering failed")
                 return None
             
-            # Step 4: Add BGM and finalize
+            # Step 4: Mux audio with video segments
+            logger.info("   🔊 Muxing audio with video segments...")
+            final_segments = []
+            
+            for i, (video_seg, audio_seg) in enumerate(zip(captioned_segments, audio_segments)):
+                audio_path = audio_seg["audio_path"]
+                output_seg = os.path.join(self.temp_dir, f"final_seg_{i:02d}.mp4")
+                
+                # Mux video + audio
+                cmd = [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-i", video_seg,
+                    "-i", audio_path,
+                    "-c:v", "copy",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-shortest",
+                    output_seg
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logger.error(f"   ❌ Audio mux error for segment {i}: {result.stderr}")
+                    return None
+                
+                final_segments.append(output_seg)
+            
+            logger.info(f"   ✅ Muxed {len(final_segments)} segments with audio")
+            
+            # Step 5: Add BGM and finalize
             logger.info("   🎵 Adding background music...")
             bgm_path = self.bgm_manager.get_bgm(
                 duration=settings.TARGET_DURATION,
@@ -443,25 +472,57 @@ class ShortsOrchestrator:
             )
             
             # Concatenate all segments
-            final_video = os.path.join(self.temp_dir, "final_video.mp4")
+            concat_video = os.path.join(self.temp_dir, "concat_video.mp4")
             
-            # Simple concatenation for now
             concat_list = os.path.join(self.temp_dir, "concat_list.txt")
             with open(concat_list, "w") as f:
-                for segment in captioned_segments:
+                for segment in final_segments:
                     f.write(f"file '{segment}'\n")
             
-            import subprocess
             cmd = [
-                "ffmpeg", "-f", "concat", "-safe", "0",
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "concat", "-safe", "0",
                 "-i", concat_list,
                 "-c", "copy",
-                final_video
+                concat_video
             ]
             
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
-                logger.error(f"   ❌ FFmpeg error: {result.stderr}")
+                logger.error(f"   ❌ Concatenation error: {result.stderr}")
+                return None
+            
+            # Final output with or without BGM
+            final_video = os.path.join(self.temp_dir, "final_video.mp4")
+            
+            if bgm_path and os.path.exists(bgm_path):
+                # Mix BGM with existing audio
+                logger.info("   🎶 Mixing BGM with voice...")
+                cmd = [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-i", concat_video,
+                    "-i", bgm_path,
+                    "-filter_complex",
+                    "[0:a]volume=1.0[voice];[1:a]volume=0.2[bgm];[voice][bgm]amix=inputs=2:duration=shortest[audio]",
+                    "-map", "0:v",
+                    "-map", "[audio]",
+                    "-c:v", "copy",
+                    "-c:a", "aac", "-b:a", "192k",
+                    final_video
+                ]
+            else:
+                # No BGM, just copy
+                logger.info("   ⏭️ Skipping BGM (disabled or not found)")
+                cmd = [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-i", concat_video,
+                    "-c", "copy",
+                    final_video
+                ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.error(f"   ❌ Final assembly error: {result.stderr}")
                 return None
             
             if not os.path.exists(final_video):
