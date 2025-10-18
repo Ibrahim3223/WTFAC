@@ -32,7 +32,7 @@ class SegmentMaker:
                 output
             ])
         else:
-            # Video: motion
+            # Video: motion (no audio from stock footage)
             fade = max(0.05, min(0.12, qdur/8.0))
             fade_out_st = max(0.0, qdur - fade)
             
@@ -58,12 +58,12 @@ class SegmentMaker:
             
             vf = ",".join(base_filters)
             
+            # ✅ DÜZELTME: -an flag'i kaldırıldı (audio orchestrator'da eklenecek)
             run([
                 "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                 "-i", video_src,
                 "-vf", vf,
                 "-r", str(settings.TARGET_FPS), "-vsync", "cfr",
-                "-an",
                 "-c:v", "libx264", "-preset", "fast", "-crf", str(settings.CRF_VISUAL),
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                 output
