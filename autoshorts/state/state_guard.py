@@ -128,6 +128,50 @@ class StateGuard:
                 return True
         return False
 
+    def record_upload(self, video_id: str, content: Dict[str, Any]) -> None:
+        """
+        Record a successful upload for tracking and deduplication.
+        Called by orchestrator after successful YouTube upload.
+        
+        Args:
+            video_id: YouTube video ID
+            content: Content dict with metadata, script, etc.
+        """
+        try:
+            # Extract key information
+            title = content.get("metadata", {}).get("title", "")
+            script_text = " ".join([
+                content.get("hook", ""),
+                *content.get("script", []),
+                content.get("cta", "")
+            ])
+            
+            # Generate content hash
+            content_hash = self.make_content_hash(
+                script_text=script_text,
+                video_paths=[],  # We don't have video paths at this point
+                audio_path=None
+            )
+            
+            # Extract main entity from title or first search query
+            entity = title
+            if not entity and content.get("search_queries"):
+                entity = content["search_queries"][0]
+            
+            # Record in state
+            self.mark_uploaded(
+                entity=entity,
+                script_text=script_text,
+                content_hash=content_hash,
+                video_path=f"youtube:{video_id}",
+                title=title
+            )
+            
+            logging.info(f"[state_guard] Recorded upload: {video_id} - {title}")
+            
+        except Exception as e:
+            logging.error(f"[state_guard] Failed to record upload: {e}")
+
     def mark_uploaded(self, entity: str, script_text: str, content_hash: str,
                       video_path: str, title: str = ""):
         # entities
