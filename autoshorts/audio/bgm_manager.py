@@ -3,16 +3,64 @@
 import os
 import pathlib
 import random
+import logging
 import requests
 
 from autoshorts.config import settings
 from autoshorts.utils.ffmpeg_utils import run
 
+logger = logging.getLogger(__name__)
+
+
 class BGMManager:
     """Manage background music."""
     
+    def get_bgm(self, duration: float, output_dir: str) -> str:
+        """
+        Get a BGM file path for the given duration.
+        This is a simple method that orchestrator expects.
+        
+        Args:
+            duration: Duration in seconds
+            output_dir: Output directory for BGM file
+            
+        Returns:
+            Path to BGM file or empty string if BGM disabled
+        """
+        if not settings.BGM_ENABLE:
+            logger.info("      BGM disabled in settings")
+            return ""
+        
+        try:
+            # Find BGM source
+            bgm_src = self._pick_source(output_dir)
+            if not bgm_src:
+                logger.warning("      ⚠️ No BGM source found")
+                return ""
+            
+            # Loop BGM to duration
+            bgm_output = os.path.join(output_dir, "bgm_final.wav")
+            self._loop_bgm(bgm_src, duration, bgm_output)
+            
+            logger.info(f"      ✅ BGM prepared: {bgm_output}")
+            return bgm_output
+            
+        except Exception as e:
+            logger.error(f"      ❌ BGM error: {e}")
+            return ""
+    
     def add_bgm(self, voice_path: str, duration: float, temp_dir: str) -> str:
-        """Add BGM to voice audio."""
+        """
+        Add BGM to voice audio.
+        
+        Args:
+            voice_path: Path to voice audio file
+            duration: Duration in seconds
+            temp_dir: Temporary directory
+            
+        Returns:
+            Path to mixed audio file
+        """
         # Find BGM source
         bgm_src = self._pick_source(temp_dir)
         if not bgm_src:
@@ -36,9 +84,11 @@ class BGMManager:
             if p.exists():
                 files = list(p.glob("*.mp3")) + list(p.glob("*.wav"))
                 if files:
-                    return str(random.choice(files))
-        except Exception:
-            pass
+                    chosen = str(random.choice(files))
+                    logger.debug(f"      Selected local BGM: {chosen}")
+                    return chosen
+        except Exception as e:
+            logger.debug(f"      Local BGM search failed: {e}")
         
         # Try URLs
         if settings.BGM_URLS:
@@ -47,6 +97,7 @@ class BGMManager:
                     ext = ".mp3" if ".mp3" in url.lower() else ".wav"
                     out_path = os.path.join(temp_dir, f"bgm_src{ext}")
                     
+                    logger.debug(f"      Downloading BGM from: {url}")
                     with requests.get(url, stream=True, timeout=60) as r:
                         r.raise_for_status()
                         with open(out_path, "wb") as f:
@@ -54,11 +105,13 @@ class BGMManager:
                                 f.write(chunk)
                     
                     if os.path.getsize(out_path) > 100_000:
+                        logger.debug(f"      Downloaded BGM: {out_path}")
                         return out_path
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"      BGM download failed: {e}")
                     continue
         
-        return None
+        return ""
     
     def _loop_bgm(self, src: str, duration: float, output: str):
         """Loop BGM to match duration."""
