@@ -1248,19 +1248,27 @@
     "ts": "2025-10-17T17:20:34.119469"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "nobody",
-    "content_hash": "077d55f7cf86050ec090ca3d1595295003bc6a88",
-    "title": "What if nobody knows why great cities disappear... until now 👀",
-    "video_path": "out/Tales of The Forgotten Realms_Forgotten_Historical_Tales_Lost_Stories_20251018_015043.mp4",
-    "ts": "2025-10-18T01:50:46.004453"
+    "channel": "TaxWise USA",
+    "entity": "tax",
+    "content_hash": "2ccabddb26837c61ef2729652fac81d2a34eb7bf",
+    "title": "3 Things About Tax That'll Blow Your Mind 🔥",
+    "video_path": "out/TaxWise USA_US_Tax_Tips_Money_Saving_Strategies_20251018_014748.mp4",
+    "ts": "2025-10-18T01:47:51.578345"
   },
   {
-    "channel": "GalacticUpdate",
-    "entity": "international",
-    "content_hash": "1d6ab5d0cd12b32abf3e49fac1094d19541ae2b7",
-    "title": "The International Space Station hides a shocking secret ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251018_015753.mp4",
-    "ts": "2025-10-18T01:57:56.746777"
+    "channel": "Universe Jumper",
+    "entity": "cosmic",
+    "content_hash": "a5b8912586a3ca09525173c4f92fc2b3b3c693c8",
+    "title": "What if a cosmic portal swapped entire worlds 🎯",
+    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251018_015513.mp4",
+    "ts": "2025-10-18T01:55:17.025800"
+  },
+  {
+    "channel": "WildWonderCaps",
+    "entity": "all",
+    "content_hash": "bfa2b63bc1b6b53b1d132c39a1af595cd782ae26",
+    "title": "0 Things About Incredible That'll Blow Your Mind 🎯",
+    "video_path": "out/WildWonderCaps_Incredible_Wildlife_Moments_Animal_Wonders_20251018_020140.mp4",
+    "ts": "2025-10-18T02:01:44.289493"
   }
 ]
