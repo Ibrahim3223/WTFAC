@@ -132,6 +132,8 @@ STRICT_ENTITY_FILTER = _env_bool("STRICT_ENTITY_FILTER", False)
 # CAPTION SETTINGS
 # ============================================================
 
+KARAOKE_CAPTIONS = _env_bool("KARAOKE_CAPTIONS", True)  # Enable karaoke-style animated captions
+
 CAPTION_FONT = os.getenv("CAPTION_FONT", "Arial")
 CAPTION_FONT_SIZE = _env_int("CAPTION_FONT_SIZE", 70)
 CAPTION_MAX_LINE = _env_int("CAPTION_MAX_LINE", 26)
@@ -153,6 +155,14 @@ BGM_DUCK_DB = _env_float("BGM_DUCK_DB", -12.0)
 BGM_FADE_DURATION = _env_float("BGM_FADE", 0.8)
 BGM_DIR = os.getenv("BGM_DIR", "bgm")
 BGM_URLS = _parse_list(os.getenv("BGM_URLS", ""))
+
+# Detailed BGM mixing parameters
+BGM_GAIN_DB = _env_float("BGM_GAIN_DB", -26.0)
+BGM_DUCK_THRESH = _env_float("BGM_DUCK_THRESH", 0.09)
+BGM_DUCK_RATIO = _env_float("BGM_DUCK_RATIO", 4.0)
+BGM_DUCK_ATTACK_MS = _env_float("BGM_DUCK_ATTACK_MS", 20.0)
+BGM_DUCK_RELEASE_MS = _env_float("BGM_DUCK_RELEASE_MS", 250.0)
+BGM_FADE = _env_float("BGM_FADE", 0.8)  # Fade duration in seconds
 
 # ============================================================
 # STATE MANAGEMENT
