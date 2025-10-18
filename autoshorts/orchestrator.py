@@ -240,6 +240,7 @@ class ShortsOrchestrator:
                 "script": content.script,
                 "cta": content.cta,
                 "search_queries": content.search_queries,
+                "main_visual_focus": content.main_visual_focus,  # ✅ YENİ
                 "metadata": content.metadata,
                 "sentences": [content.hook] + content.script + [content.cta],
                 "quality_score": score
@@ -306,56 +307,32 @@ class ShortsOrchestrator:
         Returns: Path to final video or None on failure.
         """
         try:
-            # Step 1: Search and download videos
+            # Step 1: Search and download videos - SIMPLE SINGLE SEARCH
             logger.info("   🔍 Searching for videos...")
             
-            # If search queries are too specific or abstract, use generic fallback
-            search_queries = content["search_queries"]
+            # ✅ YENİ: Use main_visual_focus for single coherent search
+            main_topic = content.get("main_visual_focus", "")
             
-            # Filter out bad queries (abstract terms that won't find stock footage)
-            bad_terms = [
-                "minute", "second", "hour", "day", "week", "month", "year", 
-                "time", "concept", "idea", "thought", "feeling", "effect",
-                "boost", "unlock", "master", "why", "how", "interleaving"
-            ]
-            filtered_queries = [
-                q for q in search_queries 
-                if not any(bad in q.lower() for bad in bad_terms)
-            ]
+            if not main_topic:
+                # Fallback to first search query
+                search_queries = content.get("search_queries", [])
+                main_topic = search_queries[0] if search_queries else "nature landscape"
             
-            # If all queries filtered out or empty, use ultra-generic fallback
-            if not filtered_queries:
-                logger.warning("   ⚠️ Search queries too abstract, using ultra-generic fallback")
-                filtered_queries = [
-                    "nature mountains",
-                    "city lights",
-                    "ocean sunset",
-                    "forest trees",
-                    "people lifestyle"
-                ]
+            logger.info(f"   🎯 Main visual focus: '{main_topic}'")
+            logger.info(f"   📹 Searching for {len(audio_segments)} matching videos...")
             
-            logger.info(f"   Using queries: {filtered_queries}")
-            
-            video_pool = self.pexels.build_pool(
-                focus=content.get("metadata", {}).get("title", ""),
-                search_terms=filtered_queries,
-                need=len(audio_segments) + 2
+            # Single search for all videos
+            video_pool = self.pexels.search_simple(
+                query=main_topic,
+                count=len(audio_segments) + 2  # Extra for variety
             )
-            
-            # If still no videos, try absolute fallback with most popular terms
-            if not video_pool:
-                logger.warning("   ⚠️ No videos found, trying absolute fallback...")
-                fallback_queries = ["nature", "city", "ocean", "sunset", "people"]
-                video_pool = self.pexels.build_pool(
-                    focus="",
-                    search_terms=fallback_queries,
-                    need=len(audio_segments) + 2
-                )
             
             if not video_pool:
                 logger.error("   ❌ No suitable videos found")
-                logger.info("   💡 Tip: Check PEXELS_API_KEY or try broader search terms")
+                logger.info(f"   💡 Tip: Check PEXELS_API_KEY or the query '{main_topic}'")
                 return None
+            
+            logger.info(f"   ✅ Found {len(video_pool)} videos for topic: {main_topic}")
             
             # Extract video URLs for download
             video_clips = [{"url": url, "id": vid} for vid, url in video_pool]
