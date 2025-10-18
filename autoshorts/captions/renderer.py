@@ -99,25 +99,27 @@ class CaptionRenderer:
                 tmp_out = output.replace(".mp4", ".tmp.mp4")
                 
                 try:
-                    # First pass: Add captions
+                    # First pass: Add captions (video only)
                     run([
                         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                         "-i", video_path,
                         "-vf", f"subtitles='{ass_path}',setsar=1,fps={settings.TARGET_FPS}",
                         "-r", str(settings.TARGET_FPS), "-vsync", "cfr",
-                        "-an", "-c:v", "libx264", "-preset", "medium",
+                        "-an",  # Remove audio here (will be added later in orchestrator)
+                        "-c:v", "libx264", "-preset", "medium",
                         "-crf", str(max(16, settings.CRF_VISUAL - 3)),
                         "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                         tmp_out
                     ])
                     
-                    # Second pass: Enforce exact frames
+                    # Second pass: Enforce exact frames (video only)
                     run([
                         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                         "-i", tmp_out,
                         "-vf", f"setsar=1,fps={settings.TARGET_FPS},trim=start_frame=0:end_frame={frames}",
                         "-r", str(settings.TARGET_FPS), "-vsync", "cfr",
-                        "-an", "-c:v", "libx264", "-preset", "medium",
+                        "-an",  # Still no audio - orchestrator will add it
+                        "-c:v", "libx264", "-preset", "medium",
                         "-crf", str(settings.CRF_VISUAL),
                         "-pix_fmt", "yuv420p",
                         output
