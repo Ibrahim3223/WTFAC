@@ -30,39 +30,58 @@ class ShortsOrchestrator:
     
     def __init__(self):
         """Initialize all components with proper API keys."""
+        logger.info("=" * 60)
+        logger.info("Initializing ShortsOrchestrator...")
+        logger.info("=" * 60)
+        
         self.channel = settings.CHANNEL_NAME
         self.temp_dir = None
         
-        # Get API keys from environment
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        logger.info(f"📺 Channel: {self.channel}")
+        logger.info(f"🎯 Topic: {settings.CHANNEL_TOPIC}")
+        logger.info(f"⏱️  Duration: {settings.TARGET_DURATION}s")
+        
+        # ✅ DÜZELTME: API keyleri settings modülünden al (os.getenv değil!)
+        gemini_api_key = settings.GEMINI_API_KEY
+        pexels_api_key = settings.PEXELS_API_KEY
+        
+        # Validate Gemini API key
         if not gemini_api_key:
             raise ValueError(
-                "GEMINI_API_KEY not found in environment variables. "
-                "Please set it in GitHub Secrets or your .env file."
+                "GEMINI_API_KEY not found! "
+                "Please set it in GitHub Secrets (Repository or Environment)."
             )
         
-        # Check Pexels API key
-        pexels_api_key = os.getenv("PEXELS_API_KEY")
+        logger.info(f"✅ Gemini API key: {gemini_api_key[:10]}...{gemini_api_key[-4:]}")
+        
+        # Validate Pexels API key
         if not pexels_api_key:
             logger.warning("⚠️ PEXELS_API_KEY not found - video search may fail")
         else:
-            logger.info(f"✅ Pexels API key found: {pexels_api_key[:10]}...")
+            logger.info(f"✅ Pexels API key: {pexels_api_key[:10]}...")
         
-        # Get Gemini model from settings (defaults to "flash" → gemini-2.5-flash)
+        # Get Gemini model from settings
         gemini_model = settings.GEMINI_MODEL
-        logger.info(f"📝 Configured Gemini model: {gemini_model}")
+        logger.info(f"🤖 Gemini model setting: {gemini_model}")
         
-        # Initialize modules with API keys
-        self.gemini = GeminiClient(
-            api_key=gemini_api_key,
-            model=gemini_model,  # ✅ settings'ten gelen model
-            max_retries=3
-        )
+        # Initialize Gemini client
+        logger.info("Initializing Gemini client...")
+        try:
+            self.gemini = GeminiClient(
+                api_key=gemini_api_key,
+                model=gemini_model,
+                max_retries=3
+            )
+            logger.info("✅ Gemini client initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Gemini client: {e}")
+            raise
         
+        # Initialize other modules
+        logger.info("Initializing other modules...")
         self.quality_scorer = QualityScorer()
         self.tts = TTSHandler()
         self.pexels = PexelsClient()
-        
         self.downloader = VideoDownloader()
         self.segment_maker = SegmentMaker()
         self.caption_renderer = CaptionRenderer()
@@ -76,7 +95,9 @@ class ShortsOrchestrator:
         )
         self.state_guard = StateGuard(channel=self.channel)
         
+        logger.info("=" * 60)
         logger.info(f"🚀 Orchestrator ready: {self.channel}")
+        logger.info("=" * 60)
     
     def run(self) -> Optional[str]:
         """
@@ -124,6 +145,9 @@ class ShortsOrchestrator:
                     
             except Exception as e:
                 logger.error(f"❌ Pipeline failed: {e}")
+                import traceback
+                logger.debug(traceback.format_exc())
+                
                 if attempt == max_attempts:
                     raise
                 logger.info(f"🔄 Retrying... ({attempt}/{max_attempts})")
@@ -154,6 +178,11 @@ class ShortsOrchestrator:
         Returns: Content dict or None on failure.
         """
         try:
+            logger.info("   🔮 Calling Gemini API...")
+            logger.info(f"   Topic: {settings.CHANNEL_TOPIC}")
+            logger.info(f"   Style: {settings.CONTENT_STYLE}")
+            logger.info(f"   Duration: {settings.TARGET_DURATION}s")
+            
             # Generate content using Gemini
             content = self.gemini.generate(
                 topic=settings.CHANNEL_TOPIC,
@@ -161,6 +190,8 @@ class ShortsOrchestrator:
                 duration=settings.TARGET_DURATION,
                 additional_context=settings.ADDITIONAL_PROMPT_CONTEXT
             )
+            
+            logger.info("   ✅ Gemini response received")
             
             # Combine all text for quality scoring
             full_text = " ".join([
@@ -218,6 +249,8 @@ class ShortsOrchestrator:
             
         except Exception as e:
             logger.error(f"   ❌ Content generation error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
     
     def _generate_tts(self, content: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
@@ -258,6 +291,8 @@ class ShortsOrchestrator:
             
         except Exception as e:
             logger.error(f"   ❌ TTS error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
     
     def _produce_video(
@@ -438,6 +473,8 @@ class ShortsOrchestrator:
             
         except Exception as e:
             logger.error(f"   ❌ Video production error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
     
     def _upload(self, video_path: str, content: Dict[str, Any]) -> Optional[str]:
@@ -479,4 +516,6 @@ class ShortsOrchestrator:
                 
         except Exception as e:
             logger.error(f"   ❌ Upload error: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return None
