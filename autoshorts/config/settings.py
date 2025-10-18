@@ -133,6 +133,8 @@ STRICT_ENTITY_FILTER = _env_bool("STRICT_ENTITY_FILTER", False)
 # ============================================================
 
 KARAOKE_CAPTIONS = _env_bool("KARAOKE_CAPTIONS", True)  # Enable karaoke-style animated captions
+KARAOKE_EFFECTS = _env_bool("KARAOKE_EFFECTS", True)  # Enable shake/blur effects
+EFFECT_STYLE = os.getenv("EFFECT_STYLE", "moderate")  # dynamic, moderate, subtle
 
 CAPTION_FONT = os.getenv("CAPTION_FONT", "Arial")
 CAPTION_FONT_SIZE = _env_int("CAPTION_FONT_SIZE", 70)
@@ -144,6 +146,11 @@ CAPTION_POSITION = os.getenv("CAPTION_POSITION", "center")  # top, center, botto
 CAPTION_PRIMARY_COLOR = os.getenv("CAPTION_PRIMARY_COLOR", "&H00FFFFFF")  # White
 CAPTION_OUTLINE_COLOR = os.getenv("CAPTION_OUTLINE_COLOR", "&H00000000")  # Black
 CAPTION_HIGHLIGHT_COLOR = os.getenv("CAPTION_HIGHLIGHT_COLOR", "&H0000FFFF")  # Yellow
+
+# Karaoke ASS colors (for karaoke_ass.py)
+KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFFFFF")  # White (inactive text)
+KARAOKE_ACTIVE = os.getenv("KARAOKE_ACTIVE", "#00FFFF")  # Yellow (active/highlighted text)
+KARAOKE_OUTLINE = os.getenv("KARAOKE_OUTLINE", "#000000")  # Black (outline)
 
 # ============================================================
 # BGM SETTINGS
