@@ -38,16 +38,13 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
-      - name: Setup FFmpeg and aeneas dependencies
+      - name: Setup FFmpeg
         run: |
-          echo "📦 Installing system dependencies for forced alignment..."
+          echo "📦 Installing FFmpeg for video/audio processing..."
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg espeak libespeak-dev python3-dev
+          sudo apt-get install -y -qq ffmpeg
           echo "✅ FFmpeg version:"
           ffmpeg -version | head -n1
-          echo "✅ eSpeak version:"
-          espeak --version
-          echo "🎯 System dependencies ready for bulletproof caption sync!"
 
       # ---------- PRE: .state'i 'state' branch'inden geri yükle (worktree-safe) ----------
       - name: Restore .state from 'state' branch (worktree-safe)
@@ -138,16 +135,9 @@ jobs:
         run: |
           echo "📦 Installing Python packages..."
           python -m pip install -U pip setuptools wheel
-          
-          # CRITICAL: Install numpy first (aeneas build dependency)
-          pip install "numpy>=1.26,<2"
-          
-          # Install all other dependencies
           pip install -r requirements.txt
           echo "✅ Python dependencies installed"
-          
-          # Verify aeneas installation
-          python -c "from aeneas.executetask import ExecuteTask; print('✅ aeneas ready for forced alignment!')" || echo "⚠️ aeneas not available - will use fallback"
+          echo "ℹ️  Caption sync: Using TTS word timings (excellent quality)"
 
       - name: Build video
         env:
@@ -162,16 +152,16 @@ jobs:
           TTS_SSML: "0"                     # SSML prosody for all topics
           TTS_RATE: "+12%"                  # Universal speech speed
 
-          # ===== CAPTIONS / KARAOKE (Bulletproof Forced Alignment) =====
+          # ===== CAPTIONS / KARAOKE (TTS Word-Level Timing) =====
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER: "1"
           KARAOKE_INACTIVE: "#FFD700"       # Gold (inactive words)
           KARAOKE_ACTIVE: "#3EA6FF"         # Blue (active words)
           KARAOKE_OUTLINE: "#000000"        # Black outline
-          KARAOKE_OFFSET_MS: "0"            # Forced alignment = perfect sync (no offset needed)
+          KARAOKE_OFFSET_MS: "0"            # TTS word timing = excellent sync (no offset needed)
           KARAOKE_SPEED: "1.0"              # No tempo adjustment needed
-          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust forced alignment timing
+          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust TTS timing
           KARAOKE_RAMP_PCT: "0.0"           # No progressive speed
           KARAOKE_EARLY_END_MS: "0"         # Full duration
           CAPTION_LEAD_MS: "0"              # No lead offset
