@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Caption rendering on video - ENHANCED WITH CAPCUT CHUNKING
-Word-by-word rendering with 2-3 word chunks for maximum readability
+Caption rendering - CAPCUT PERFECT SYNC
+Simple word-by-word Dialogue events - NO karaoke tags
 """
 import os
 import pathlib
@@ -9,19 +9,18 @@ import logging
 from typing import List, Tuple, Optional, Dict, Any
 
 from autoshorts.config import settings
-from autoshorts.utils.ffmpeg_utils import run, has_subtitles, quantize_to_frames, ffprobe_duration
+from autoshorts.utils.ffmpeg_utils import run, has_subtitles, ffprobe_duration
 from autoshorts.captions.karaoke_ass import CAPTION_STYLES, get_random_style, EMPHASIS_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
 
 class CaptionRenderer:
-    """Render captions on video with CapCut-style chunking."""
+    """Render captions with CapCut-style perfect sync."""
     
-    # CapCut-style chunking parameters
-    WORDS_PER_CHUNK = 3      # Max 3 words per caption block
-    MIN_CHUNK_DURATION = 0.8  # Minimum 0.8s per chunk
-    MAX_CHUNK_DURATION = 2.5  # Maximum 2.5s per chunk
+    # CapCut-style parameters
+    WORDS_PER_CHUNK = 3      # Max words per caption line
+    MIN_WORD_DURATION = 0.15  # Min 150ms per word
     
     def render_captions(
         self,
@@ -29,17 +28,7 @@ class CaptionRenderer:
         audio_segments: List[Dict[str, Any]],
         output_dir: str
     ) -> List[str]:
-        """
-        Render captions on all video segments with CapCut-style chunking.
-        
-        Args:
-            video_segments: List of video file paths
-            audio_segments: List of audio segment dicts with text and word_timings
-            output_dir: Output directory for captioned videos
-            
-        Returns:
-            List of paths to captioned video segments
-        """
+        """Render captions on all video segments."""
         captioned_segments = []
         
         for i, (video_path, audio_segment) in enumerate(zip(video_segments, audio_segments)):
@@ -52,12 +41,12 @@ class CaptionRenderer:
                 
                 logger.info(f"      Rendering caption {i+1}/{len(video_segments)}: {text[:50]}...")
                 
-                # CRITICAL: Validate and fix word timings
+                # Validate and fix word timings
                 if words:
-                    words = self._validate_and_fix_timings(words, duration)
+                    words = self._validate_timings(words, duration)
                 else:
                     logger.warning(f"      ⚠️ No word timings, using fallback")
-                    words = self._fallback_word_timings(text, duration)
+                    words = self._fallback_timings(text, duration)
                 
                 captioned_path = self.render(
                     video_path=video_path,
@@ -88,29 +77,14 @@ class CaptionRenderer:
         self,
         video_path: str,
         text: str,
-        words: Optional[List[Tuple[str, float]]] = None,
-        duration: float = 0,
+        words: List[Tuple[str, float]],
+        duration: float,
         is_hook: bool = False,
         sentence_type: str = "buildup",
         temp_dir: str = None
     ) -> str:
-        """
-        Render captions on a single video using ASS karaoke with CapCut-style chunks.
-        
-        Args:
-            video_path: Input video file path
-            text: Caption text to render
-            words: Word timings for karaoke effect
-            duration: Video duration in seconds
-            is_hook: Whether this is the hook segment (affects styling)
-            sentence_type: Type of sentence (hook/buildup/payoff/cta)
-            temp_dir: Temporary directory for intermediate files
-            
-        Returns:
-            Path to output video with captions
-        """
+        """Render captions with perfect sync."""
         try:
-            # Get video duration
             if duration <= 0:
                 duration = ffprobe_duration(video_path)
             
@@ -118,42 +92,33 @@ class CaptionRenderer:
             output = video_path.replace(".mp4", "_caption.mp4")
             
             if settings.KARAOKE_CAPTIONS and has_subtitles():
-                # Create CapCut-style chunked ASS
-                chunks = self._create_word_chunks(text, words or [], sentence_type)
-                
-                if not chunks:
-                    logger.warning(f"      ⚠️ No chunks created, skipping captions")
-                    return video_path
-                
-                logger.debug(f"      Created {len(chunks)} caption chunks")
-                
-                # Write chunked ASS file
+                # Create CapCut-style ASS (word-by-word, NO karaoke)
                 ass_path = video_path.replace(".mp4", ".ass")
-                self._write_chunked_ass(chunks, duration, sentence_type, ass_path)
+                self._write_capcut_ass(words, duration, sentence_type, ass_path)
                 
                 tmp_out = output.replace(".mp4", ".tmp.mp4")
                 
                 try:
-                    # First pass: Add captions (video only)
+                    # Add captions
                     run([
                         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                         "-i", video_path,
                         "-vf", f"subtitles='{ass_path}',setsar=1,fps={settings.TARGET_FPS}",
                         "-r", str(settings.TARGET_FPS), "-vsync", "cfr",
-                        "-an",  # Remove audio (will be added later)
+                        "-an",
                         "-c:v", "libx264", "-preset", "medium",
                         "-crf", str(max(16, settings.CRF_VISUAL - 3)),
                         "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                         tmp_out
                     ])
                     
-                    # Second pass: Enforce exact frames (video only)
+                    # Enforce exact frames
                     run([
                         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                         "-i", tmp_out,
                         "-vf", f"setsar=1,fps={settings.TARGET_FPS},trim=start_frame=0:end_frame={frames}",
                         "-r", str(settings.TARGET_FPS), "-vsync", "cfr",
-                        "-an",  # Still no audio
+                        "-an",
                         "-c:v", "libx264", "-preset", "medium",
                         "-crf", str(settings.CRF_VISUAL),
                         "-pix_fmt", "yuv420p",
@@ -161,13 +126,11 @@ class CaptionRenderer:
                     ])
                     
                 finally:
-                    # Cleanup temporary files
                     pathlib.Path(ass_path).unlink(missing_ok=True)
                     pathlib.Path(tmp_out).unlink(missing_ok=True)
                 
                 return output
             else:
-                # No captions required or subtitles not available
                 logger.warning(f"      Skipping captions for {video_path}")
                 return video_path
                 
@@ -175,317 +138,187 @@ class CaptionRenderer:
             logger.error(f"      ❌ Error in render(): {e}")
             import traceback
             logger.debug(traceback.format_exc())
-            return video_path  # Return original if caption rendering fails
+            return video_path
     
     # ========================================================================
-    # NEW METHODS: CapCut-Style Chunking
+    # TIMING VALIDATION
     # ========================================================================
     
-    def _validate_and_fix_timings(
+    def _validate_timings(
         self, 
         word_timings: List[Tuple[str, float]], 
         total_duration: float
     ) -> List[Tuple[str, float]]:
-        """
-        CRITICAL: Validate and fix word timings to match audio duration.
-        
-        Fixes:
-        1. Timings exceed audio duration (TTS cut off)
-        2. Last words have zero duration
-        3. Unrealistic durations
-        4. ATEMPO SCALING (if handler didn't do it)
-        
-        Args:
-            word_timings: List of (word, duration) tuples
-            total_duration: Actual audio duration in seconds
-            
-        Returns:
-            Fixed word timings
-        """
+        """Validate and fix word timings."""
         if not word_timings:
             return []
         
-        # CRITICAL FIX: Check if timings need atempo scaling
-        # If sum of word durations >> total_duration, atempo wasn't applied!
+        # Check if atempo scaling needed
         sum_raw = sum(d for _, d in word_timings)
         
-        if sum_raw > total_duration * 1.05:  # More than 5% difference
-            # Calculate atempo factor
+        if sum_raw > total_duration * 1.05:
             atempo_factor = sum_raw / total_duration
-            logger.warning(f"      ⚠️ Atempo scaling missing! Applying factor {atempo_factor:.2f}")
-            
-            # Apply atempo scaling
+            logger.warning(f"      ⚠️ Applying atempo scale: {atempo_factor:.2f}")
             word_timings = [(word, dur / atempo_factor) for word, dur in word_timings]
             sum_raw = sum(d for _, d in word_timings)
         
-        fixed_timings = []
-        cumulative_time = 0.0
+        fixed = []
+        cumulative = 0.0
         
-        for i, (word, duration) in enumerate(word_timings):
-            # Skip empty words
+        for i, (word, dur) in enumerate(word_timings):
             if not word.strip():
                 continue
             
-            # Fix: Ensure duration is reasonable
-            if duration < 0.08:
-                duration = 0.20  # Minimum 200ms per word
-            elif duration > 2.0:
-                duration = 2.0  # Maximum 2s per word
+            # Clamp duration
+            dur = max(self.MIN_WORD_DURATION, min(dur, 2.0))
             
-            # Fix: If we're exceeding total duration, truncate
-            if cumulative_time + duration > total_duration + 0.05:  # 50ms tolerance
-                # TTS was cut off - distribute remaining time
-                remaining_time = max(0.0, total_duration - cumulative_time)
+            # Stop if exceeding total
+            if cumulative + dur > total_duration + 0.01:
+                remaining = max(0.0, total_duration - cumulative)
                 remaining_words = len(word_timings) - i
                 
-                if remaining_time > 0.1 and remaining_words > 0:
-                    duration = remaining_time / remaining_words
-                    
-                    # Only add if we have meaningful time
-                    if duration > 0.08:
-                        fixed_timings.append((word, duration))
-                        cumulative_time += duration
+                if remaining > 0.1 and remaining_words > 0:
+                    dur = remaining / remaining_words
+                    if dur >= self.MIN_WORD_DURATION:
+                        fixed.append((word, dur))
+                        cumulative += dur
                 
-                # Stop processing - TTS cut off here
-                logger.warning(f"      ⚠️ TTS cut off at word '{word}' ({i+1}/{len(word_timings)}) - truncating captions")
+                logger.warning(f"      ⚠️ TTS cut at '{word}' ({i+1}/{len(word_timings)})")
                 break
             
-            fixed_timings.append((word, duration))
-            cumulative_time += duration
+            fixed.append((word, dur))
+            cumulative += dur
         
-        # Final precision adjustment
-        if fixed_timings:
-            total_fixed = sum(d for _, d in fixed_timings)
+        # Final adjustment
+        if fixed:
+            total_fixed = sum(d for _, d in fixed)
             diff = total_duration - total_fixed
             
-            # If difference > 50ms, adjust last word
-            if abs(diff) > 0.05:
-                last_word, last_dur = fixed_timings[-1]
-                new_dur = max(0.08, last_dur + diff)
-                fixed_timings[-1] = (last_word, new_dur)
-                total_fixed = sum(d for _, d in fixed_timings)
-        
-        # Log the fix
-        if fixed_timings:
-            total_fixed = sum(d for _, d in fixed_timings)
-            if len(fixed_timings) != len(word_timings):
-                logger.info(f"      📝 Fixed timings: {len(word_timings)} → {len(fixed_timings)} words")
-            logger.info(f"      🎯 Timing sync: {total_fixed:.2f}s / {total_duration:.2f}s (diff: {abs(total_fixed - total_duration)*1000:.0f}ms)")
-        
-        return fixed_timings
-    
-    def _create_word_chunks(
-        self,
-        text: str,
-        word_timings: List[Tuple[str, float]],
-        sentence_type: str
-    ) -> List[Dict[str, Any]]:
-        """
-        Create CapCut-style caption chunks (2-3 words per chunk).
-        Uses CUMULATIVE timing to avoid rounding errors.
-        
-        Args:
-            text: Full sentence text
-            word_timings: List of (word, duration) tuples (VALIDATED)
-            sentence_type: Type of sentence (hook/buildup/payoff/cta)
+            if abs(diff) > 0.01:
+                word, dur = fixed[-1]
+                fixed[-1] = (word, max(self.MIN_WORD_DURATION, dur + diff))
+                total_fixed = sum(d for _, d in fixed)
             
-        Returns:
-            List of chunks with metadata
-        """
-        if not word_timings:
+            diff_ms = abs(total_fixed - total_duration) * 1000
+            logger.info(f"      🎯 Sync: {total_fixed:.3f}s / {total_duration:.3f}s (±{diff_ms:.0f}ms)")
+        
+        return fixed
+    
+    def _fallback_timings(self, text: str, duration: float) -> List[Tuple[str, float]]:
+        """Generate fallback timings."""
+        words = [w for w in text.split() if w.strip()]
+        if not words:
             return []
         
-        chunks = []
-        current_chunk_words = []
-        cumulative_time = 0.0
-        chunk_start_time = 0.0
+        per_word = max(self.MIN_WORD_DURATION, duration / len(words))
+        result = [(w, per_word) for w in words]
         
-        # Determine words per chunk based on sentence type
-        if sentence_type == "hook":
-            max_words = 2  # Hook: 2 words max (faster pacing)
-        else:
-            max_words = self.WORDS_PER_CHUNK  # Normal: 3 words max
+        # Adjust last word
+        if result:
+            total = sum(d for _, d in result)
+            diff = duration - total
+            if abs(diff) > 0.01:
+                word, dur = result[-1]
+                result[-1] = (word, max(self.MIN_WORD_DURATION, dur + diff))
         
-        for i, (word, duration) in enumerate(word_timings):
-            # Add word to current chunk
-            current_chunk_words.append((word, duration))
-            
-            # Check if we should finalize this chunk
-            should_finalize = False
-            
-            # Rule 1: Max words reached
-            if len(current_chunk_words) >= max_words:
-                should_finalize = True
-            
-            # Rule 2: Natural break (punctuation)
-            elif word.rstrip().endswith((',', '.', '!', '?', ':', ';', '—', '…')):
-                should_finalize = True
-            
-            # Rule 3: Last word
-            elif i == len(word_timings) - 1:
-                should_finalize = True
-            
-            if should_finalize and current_chunk_words:
-                # Calculate chunk duration from word durations
-                chunk_duration = sum(d for _, d in current_chunk_words)
-                
-                # Create chunk
-                chunk_text = " ".join(w for w, _ in current_chunk_words)
-                
-                chunk = {
-                    "text": chunk_text.upper(),  # CapCut uses uppercase
-                    "words": current_chunk_words,
-                    "start_time": chunk_start_time,  # Using cumulative time
-                    "duration": chunk_duration
-                }
-                
-                chunks.append(chunk)
-                
-                # Update cumulative time for next chunk
-                chunk_start_time += chunk_duration
-                current_chunk_words = []
-        
-        # Log chunk stats
-        total_time = sum(c["duration"] for c in chunks)
-        logger.debug(f"      Created {len(chunks)} chunks from {len(word_timings)} words (total: {total_time:.3f}s)")
-        
-        return chunks
+        return result
     
-    def _write_chunked_ass(
+    # ========================================================================
+    # CAPCUT-STYLE ASS WRITER
+    # ========================================================================
+    
+    def _write_capcut_ass(
         self,
-        chunks: List[Dict[str, Any]],
+        words: List[Tuple[str, float]],
         total_duration: float,
         sentence_type: str,
         output_path: str
     ):
         """
-        Write ASS file with chunked captions - MILLISECOND PRECISION.
-        Each chunk is a separate Dialogue event.
-        
-        Args:
-            chunks: List of caption chunks
-            total_duration: Total video duration
-            sentence_type: Type of sentence
-            output_path: Path to output ASS file
+        Write CapCut-style ASS: word-by-word chunks, NO karaoke.
+        Each chunk is a separate Dialogue with exact start/end.
         """
-        # Select caption style
+        if not words:
+            return
+        
+        # Select style
         style = CAPTION_STYLES[get_random_style()]
         
-        # Get style parameters
+        is_hook = (sentence_type == "hook")
         fontname = style["fontname"]
-        fontsize = style["fontsize_hook"] if sentence_type == "hook" else style["fontsize_normal"]
-        fontsize_emphasis = style["fontsize_emphasis"]
+        fontsize = style["fontsize_hook"] if is_hook else style["fontsize_normal"]
         outline = style["outline"]
         shadow = style["shadow"]
-        margin_v = style["margin_v_hook"] if sentence_type == "hook" else style["margin_v_normal"]
+        margin_v = style["margin_v_hook"] if is_hook else style["margin_v_normal"]
         
-        # Colors
-        inactive = style["color_inactive"]
-        active = style["color_active"]
-        outline_c = style["color_outline"]
-        emphasis_c = style["color_emphasis"]
+        # CapCut colors: vibrant, high contrast
+        primary_color = "&H00FFFFFF"   # White text
+        outline_color = "&H00000000"   # Black outline
         
-        # Build ASS header
-        ass_content = f"""[Script Info]
+        # Build ASS
+        ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
+WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Base,{fontname},{fontsize},{inactive},{active},{outline_c},&H7F000000,1,0,0,0,100,100,0,0,1,{outline},{shadow},2,50,50,{margin_v},0
-Style: Emphasis,{fontname},{fontsize_emphasis},{emphasis_c},{emphasis_c},{outline_c},&H7F000000,1,0,0,0,100,100,0,0,1,{outline + 1},{shadow},2,50,50,{margin_v},0
+Style: Default,{fontname},{fontsize},{primary_color},{primary_color},{outline_color},&H00000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,50,50,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
         
-        # Add each chunk as a separate Dialogue event
-        cumulative_time = 0.0
+        # Group words into chunks (2-3 words)
+        max_words = 2 if is_hook else self.WORDS_PER_CHUNK
         
-        for chunk_idx, chunk in enumerate(chunks):
-            start = cumulative_time
-            words = chunk["words"]
-            
-            # Build karaoke tags for word-by-word reveal
-            karaoke_text = ""
-            chunk_duration = 0.0
-            
-            for word, word_dur in words:
-                word_upper = word.upper()
-                # CRITICAL: Round to centiseconds for ASS precision
-                duration_cs = max(5, int(round(word_dur * 100)))  # Min 50ms
-                actual_dur = duration_cs / 100.0  # Convert back to seconds
-                
-                chunk_duration += actual_dur
-                
-                # Check if emphasis word
-                clean_word = word_upper.strip(".,!?;:—…")
-                if clean_word in EMPHASIS_KEYWORDS:
-                    # Emphasis style with stronger bounce
-                    karaoke_text += f"{{\\k{duration_cs}\\fs{fontsize_emphasis}\\c{emphasis_c}\\t(0,40,\\fscx110\\fscy110)\\t(40,80,\\fscx100\\fscy100)}}{word_upper} "
-                else:
-                    # Normal style with subtle bounce
-                    karaoke_text += f"{{\\k{duration_cs}\\t(0,50,\\fscx105\\fscy105)\\t(50,100,\\fscx100\\fscy100)}}{word_upper} "
-            
-            karaoke_text = karaoke_text.strip()
-            
-            # Calculate end time with cumulative precision
-            end = start + chunk_duration
-            
-            # Format times with millisecond precision
-            start_time = self._format_ass_time(start)
-            end_time = self._format_ass_time(end)
-            
-            # Add dialogue line
-            ass_content += f"Dialogue: 0,{start_time},{end_time},Base,,0,0,{margin_v},,{karaoke_text}\n"
-            
-            # Update cumulative time for next chunk
-            cumulative_time = end
+        chunks = []
+        current = []
         
-        # Write file
+        for word, dur in words:
+            current.append((word, dur))
+            
+            # Finalize chunk
+            if len(current) >= max_words or word.rstrip().endswith(('.', '!', '?', '…')):
+                if current:
+                    chunks.append(current)
+                    current = []
+        
+        if current:
+            chunks.append(current)
+        
+        # Write Dialogue events
+        cumulative = 0.0
+        
+        for chunk in chunks:
+            chunk_text = " ".join(w.upper() for w, _ in chunk)
+            chunk_duration = sum(d for _, d in chunk)
+            
+            start = cumulative
+            end = cumulative + chunk_duration
+            
+            # Format times (centisecond precision)
+            start_str = self._ass_time(start)
+            end_str = self._ass_time(end)
+            
+            # Simple Dialogue - NO effects, perfect sync
+            ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{chunk_text}\n"
+            
+            cumulative = end
+        
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write(ass_content)
+            f.write(ass)
         
-        logger.debug(f"      Wrote ASS with {len(chunks)} chunks (total: {cumulative_time:.3f}s) to {output_path}")
+        logger.debug(f"      ASS: {len(chunks)} chunks, {cumulative:.3f}s total")
     
-    def _format_ass_time(self, seconds: float) -> str:
-        """
-        Format seconds to ASS time format with CENTISECOND precision.
-        Format: H:MM:SS.CC (centiseconds)
-        """
-        # Round to centiseconds (10ms precision)
-        centiseconds = int(round(seconds * 100))
-        
-        h = centiseconds // 360000
-        centiseconds -= h * 360000
-        
-        m = centiseconds // 6000
-        centiseconds -= m * 6000
-        
-        s = centiseconds // 100
-        cs = centiseconds % 100
-        
-        return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
-    
-    def _fallback_word_timings(self, text: str, duration: float) -> List[Tuple[str, float]]:
-        """
-        Generate fallback word timings if TTS doesn't provide them.
-        
-        Args:
-            text: Full text
-            duration: Total duration in seconds
-            
-        Returns:
-            List of (word, duration) tuples
-        """
-        words = text.split()
-        if not words:
-            return []
-        
-        # Distribute duration evenly
-        per_word = duration / len(words)
-        per_word = max(0.2, min(per_word, 1.0))  # Clamp between 0.2-1.0s
-        
-        logger.debug(f"      Generated fallback timings: {len(words)} words, {per_word:.2f}s each")
-        return [(word, per_word) for word in words]
+    def _ass_time(self, seconds: float) -> str:
+        """Format seconds to ASS time (H:MM:SS.CC)"""
+        cs = int(round(seconds * 100))
+        h = cs // 360000
+        cs -= h * 360000
+        m = cs // 6000
+        cs -= m * 6000
+        s = cs // 100
+        cs %= 100
+        return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
