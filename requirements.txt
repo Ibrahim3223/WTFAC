@@ -1,56 +1,55 @@
 # ============================================================
-# YouTube Shorts Automation - Requirements
+# YouTube Shorts Automation - Requirements (merged)
 # ============================================================
 
-# Core AI/ML - Gemini API
-google-genai>=0.2.0
+# --- Core AI/ML (Gemini SDKs: yalnızca birini kullanıyorsanız diğerini kaldırın) ---
+google-genai>=0.2.0           # import: google.genai
+google-generativeai>=0.8.3    # import: google.generativeai
 
-# Text-to-Speech
+# --- Config / Validation / Env ---
+pyyaml>=6.0
+pydantic>=2.0
+python-dotenv>=1.0.0
+
+# --- Text-to-Speech ---
 edge-tts>=6.1.0
 nest-asyncio>=1.5.0
+gtts>=2.5.0
 
-# Google APIs (YouTube upload)
+# --- Google APIs (YouTube upload) ---
 google-api-python-client>=2.100.0
 google-auth-oauthlib>=1.1.0
 google-auth>=2.23.0
 google-auth-httplib2>=0.1.1
 
-# HTTP requests (for video downloads, Pexels API, etc.)
+# --- HTTP / Feeds ---
 requests>=2.31.0
-
-# Image/Video processing
-Pillow>=10.0.0
-
-# Numeric computing
-numpy>=1.26,<2
-
-# ML/Embeddings (for state management - optional but recommended)
-sentence-transformers>=2.7.0
-scikit-learn>=1.3.0
-
-# RSS/Feed parsing
 feedparser>=6.0.0
 
-# Configuration parsing
-pyyaml>=6.0
+# --- Image/Video processing ---
+Pillow>=10.0.0
 
-# Optional: For better progress bars and CLI
+# --- Audio/Video utilities ---
+pydub>=0.25.0   # FFmpeg runtime gerekir (sistem paketi)
+
+# --- Numeric / ML toolstack ---
+numpy>=1.26,<2
+scikit-learn>=1.3.0
+
+# --- ML / Embeddings ---
+sentence-transformers>=2.7.0   # (daha yeni gereksinim olduğu için 2.7.0'ı koruduk)
+
+# --- CLI / Logging (opsiyonel ama faydalı) ---
 tqdm>=4.66.0
-
-# Optional: For better logging
 colorlog>=6.8.0
 
 # ============================================================
-# OPTIONAL: Perfect Caption Sync with Whisper
+# Perfect Caption Sync (Whisper) — etkin kullanıyorsanız yükleyin
 # ============================================================
-# Uncomment ONE of these for perfect caption timing:
-# (System works fine without them, just uses TTS timings)
+faster-whisper>=1.0.0
+av>=11.0.0                  # PyAV: faster-whisper için gerekli
+openai-whisper>=20231117    # Fallback olarak (opsiyonel, isterseniz kaldırın)
 
-# Option 1: faster-whisper (RECOMMENDED - much faster, same accuracy)
-# faster-whisper>=1.0.0
-
-# Option 2: openai-whisper (slower but works everywhere)
-# openai-whisper>=20231117
-
-# Note: If neither is installed, captions will use TTS word timings
-# with smart offset adjustments. Still good quality!
+# Notlar:
+# - 'pydub' ve Whisper için FFmpeg ikilisi gereklidir (sistem düzeyinde).
+# - Eğer yalnızca tek Gemini SDK'sı kullanıyorsanız, diğeri satırı silinebilir.
