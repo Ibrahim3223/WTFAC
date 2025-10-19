@@ -193,6 +193,7 @@ class CaptionRenderer:
         1. Timings exceed audio duration (TTS cut off)
         2. Last words have zero duration
         3. Unrealistic durations
+        4. ATEMPO SCALING (if handler didn't do it)
         
         Args:
             word_timings: List of (word, duration) tuples
@@ -204,6 +205,19 @@ class CaptionRenderer:
         if not word_timings:
             return []
         
+        # CRITICAL FIX: Check if timings need atempo scaling
+        # If sum of word durations >> total_duration, atempo wasn't applied!
+        sum_raw = sum(d for _, d in word_timings)
+        
+        if sum_raw > total_duration * 1.05:  # More than 5% difference
+            # Calculate atempo factor
+            atempo_factor = sum_raw / total_duration
+            logger.warning(f"      ⚠️ Atempo scaling missing! Applying factor {atempo_factor:.2f}")
+            
+            # Apply atempo scaling
+            word_timings = [(word, dur / atempo_factor) for word, dur in word_timings]
+            sum_raw = sum(d for _, d in word_timings)
+        
         fixed_timings = []
         cumulative_time = 0.0
         
@@ -213,26 +227,24 @@ class CaptionRenderer:
                 continue
             
             # Fix: Ensure duration is reasonable
-            if duration < 0.1:
-                duration = 0.25  # Minimum 250ms per word
+            if duration < 0.08:
+                duration = 0.20  # Minimum 200ms per word
             elif duration > 2.0:
                 duration = 2.0  # Maximum 2s per word
             
             # Fix: If we're exceeding total duration, truncate
-            if cumulative_time + duration > total_duration:
+            if cumulative_time + duration > total_duration + 0.05:  # 50ms tolerance
                 # TTS was cut off - distribute remaining time
-                remaining_time = max(0.1, total_duration - cumulative_time)
+                remaining_time = max(0.0, total_duration - cumulative_time)
                 remaining_words = len(word_timings) - i
                 
-                if remaining_words > 0:
+                if remaining_time > 0.1 and remaining_words > 0:
                     duration = remaining_time / remaining_words
-                else:
-                    duration = remaining_time
-                
-                # Only add if we have time left
-                if duration > 0.05:
-                    fixed_timings.append((word, duration))
-                    cumulative_time += duration
+                    
+                    # Only add if we have meaningful time
+                    if duration > 0.08:
+                        fixed_timings.append((word, duration))
+                        cumulative_time += duration
                 
                 # Stop processing - TTS cut off here
                 logger.warning(f"      ⚠️ TTS cut off at word '{word}' ({i+1}/{len(word_timings)}) - truncating captions")
@@ -241,12 +253,24 @@ class CaptionRenderer:
             fixed_timings.append((word, duration))
             cumulative_time += duration
         
-        # Log the fix
-        total_fixed = sum(d for _, d in fixed_timings)
-        if len(fixed_timings) != len(word_timings):
-            logger.info(f"      📝 Fixed timings: {len(word_timings)} → {len(fixed_timings)} words")
+        # Final precision adjustment
+        if fixed_timings:
+            total_fixed = sum(d for _, d in fixed_timings)
+            diff = total_duration - total_fixed
+            
+            # If difference > 50ms, adjust last word
+            if abs(diff) > 0.05:
+                last_word, last_dur = fixed_timings[-1]
+                new_dur = max(0.08, last_dur + diff)
+                fixed_timings[-1] = (last_word, new_dur)
+                total_fixed = sum(d for _, d in fixed_timings)
         
-        logger.debug(f"      Timing validation: {total_fixed:.2f}s / {total_duration:.2f}s")
+        # Log the fix
+        if fixed_timings:
+            total_fixed = sum(d for _, d in fixed_timings)
+            if len(fixed_timings) != len(word_timings):
+                logger.info(f"      📝 Fixed timings: {len(word_timings)} → {len(fixed_timings)} words")
+            logger.info(f"      🎯 Timing sync: {total_fixed:.2f}s / {total_duration:.2f}s (diff: {abs(total_fixed - total_duration)*1000:.0f}ms)")
         
         return fixed_timings
     
@@ -258,10 +282,11 @@ class CaptionRenderer:
     ) -> List[Dict[str, Any]]:
         """
         Create CapCut-style caption chunks (2-3 words per chunk).
+        Uses CUMULATIVE timing to avoid rounding errors.
         
         Args:
             text: Full sentence text
-            word_timings: List of (word, duration) tuples
+            word_timings: List of (word, duration) tuples (VALIDATED)
             sentence_type: Type of sentence (hook/buildup/payoff/cta)
             
         Returns:
@@ -272,7 +297,7 @@ class CaptionRenderer:
         
         chunks = []
         current_chunk_words = []
-        current_chunk_duration = 0.0
+        cumulative_time = 0.0
         chunk_start_time = 0.0
         
         # Determine words per chunk based on sentence type
@@ -281,12 +306,9 @@ class CaptionRenderer:
         else:
             max_words = self.WORDS_PER_CHUNK  # Normal: 3 words max
         
-        cumulative_time = 0.0
-        
         for i, (word, duration) in enumerate(word_timings):
             # Add word to current chunk
             current_chunk_words.append((word, duration))
-            current_chunk_duration += duration
             
             # Check if we should finalize this chunk
             should_finalize = False
@@ -295,39 +317,38 @@ class CaptionRenderer:
             if len(current_chunk_words) >= max_words:
                 should_finalize = True
             
-            # Rule 2: Max duration reached
-            elif current_chunk_duration >= self.MAX_CHUNK_DURATION:
-                should_finalize = True
-            
-            # Rule 3: Natural break (punctuation)
+            # Rule 2: Natural break (punctuation)
             elif word.rstrip().endswith((',', '.', '!', '?', ':', ';', '—', '…')):
                 should_finalize = True
             
-            # Rule 4: Last word
+            # Rule 3: Last word
             elif i == len(word_timings) - 1:
                 should_finalize = True
             
             if should_finalize and current_chunk_words:
+                # Calculate chunk duration from word durations
+                chunk_duration = sum(d for _, d in current_chunk_words)
+                
                 # Create chunk
                 chunk_text = " ".join(w for w, _ in current_chunk_words)
                 
                 chunk = {
                     "text": chunk_text.upper(),  # CapCut uses uppercase
                     "words": current_chunk_words,
-                    "start_time": chunk_start_time,
-                    "duration": current_chunk_duration
+                    "start_time": chunk_start_time,  # Using cumulative time
+                    "duration": chunk_duration
                 }
                 
                 chunks.append(chunk)
                 
-                # Reset for next chunk
-                chunk_start_time = cumulative_time + current_chunk_duration
+                # Update cumulative time for next chunk
+                chunk_start_time += chunk_duration
                 current_chunk_words = []
-                current_chunk_duration = 0.0
-            
-            cumulative_time += duration
         
-        logger.debug(f"      Created {len(chunks)} chunks from {len(word_timings)} words")
+        # Log chunk stats
+        total_time = sum(c["duration"] for c in chunks)
+        logger.debug(f"      Created {len(chunks)} chunks from {len(word_timings)} words (total: {total_time:.3f}s)")
+        
         return chunks
     
     def _write_chunked_ass(
@@ -338,7 +359,7 @@ class CaptionRenderer:
         output_path: str
     ):
         """
-        Write ASS file with chunked captions.
+        Write ASS file with chunked captions - MILLISECOND PRECISION.
         Each chunk is a separate Dialogue event.
         
         Args:
@@ -380,16 +401,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
         
         # Add each chunk as a separate Dialogue event
-        for chunk in chunks:
-            start = chunk["start_time"]
-            end = start + chunk["duration"]
+        cumulative_time = 0.0
+        
+        for chunk_idx, chunk in enumerate(chunks):
+            start = cumulative_time
             words = chunk["words"]
             
             # Build karaoke tags for word-by-word reveal
             karaoke_text = ""
+            chunk_duration = 0.0
+            
             for word, word_dur in words:
                 word_upper = word.upper()
-                duration_cs = max(8, int(round(word_dur * 100)))  # Centiseconds
+                # CRITICAL: Round to centiseconds for ASS precision
+                duration_cs = max(5, int(round(word_dur * 100)))  # Min 50ms
+                actual_dur = duration_cs / 100.0  # Convert back to seconds
+                
+                chunk_duration += actual_dur
                 
                 # Check if emphasis word
                 clean_word = word_upper.strip(".,!?;:—…")
@@ -402,26 +430,43 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             karaoke_text = karaoke_text.strip()
             
-            # Format times
+            # Calculate end time with cumulative precision
+            end = start + chunk_duration
+            
+            # Format times with millisecond precision
             start_time = self._format_ass_time(start)
             end_time = self._format_ass_time(end)
             
             # Add dialogue line
             ass_content += f"Dialogue: 0,{start_time},{end_time},Base,,0,0,{margin_v},,{karaoke_text}\n"
+            
+            # Update cumulative time for next chunk
+            cumulative_time = end
         
         # Write file
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass_content)
         
-        logger.debug(f"      Wrote ASS with {len(chunks)} chunks to {output_path}")
+        logger.debug(f"      Wrote ASS with {len(chunks)} chunks (total: {cumulative_time:.3f}s) to {output_path}")
     
     def _format_ass_time(self, seconds: float) -> str:
-        """Format seconds to ASS time format (0:00:00.00)"""
-        h = int(seconds // 3600)
-        seconds -= h * 3600
-        m = int(seconds // 60)
-        seconds -= m * 60
-        return f"{h:d}:{m:02d}:{seconds:05.2f}"
+        """
+        Format seconds to ASS time format with CENTISECOND precision.
+        Format: H:MM:SS.CC (centiseconds)
+        """
+        # Round to centiseconds (10ms precision)
+        centiseconds = int(round(seconds * 100))
+        
+        h = centiseconds // 360000
+        centiseconds -= h * 360000
+        
+        m = centiseconds // 6000
+        centiseconds -= m * 6000
+        
+        s = centiseconds // 100
+        cs = centiseconds % 100
+        
+        return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
     
     def _fallback_word_timings(self, text: str, duration: float) -> List[Tuple[str, float]]:
         """
