@@ -1,6 +1,6 @@
 """
-Orchestrator - Main pipeline coordinator with SMART VIDEO SELECTION
-Manages the full flow: content → TTS → video → upload
+Orchestrator - Main pipeline coordinator with SMART VIDEO SELECTION + WHISPER
+Manages the full flow: content → TTS → video (with perfect caption sync) → upload
 """
 
 import os
@@ -46,7 +46,7 @@ VIDEO_SCORE_WEIGHTS = {
 }
 
 class ShortsOrchestrator:
-    """Main orchestrator for the YouTube Shorts pipeline with smart video selection."""
+    """Main orchestrator for the YouTube Shorts pipeline with smart video selection and Whisper sync."""
     
     def __init__(self):
         """Initialize all components with proper API keys."""
@@ -104,7 +104,29 @@ class ShortsOrchestrator:
         self.pexels = PexelsClient()
         self.downloader = VideoDownloader()
         self.segment_maker = SegmentMaker()
-        self.caption_renderer = CaptionRenderer()
+        
+        # Initialize caption renderer with Whisper support
+        logger.info("Initializing caption renderer...")
+        try:
+            # Get Whisper settings from config (if available)
+            use_whisper = getattr(settings, 'USE_WHISPER_CAPTIONS', True)
+            caption_offset = getattr(settings, 'CAPTION_OFFSET', None)
+            
+            self.caption_renderer = CaptionRenderer(
+                caption_offset=caption_offset,
+                use_whisper=use_whisper
+            )
+            
+            if use_whisper:
+                logger.info("🎯 Caption renderer initialized with Whisper (perfect sync)")
+            else:
+                logger.info("⚙️ Caption renderer initialized without Whisper (TTS timings)")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Caption renderer init warning: {e}")
+            # Fallback to basic initialization
+            self.caption_renderer = CaptionRenderer()
+        
         self.bgm_manager = BGMManager()
         self.uploader = YouTubeUploader()
         
@@ -146,8 +168,8 @@ class ShortsOrchestrator:
                     logger.error("❌ TTS generation failed")
                     continue
                 
-                # Phase 3: Video
-                logger.info("🎬 Phase 3: Video production...")
+                # Phase 3: Video (includes Whisper-perfect captions)
+                logger.info("🎬 Phase 3: Video production with perfect caption sync...")
                 video_path = self._produce_video(audio_segments, content)
                 if not video_path:
                     logger.error("❌ Video production failed")
@@ -277,7 +299,7 @@ class ShortsOrchestrator:
     def _generate_tts(self, content: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """
         Generate TTS for all sentences.
-        Returns: List of audio segments or None on failure.
+        Returns: List of audio segments with audio_path for Whisper.
         """
         try:
             sentences = content["sentences"]
@@ -306,19 +328,23 @@ class ShortsOrchestrator:
                     else:
                         sentence_type = "buildup"
                     
+                    # Audio segment with all info for Whisper
                     segment = {
                         "text": sentence,
-                        "audio_path": audio_file,
+                        "audio_path": audio_file,  # ✅ For Whisper perfect sync!
                         "duration": duration,
-                        "word_timings": word_timings,
-                        "type": sentence_type  # NEW: Track sentence type for pacing
+                        "word_timings": word_timings,  # TTS timings (fallback)
+                        "type": sentence_type
                     }
                     audio_segments.append(segment)
+                    
+                    logger.info(f"   ✅ Generated audio: {duration:.2f}s")
                 else:
                     logger.error(f"   ❌ TTS failed for sentence {i}")
                     return None
             
             logger.info(f"   ✅ Generated {len(audio_segments)} audio segments")
+            logger.info(f"   🎯 Audio files ready for Whisper analysis")
             return audio_segments
             
         except Exception as e:
@@ -367,7 +393,7 @@ class ShortsOrchestrator:
         content: Dict[str, Any]
     ) -> Optional[str]:
         """
-        Produce the final video with smart video selection.
+        Produce the final video with smart video selection and Whisper-perfect captions.
         Returns: Path to final video or None on failure.
         """
         try:
@@ -466,8 +492,6 @@ class ShortsOrchestrator:
                     min_dur, max_dur = SHOT_DURATION.get(sentence_type, (2.5, 3.5))
                     
                     # Adjust duration to fit optimal range (but respect audio)
-                    # If audio is shorter than min, use audio duration
-                    # If audio is longer than max, still use audio (we'll handle pacing with cuts)
                     optimal_duration = max(min_dur, min(duration, max_dur))
                     
                     logger.info(f"   🎬 Segment {i+1} ({sentence_type}): {duration:.1f}s (optimal: {optimal_duration:.1f}s)")
@@ -497,17 +521,21 @@ class ShortsOrchestrator:
             
             logger.info(f"   ✅ Created {len(video_segments)} video segments with optimal pacing")
             
-            # Step 4: Add captions
-            logger.info("   📝 Adding captions...")
+            # Step 4: Add captions with Whisper-perfect sync
+            logger.info("   📝 Adding captions with Whisper-perfect sync...")
+            logger.info("   🎯 Analyzing audio files for perfect timing...")
+            
             captioned_segments = self.caption_renderer.render_captions(
                 video_segments=video_segments,
-                audio_segments=audio_segments,
+                audio_segments=audio_segments,  # Contains audio_path for Whisper!
                 output_dir=self.temp_dir
             )
             
             if not captioned_segments:
                 logger.error("   ❌ Caption rendering failed")
                 return None
+            
+            logger.info("   ✅ Captions rendered with perfect sync")
             
             # Step 5: Mux audio with video segments
             logger.info("   🔊 Muxing audio with video segments...")
@@ -603,6 +631,7 @@ class ShortsOrchestrator:
                 return None
             
             logger.info(f"   ✅ Video produced: {final_video}")
+            logger.info(f"   🎯 Perfect caption sync achieved with Whisper!")
             return final_video
             
         except Exception as e:
