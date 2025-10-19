@@ -1408,11 +1408,11 @@
     "ts": "2025-10-18T17:14:10.083085"
   },
   {
-    "channel": "Flashback Minute",
-    "entity": "knew",
-    "content_hash": "1f850a4da160b1f6182293becc03db4b4ce82469",
-    "title": "Nobody knew landing on the Moon was possible 🔥",
-    "video_path": "out/Flashback Minute_This_Day_in_History_Important_Events_20251019_020531.mp4",
-    "ts": "2025-10-19T02:05:34.341503"
+    "channel": "World Briefing",
+    "entity": "nobody",
+    "content_hash": "bda9c1d8f4b4e332d4d44abd0125dcc7afea31d6",
+    "title": "What if nobody truly understands global news connections 🤯",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251019_020615.mp4",
+    "ts": "2025-10-19T02:06:18.218245"
   }
 ]
