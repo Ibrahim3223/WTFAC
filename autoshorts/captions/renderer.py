@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Caption rendering - PRODUCTION READY
-Perfect sync with Forced Alignment (aeneas)
+Excellent sync with Edge-TTS word-level timings
 """
 import os
 import pathlib
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class CaptionRenderer:
-    """Render captions with bulletproof forced alignment."""
+    """Render captions with TTS word-level precision."""
     
     # Caption parameters
     WORDS_PER_CHUNK = 3
@@ -24,20 +24,20 @@ class CaptionRenderer:
     TIMING_PRECISION = 0.001
     FADE_DURATION = 0.08
     
-    # Smart offset for TTS timings fallback (rare case)
+    # Smart offset for TTS timings fine-tuning
     CHUNK_OFFSET = -0.15
     
     def __init__(self, caption_offset: Optional[float] = None):
         """
-        Initialize caption renderer with forced alignment.
+        Initialize caption renderer.
         
         Args:
-            caption_offset: Custom timing offset (only for rare fallback cases)
+            caption_offset: Custom timing offset for fine-tuning (optional)
         """
         if caption_offset is not None:
             self.CHUNK_OFFSET = caption_offset
         
-        logger.info("      🎯 Caption renderer: Forced alignment enabled (bulletproof)")
+        logger.info("      🎯 Caption renderer: TTS word-level timing (EXCELLENT quality)")
     
     def render_captions(
         self,
