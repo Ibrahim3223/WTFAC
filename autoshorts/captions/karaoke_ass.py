@@ -30,7 +30,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000DDFF", # Light yellow
-        "margin_v": 320  # FIXED: Same position for all captions
+        "margin_v": 320  # FIXED: Consistent position
     },
     
     # Style 2: NEON CYAN - Electric energy
@@ -49,8 +49,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H00FFAA00", # Light cyan
-        "margin_v_normal": 320,
-        "margin_v_hook": 280
+        "margin_v": 320  # FIXED: Single margin_v
     },
     
     # Style 3: HOT PINK - Bold and attention-grabbing
@@ -69,8 +68,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H00FF69B4", # Light pink
-        "margin_v_normal": 320,
-        "margin_v_hook": 280
+        "margin_v": 320  # FIXED: Single margin_v
     },
     
     # Style 4: LIME GREEN - Fresh and vibrant
@@ -89,8 +87,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000DD00", # Light lime
-        "margin_v_normal": 330,
-        "margin_v_hook": 290
+        "margin_v": 330  # FIXED: Single margin_v
     },
     
     # Style 5: ORANGE FIRE - Warm and energetic
@@ -109,8 +106,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000BBFF", # Light orange
-        "margin_v_normal": 330,
-        "margin_v_hook": 290
+        "margin_v": 330  # FIXED: Single margin_v
     },
     
     # Style 6: PURPLE VIBES - Trendy and modern
@@ -129,8 +125,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H00FF00FF",  # Magenta
         "color_secondary": "&H00CC00FF", # Light purple
-        "margin_v_normal": 320,
-        "margin_v_hook": 280
+        "margin_v": 320  # FIXED: Single margin_v
     },
     
     # Style 7: TURQUOISE WAVE - Cool and calming
@@ -149,8 +144,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H00FFFF00",  # Cyan
         "color_secondary": "&H00FFDD00", # Light turquoise
-        "margin_v_normal": 320,
-        "margin_v_hook": 280
+        "margin_v": 320  # FIXED: Single margin_v
     },
     
     # Style 8: RED HOT - Intense and dramatic
@@ -169,8 +163,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H000033FF", # Light red
-        "margin_v_normal": 330,
-        "margin_v_hook": 290
+        "margin_v": 330  # FIXED: Single margin_v
     }
 }
 
