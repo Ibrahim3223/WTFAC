@@ -1,6 +1,6 @@
 """
 Orchestrator - Main pipeline coordinator - PRODUCTION READY
-Manages full flow: content → TTS → video (with perfect captions) → upload
+Manages full flow: content → TTS → video (with BULLETPROOF captions) → upload
 """
 
 import os
@@ -99,15 +99,14 @@ class ShortsOrchestrator:
         self.downloader = VideoDownloader()
         self.segment_maker = SegmentMaker()
         
-        # Initialize caption renderer with Whisper support
+        # Initialize caption renderer with FORCED ALIGNMENT (bulletproof)
         logger.info("Initializing caption renderer...")
         try:
-            use_whisper = getattr(settings, 'USE_WHISPER_CAPTIONS', True)
             caption_offset = getattr(settings, 'CAPTION_OFFSET', None)
             
+            # UPDATED: No use_whisper parameter - we always use forced alignment
             self.caption_renderer = CaptionRenderer(
-                caption_offset=caption_offset,
-                use_whisper=use_whisper
+                caption_offset=caption_offset
             )
             
         except Exception as e:
@@ -291,9 +290,9 @@ class ShortsOrchestrator:
                     
                     segment = {
                         "text": sentence,
-                        "audio_path": audio_file,  # For Whisper!
+                        "audio_path": audio_file,  # CRITICAL: For forced alignment!
                         "duration": duration,
-                        "word_timings": word_timings,  # Fallback
+                        "word_timings": word_timings,  # Fallback if forced alignment fails
                         "type": sentence_type
                     }
                     audio_segments.append(segment)
@@ -344,7 +343,7 @@ class ShortsOrchestrator:
         audio_segments: List[Dict[str, Any]],
         content: Dict[str, Any]
     ) -> Optional[str]:
-        """Produce final video with perfect captions."""
+        """Produce final video with BULLETPROOF forced-aligned captions."""
         try:
             # Step 1: Search videos
             logger.info("   🔍 Searching videos...")
@@ -420,7 +419,7 @@ class ShortsOrchestrator:
             
             logger.info(f"   ✅ Created {len(video_segments)} segments")
             
-            # Step 5: Add captions (with Whisper if available!)
+            # Step 5: Add captions (with FORCED ALIGNMENT - bulletproof!)
             logger.info("   📝 Adding captions...")
             
             captioned_segments = self.caption_renderer.render_captions(
