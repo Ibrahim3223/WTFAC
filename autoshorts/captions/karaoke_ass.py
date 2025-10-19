@@ -30,8 +30,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000DDFF", # Light yellow
-        "margin_v_normal": 330,
-        "margin_v_hook": 290
+        "margin_v": 320  # FIXED: Same position for all captions
     },
     
     # Style 2: NEON CYAN - Electric energy
