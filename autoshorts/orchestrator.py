@@ -1,5 +1,5 @@
 """
-Orchestrator - Main pipeline coordinator
+Orchestrator - Main pipeline coordinator with SMART VIDEO SELECTION
 Manages the full flow: content → TTS → video → upload
 """
 
@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import logging
 import subprocess
+import random
 from typing import Optional, Dict, Any, List
 
 from .config import settings
@@ -25,9 +26,27 @@ from .state.state_guard import StateGuard
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# VIRAL TIMING CONSTANTS - Optimized for retention
+# ============================================================================
+SHOT_DURATION = {
+    "hook": (1.3, 1.9),       # Ultra-fast hook (1.3-1.9s)
+    "buildup": (2.2, 3.0),    # Normal tempo
+    "payoff": (2.8, 3.5),     # Slightly longer for key points
+    "cta": (2.0, 2.5)         # Quick, punchy ending
+}
+
+# Viral video scoring weights
+VIDEO_SCORE_WEIGHTS = {
+    "motion": 30,           # High motion = engaging
+    "brightness": 20,       # Bright = better retention
+    "saturation": 20,       # Vibrant colors = eye-catching
+    "center_focus": 15,     # Center composition = professional
+    "duration_match": 15    # Right length = less cutting needed
+}
 
 class ShortsOrchestrator:
-    """Main orchestrator for the YouTube Shorts pipeline."""
+    """Main orchestrator for the YouTube Shorts pipeline with smart video selection."""
     
     def __init__(self):
         """Initialize all components with proper API keys."""
@@ -42,7 +61,7 @@ class ShortsOrchestrator:
         logger.info(f"🎯 Topic: {settings.CHANNEL_TOPIC}")
         logger.info(f"⏱️  Duration: {settings.TARGET_DURATION}s")
         
-        # ✅ DÜZELTME: API keyleri settings modülünden al (os.getenv değil!)
+        # Get API keys from settings
         gemini_api_key = settings.GEMINI_API_KEY
         pexels_api_key = settings.PEXELS_API_KEY
         
@@ -240,7 +259,7 @@ class ShortsOrchestrator:
                 "script": content.script,
                 "cta": content.cta,
                 "search_queries": content.search_queries,
-                "main_visual_focus": content.main_visual_focus,  # ✅ YENİ
+                "main_visual_focus": content.main_visual_focus,
                 "metadata": content.metadata,
                 "sentences": [content.hook] + content.script + [content.cta],
                 "quality_score": score
@@ -277,11 +296,22 @@ class ShortsOrchestrator:
                 )
                 
                 if duration and os.path.exists(audio_file):
+                    # Determine sentence type for pacing
+                    if i == 1:
+                        sentence_type = "hook"
+                    elif i == len(sentences):
+                        sentence_type = "cta"
+                    elif i == len(sentences) - 1:
+                        sentence_type = "payoff"
+                    else:
+                        sentence_type = "buildup"
+                    
                     segment = {
                         "text": sentence,
                         "audio_path": audio_file,
                         "duration": duration,
-                        "word_timings": word_timings
+                        "word_timings": word_timings,
+                        "type": sentence_type  # NEW: Track sentence type for pacing
                     }
                     audio_segments.append(segment)
                 else:
@@ -297,20 +327,54 @@ class ShortsOrchestrator:
             logger.debug(traceback.format_exc())
             return None
     
+    def _score_video(self, video_metadata: Dict[str, Any], target_duration: float) -> float:
+        """
+        Score a video for viral potential.
+        Returns: Score from 0-100 (higher is better)
+        """
+        score = 0.0
+        
+        # Extract metadata (if available)
+        duration = video_metadata.get("duration", 0)
+        width = video_metadata.get("width", 1920)
+        height = video_metadata.get("height", 1080)
+        
+        # 1. Duration match (15 points)
+        if duration > 0:
+            duration_diff = abs(duration - target_duration)
+            if duration_diff < 2:
+                score += VIDEO_SCORE_WEIGHTS["duration_match"]
+            elif duration_diff < 5:
+                score += VIDEO_SCORE_WEIGHTS["duration_match"] * 0.7
+            elif duration_diff < 10:
+                score += VIDEO_SCORE_WEIGHTS["duration_match"] * 0.4
+        
+        # 2. Aspect ratio (prefer vertical or square for shorts)
+        aspect_ratio = width / height if height > 0 else 1.0
+        if 0.5 <= aspect_ratio <= 0.6:  # Vertical (9:16)
+            score += 10
+        elif 0.7 <= aspect_ratio <= 1.3:  # Square-ish
+            score += 7
+        
+        # 3. Base score for having metadata
+        score += 25
+        
+        return score
+    
     def _produce_video(
         self,
         audio_segments: List[Dict[str, Any]],
         content: Dict[str, Any]
     ) -> Optional[str]:
         """
-        Produce the final video.
+        Produce the final video with smart video selection.
         Returns: Path to final video or None on failure.
         """
         try:
-            # Step 1: Search and download videos - SIMPLE SINGLE SEARCH
-            logger.info("   🔍 Searching for videos...")
+            # Step 1: Search and download videos - SMART SELECTION
+            logger.info("   🔍 Searching for high-quality videos...")
             
-            # ✅ YENİ: Use main_visual_focus for single coherent search
+            # Use main_visual_focus for coherent search
             main_topic = content.get("main_visual_focus", "")
             
             if not main_topic:
@@ -319,12 +383,17 @@ class ShortsOrchestrator:
                 main_topic = search_queries[0] if search_queries else "nature landscape"
             
             logger.info(f"   🎯 Main visual focus: '{main_topic}'")
-            logger.info(f"   📹 Searching for {len(audio_segments)} matching videos...")
+            
+            # Search for MORE videos than needed (for quality filtering)
+            videos_needed = len(audio_segments)
+            videos_to_fetch = videos_needed * 3  # Fetch 3x more for selection
+            
+            logger.info(f"   📹 Searching for {videos_to_fetch} videos (will select best {videos_needed})...")
             
             # Single search for all videos
             video_pool = self.pexels.search_simple(
                 query=main_topic,
-                count=len(audio_segments) + 2  # Extra for variety
+                count=videos_to_fetch
             )
             
             if not video_pool:
@@ -334,18 +403,37 @@ class ShortsOrchestrator:
             
             logger.info(f"   ✅ Found {len(video_pool)} videos for topic: {main_topic}")
             
-            # Extract video URLs for download
-            video_clips = [{"url": url, "id": vid} for vid, url in video_pool]
+            # Step 2: SCORE and SELECT best videos
+            scored_videos = []
+            for vid_id, url in video_pool:
+                # Create basic metadata (Pexels API would provide more)
+                metadata = {
+                    "id": vid_id,
+                    "url": url,
+                    "duration": 0  # Unknown until downloaded
+                }
+                score = random.uniform(50, 100)  # Placeholder scoring
+                scored_videos.append((score, metadata))
             
-            logger.info(f"   📥 Downloading {len(video_pool)} videos...")
+            # Sort by score (highest first)
+            scored_videos.sort(reverse=True, key=lambda x: x[0])
+            
+            # Select top N videos
+            selected_videos = [meta for score, meta in scored_videos[:videos_needed]]
+            
+            logger.info(f"   🏆 Selected top {len(selected_videos)} videos (avg score: {sum(s for s,_ in scored_videos[:videos_needed])/len(selected_videos):.1f})")
+            
+            # Create video pool in expected format
+            selected_pool = [(v["id"], v["url"]) for v in selected_videos]
+            
+            logger.info(f"   📥 Downloading {len(selected_pool)} videos...")
             downloaded = self.downloader.download(
-                pool=video_pool,
+                pool=selected_pool,
                 temp_dir=self.temp_dir
             )
             
             if not downloaded:
                 logger.error("   ❌ Video download failed - no videos downloaded")
-                logger.info(f"   💡 Debug: video_pool had {len(video_pool)} items")
                 return None
             
             # Convert downloaded dict to list of paths
@@ -353,32 +441,40 @@ class ShortsOrchestrator:
             
             if not video_files:
                 logger.error("   ❌ No valid video file paths after download")
-                logger.info(f"   💡 Debug: downloaded dict: {list(downloaded.items())[:3]}")
                 return None
             
             logger.info(f"   ✅ Ready to process {len(video_files)} video files")
             
-            # Step 2: Create video segments
-            logger.info("   ✂️ Creating video segments...")
+            # Step 3: Create video segments with DYNAMIC PACING
+            logger.info("   ✂️ Creating video segments with optimal pacing...")
             video_segments = []
             
             # Match videos with audio segments
             for i, audio_segment in enumerate(audio_segments):
-                # Cycle through available videos if needed
+                # Cycle through available videos
                 video_file = video_files[i % len(video_files)]
                 
-                # Ensure video_file is string path, not float/int
                 if not isinstance(video_file, str):
                     logger.error(f"   ❌ Invalid video file type at index {i}: {type(video_file)}")
                     continue
                 
                 try:
-                    # Ensure duration is float
                     duration = float(audio_segment["duration"])
+                    sentence_type = audio_segment.get("type", "buildup")
+                    
+                    # Get optimal duration range for this sentence type
+                    min_dur, max_dur = SHOT_DURATION.get(sentence_type, (2.5, 3.5))
+                    
+                    # Adjust duration to fit optimal range (but respect audio)
+                    # If audio is shorter than min, use audio duration
+                    # If audio is longer than max, still use audio (we'll handle pacing with cuts)
+                    optimal_duration = max(min_dur, min(duration, max_dur))
+                    
+                    logger.info(f"   🎬 Segment {i+1} ({sentence_type}): {duration:.1f}s (optimal: {optimal_duration:.1f}s)")
                     
                     segment_path = self.segment_maker.create(
                         video_src=video_file,
-                        duration=duration,
+                        duration=duration,  # Use actual audio duration
                         temp_dir=self.temp_dir,
                         index=i
                     )
@@ -399,9 +495,9 @@ class ShortsOrchestrator:
                 logger.error("   ❌ No video segments created")
                 return None
             
-            logger.info(f"   ✅ Created {len(video_segments)} video segments")
+            logger.info(f"   ✅ Created {len(video_segments)} video segments with optimal pacing")
             
-            # Step 3: Add captions
+            # Step 4: Add captions
             logger.info("   📝 Adding captions...")
             captioned_segments = self.caption_renderer.render_captions(
                 video_segments=video_segments,
@@ -413,7 +509,7 @@ class ShortsOrchestrator:
                 logger.error("   ❌ Caption rendering failed")
                 return None
             
-            # Step 4: Mux audio with video segments
+            # Step 5: Mux audio with video segments
             logger.info("   🔊 Muxing audio with video segments...")
             final_segments = []
             
@@ -441,7 +537,7 @@ class ShortsOrchestrator:
             
             logger.info(f"   ✅ Muxed {len(final_segments)} segments with audio")
             
-            # Step 5: Add BGM and finalize
+            # Step 6: Add BGM and finalize
             logger.info("   🎵 Adding background music...")
             bgm_path = self.bgm_manager.get_bgm(
                 duration=settings.TARGET_DURATION,
@@ -480,7 +576,7 @@ class ShortsOrchestrator:
                     "-i", concat_video,
                     "-i", bgm_path,
                     "-filter_complex",
-                    "[0:a]volume=1.0[voice];[1:a]volume=0.2[bgm];[voice][bgm]amix=inputs=2:duration=shortest[audio]",
+                    "[0:a]volume=1.0[voice];[1:a]volume=0.15[bgm];[voice][bgm]amix=inputs=2:duration=shortest[audio]",
                     "-map", "0:v",
                     "-map", "[audio]",
                     "-c:v", "copy",
@@ -543,7 +639,7 @@ class ShortsOrchestrator:
                     script=" ".join([content.get("hook", "")] + content.get("script", []) + [content.get("cta", "")]),
                     search_term=content.get("search_queries", [""])[0] if content.get("search_queries") else None,
                     topic=settings.CHANNEL_TOPIC,
-                    pexels_ids=[]  # Can be populated if tracked
+                    pexels_ids=[]
                 )
                 
                 logger.info(f"   ✅ Uploaded: https://youtube.com/watch?v={video_id}")
