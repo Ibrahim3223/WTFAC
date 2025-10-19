@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Caption rendering - PRODUCTION READY
-Perfect sync with Whisper (if available) or smart TTS timings
+Perfect sync with Forced Alignment (aeneas)
 """
 import os
 import pathlib
@@ -14,32 +14,9 @@ from autoshorts.captions.karaoke_ass import CAPTION_STYLES, get_random_style, EM
 
 logger = logging.getLogger(__name__)
 
-# Try to import Whisper (optional)
-WHISPER_AVAILABLE = False
-FASTER_WHISPER_AVAILABLE = False
-
-try:
-    from faster_whisper import WhisperModel
-    FASTER_WHISPER_AVAILABLE = True
-    logger.info("✅ faster-whisper available for perfect caption sync")
-except ImportError:
-    pass
-
-if not FASTER_WHISPER_AVAILABLE:
-    try:
-        import whisper
-        WHISPER_AVAILABLE = True
-        logger.info("✅ openai-whisper available for perfect caption sync")
-    except ImportError:
-        pass
-
-if not WHISPER_AVAILABLE and not FASTER_WHISPER_AVAILABLE:
-    logger.info("ℹ️ Whisper not installed - using TTS timings (still good quality!)")
-    logger.info("   💡 For perfect sync, install: pip install faster-whisper av")
-
 
 class CaptionRenderer:
-    """Render captions with optional Whisper-perfect sync."""
+    """Render captions with bulletproof forced alignment."""
     
     # Caption parameters
     WORDS_PER_CHUNK = 3
@@ -47,77 +24,20 @@ class CaptionRenderer:
     TIMING_PRECISION = 0.001
     FADE_DURATION = 0.08
     
-    # Smart offset for TTS timings (when Whisper not available)
+    # Smart offset for TTS timings fallback (rare case)
     CHUNK_OFFSET = -0.15
     
-    # Whisper settings
-    WHISPER_MODEL = "base"
-    
-    def __init__(self, caption_offset: Optional[float] = None, use_whisper: bool = True):
+    def __init__(self, caption_offset: Optional[float] = None):
         """
-        Initialize caption renderer.
+        Initialize caption renderer with forced alignment.
         
         Args:
-            caption_offset: Custom timing offset (only for TTS timings fallback)
-            use_whisper: Try to use Whisper if available (default: True)
+            caption_offset: Custom timing offset (only for rare fallback cases)
         """
-        self.use_whisper = use_whisper and (WHISPER_AVAILABLE or FASTER_WHISPER_AVAILABLE)
-        
         if caption_offset is not None:
             self.CHUNK_OFFSET = caption_offset
         
-        self.whisper_model = None
-        self.faster_whisper_model = None
-        
-        if self.use_whisper:
-            logger.info("      🎯 Caption renderer: Whisper enabled")
-            self._lazy_init_whisper()
-        else:
-            logger.info("      ⚙️ Caption renderer: Using TTS timings with smart offset")
-    
-    def _lazy_init_whisper(self):
-        """Lazy initialize Whisper model (only when first needed)."""
-        pass  # Will initialize on first use
-    
-    def _ensure_whisper_loaded(self) -> bool:
-        """Ensure Whisper model is loaded. Returns True if successful."""
-        if not self.use_whisper:
-            return False
-        
-        # Already loaded?
-        if self.faster_whisper_model or self.whisper_model:
-            return True
-        
-        # Try faster-whisper first
-        if FASTER_WHISPER_AVAILABLE and not self.faster_whisper_model:
-            try:
-                logger.info(f"      Loading faster-whisper model: {self.WHISPER_MODEL}...")
-                self.faster_whisper_model = WhisperModel(
-                    self.WHISPER_MODEL,
-                    device="cpu",
-                    compute_type="int8"
-                )
-                logger.info(f"      ✅ Loaded faster-whisper: {self.WHISPER_MODEL}")
-                return True
-            except Exception as e:
-                logger.warning(f"      ⚠️ Failed to load faster-whisper: {e}")
-                self.faster_whisper_model = None
-        
-        # Try openai-whisper
-        if WHISPER_AVAILABLE and not self.whisper_model:
-            try:
-                logger.info(f"      Loading whisper model: {self.WHISPER_MODEL}...")
-                self.whisper_model = whisper.load_model(self.WHISPER_MODEL)
-                logger.info(f"      ✅ Loaded whisper: {self.WHISPER_MODEL}")
-                return True
-            except Exception as e:
-                logger.warning(f"      ⚠️ Failed to load whisper: {e}")
-                self.whisper_model = None
-        
-        # Both failed
-        self.use_whisper = False
-        logger.warning("      ⚠️ Whisper unavailable - using TTS timings")
-        return False
+        logger.info("      🎯 Caption renderer: Forced alignment enabled (bulletproof)")
     
     def render_captions(
         self,
@@ -125,16 +45,15 @@ class CaptionRenderer:
         audio_segments: List[Dict[str, Any]],
         output_dir: str
     ) -> List[str]:
-        """Render captions on all video segments."""
-        captioned_segments = []
+        """Render captions on all video segments with forced alignment."""
+        from autoshorts.captions.forced_aligner import align_text_to_audio
         
-        # Check if we should use Whisper
-        use_whisper_for_batch = self.use_whisper and self._ensure_whisper_loaded()
+        captioned_segments = []
         
         for i, (video_path, audio_segment) in enumerate(zip(video_segments, audio_segments)):
             try:
                 text = audio_segment["text"]
-                words = audio_segment.get("word_timings", [])
+                tts_word_timings = audio_segment.get("word_timings", [])
                 duration = audio_segment.get("duration", 0)
                 audio_path = audio_segment.get("audio_path")
                 sentence_type = audio_segment.get("type", "buildup")
@@ -142,19 +61,18 @@ class CaptionRenderer:
                 
                 logger.info(f"      Rendering caption {i+1}/{len(video_segments)}: {text[:50]}...")
                 
-                # Try Whisper for perfect timings
-                if use_whisper_for_batch and audio_path and os.path.exists(audio_path):
-                    whisper_words = self._extract_whisper_timings(audio_path, text)
-                    
-                    if whisper_words:
-                        words = whisper_words
-                        logger.info(f"      ✅ Whisper: {len(words)} perfect timings")
-                    else:
-                        logger.debug(f"      ℹ️ Whisper failed, using TTS timings")
-                        words = self._ultra_precise_timing(words, duration) if words else self._smart_fallback_timings(text, duration)
+                # BULLETPROOF: Forced alignment with multiple fallbacks
+                if audio_path and os.path.exists(audio_path):
+                    words = align_text_to_audio(
+                        text=text,
+                        audio_path=audio_path,
+                        tts_word_timings=tts_word_timings,
+                        total_duration=duration
+                    )
+                    logger.info(f"      ✅ Aligned: {len(words)} words with perfect sync")
                 else:
-                    # Use TTS timings
-                    words = self._ultra_precise_timing(words, duration) if words else self._smart_fallback_timings(text, duration)
+                    # No audio file - use TTS timings or estimation
+                    words = self._ultra_precise_timing(tts_word_timings, duration) if tts_word_timings else self._smart_fallback_timings(text, duration)
                 
                 captioned_path = self.render(
                     video_path=video_path,
