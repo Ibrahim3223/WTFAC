@@ -35,7 +35,7 @@ if not FASTER_WHISPER_AVAILABLE:
 
 if not WHISPER_AVAILABLE and not FASTER_WHISPER_AVAILABLE:
     logger.info("ℹ️ Whisper not installed - using TTS timings (still good quality!)")
-    logger.info("   💡 For perfect sync, install: pip install faster-whisper")
+    logger.info("   💡 For perfect sync, install: pip install faster-whisper av")
 
 
 class CaptionRenderer:
@@ -169,17 +169,22 @@ class CaptionRenderer:
                 
                 if captioned_path and os.path.exists(captioned_path):
                     captioned_segments.append(captioned_path)
+                    logger.info(f"      ✅ Caption {i+1} rendered successfully")
                 else:
                     logger.error(f"      ❌ Caption rendering failed for segment {i+1}")
-                    return []
+                    # CRITICAL: Don't fail entire batch, use uncaptioned video
+                    logger.warning(f"      ⚠️ Using uncaptioned video for segment {i+1}")
+                    captioned_segments.append(video_path)
                     
             except Exception as e:
                 logger.error(f"      ❌ Error rendering caption {i+1}: {e}")
                 import traceback
                 logger.debug(traceback.format_exc())
-                return []
+                # CRITICAL: Don't fail entire batch
+                logger.warning(f"      ⚠️ Using uncaptioned video for segment {i+1}")
+                captioned_segments.append(video_path)
         
-        logger.info(f"      ✅ Rendered {len(captioned_segments)} captioned segments")
+        logger.info(f"      ✅ Rendered {len(captioned_segments)} segments (captioned or fallback)")
         return captioned_segments
     
     def render(
@@ -203,7 +208,19 @@ class CaptionRenderer:
             
             if settings.KARAOKE_CAPTIONS and has_subtitles():
                 ass_path = video_path.replace(".mp4", ".ass")
-                self._write_smooth_ass(words, duration, sentence_type, ass_path, use_offset)
+                
+                # CRITICAL: Safe ASS generation with try-catch
+                try:
+                    self._write_smooth_ass(words, duration, sentence_type, ass_path, use_offset)
+                except Exception as e:
+                    logger.error(f"      ❌ ASS generation failed: {e}")
+                    import traceback
+                    logger.debug(traceback.format_exc())
+                    return video_path  # Return uncaptioned video
+                
+                if not os.path.exists(ass_path):
+                    logger.error(f"      ❌ ASS file not created: {ass_path}")
+                    return video_path
                 
                 tmp_out = output.replace(".mp4", ".tmp.mp4")
                 
@@ -220,6 +237,10 @@ class CaptionRenderer:
                         tmp_out
                     ])
                     
+                    if not os.path.exists(tmp_out):
+                        logger.error(f"      ❌ FFmpeg subtitle burn failed")
+                        return video_path
+                    
                     run([
                         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                         "-i", tmp_out,
@@ -232,20 +253,24 @@ class CaptionRenderer:
                         output
                     ])
                     
+                    if not os.path.exists(output):
+                        logger.error(f"      ❌ FFmpeg final output failed")
+                        return video_path
+                    
                 finally:
                     pathlib.Path(ass_path).unlink(missing_ok=True)
                     pathlib.Path(tmp_out).unlink(missing_ok=True)
                 
                 return output
             else:
-                logger.warning(f"      Skipping captions for {video_path}")
+                logger.warning(f"      ⚠️ Skipping captions (karaoke disabled or no subtitle support)")
                 return video_path
                 
         except Exception as e:
             logger.error(f"      ❌ Error in render(): {e}")
             import traceback
             logger.debug(traceback.format_exc())
-            return video_path
+            return video_path  # Return uncaptioned video instead of failing
     
     # ========================================================================
     # WHISPER INTEGRATION
@@ -437,20 +462,27 @@ class CaptionRenderer:
     ):
         """Write ultra-smooth ASS with fade transitions and NO overlap."""
         if not words:
+            logger.warning("      ⚠️ No words to write to ASS")
             return
         
-        style = CAPTION_STYLES[get_random_style()]
+        try:
+            style = CAPTION_STYLES[get_random_style()]
+        except Exception as e:
+            logger.warning(f"      ⚠️ Failed to get random style: {e}, using classic_yellow")
+            style = CAPTION_STYLES["classic_yellow"]
         
         is_hook = (sentence_type == "hook")
-        fontname = style["fontname"]
-        fontsize = style["fontsize_hook"] if is_hook else style["fontsize_normal"]
-        outline = style["outline"]
-        shadow = style["shadow"]
-        margin_v = style["margin_v"]  # FIXED: Same position for all captions
+        fontname = style.get("fontname", "Arial Black")
+        fontsize = style.get("fontsize_hook" if is_hook else "fontsize_normal", 60)
+        outline = style.get("outline", 7)
+        shadow = style.get("shadow", "5")
         
-        primary_color = style["color_active"]
-        secondary_color = style["color_inactive"]
-        outline_color = style["color_outline"]
+        # CRITICAL FIX: Safe margin_v access with fallback
+        margin_v = style.get("margin_v", 320)
+        
+        primary_color = style.get("color_active", "&H0000FFFF")
+        secondary_color = style.get("color_inactive", "&H00FFFFFF")
+        outline_color = style.get("color_outline", "&H00000000")
         
         ass = f"""[Script Info]
 ScriptType: v4.00+
@@ -520,6 +552,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
+        
+        logger.debug(f"      ✅ ASS written: {output_path}")
     
     def _create_smooth_chunks(
         self, 
