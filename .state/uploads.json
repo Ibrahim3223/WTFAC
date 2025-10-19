@@ -1624,11 +1624,19 @@
     "ts": "2025-10-19T16:42:12.680230"
   },
   {
-    "channel": "Planet Snapshot",
-    "entity": "wondered",
-    "content_hash": "fc1b27afbb49122500fd5a0eaa74657b89f0d6ac",
-    "title": "Ever wondered why Japan's spring is world-famous 👀",
-    "video_path": "out/Planet Snapshot_Fast_Geography_Country_Curiosities_20251019_165153.mp4",
-    "ts": "2025-10-19T16:51:57.092346"
+    "channel": "Eco Habit Hacks",
+    "entity": "ground",
+    "content_hash": "c28cab2e3e687d06bbc9f9ab0d7ca19e132e5634",
+    "title": "Nobody knows coffee grounds can do THIS... until ⚡",
+    "video_path": "out/Eco Habit Hacks_One_Minute_Sustainable_Living_Tips_20251019_164827.mp4",
+    "ts": "2025-10-19T16:48:31.100993"
+  },
+  {
+    "channel": "Kitchen Logic Lab",
+    "entity": "told",
+    "content_hash": "72be152f7cb7fdc5182030cfe42013513bb5b266",
+    "title": "60 Things About Practical That'll Blow Your Mind ✨",
+    "video_path": "out/Kitchen Logic Lab_Practical_60s_Cooking_Food_Science_Tips_20251019_165621.mp4",
+    "ts": "2025-10-19T16:56:25.195836"
   }
 ]
