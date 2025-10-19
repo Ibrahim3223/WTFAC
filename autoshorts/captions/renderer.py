@@ -435,7 +435,7 @@ class CaptionRenderer:
         output_path: str,
         use_offset: bool = False
     ):
-        """Write ultra-smooth ASS with fade transitions."""
+        """Write ultra-smooth ASS with fade transitions and NO overlap."""
         if not words:
             return
         
@@ -446,7 +446,7 @@ class CaptionRenderer:
         fontsize = style["fontsize_hook"] if is_hook else style["fontsize_normal"]
         outline = style["outline"]
         shadow = style["shadow"]
-        margin_v = style["margin_v_hook"] if is_hook else style["margin_v_normal"]
+        margin_v = style["margin_v"]  # FIXED: Same position for all captions
         
         primary_color = style["color_active"]
         secondary_color = style["color_inactive"]
@@ -471,6 +471,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         chunks = self._create_smooth_chunks(words, max_words)
         
         cumulative = 0.0
+        prev_end = 0.0  # Track previous caption end time
         
         for i, chunk in enumerate(chunks):
             chunk_text = " ".join(w.upper() for w, _ in chunk)
@@ -482,6 +483,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:
                 start = cumulative
             
+            # CRITICAL: Ensure NO overlap - wait for previous to finish
+            if i > 0 and start < prev_end:
+                start = prev_end + 0.05  # 50ms gap minimum
+            
             end = start + chunk_duration
             
             if end > total_duration:
@@ -489,11 +494,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if start >= end:
                     break
             
-            fade_in = min(self.FADE_DURATION, chunk_duration * 0.2)
-            fade_out = min(self.FADE_DURATION, chunk_duration * 0.2)
+            # Reduce fade duration to prevent overlap
+            fade_in = min(self.FADE_DURATION, chunk_duration * 0.15)
+            fade_out = min(self.FADE_DURATION, chunk_duration * 0.15)
+            
+            # Shorten end by fade_out to prevent overlap
+            display_end = end - (fade_out * 0.5)
             
             start_str = self._ass_time_precise(start)
-            end_str = self._ass_time_precise(end)
+            end_str = self._ass_time_precise(display_end)
             
             has_emphasis = any(w.strip(".,!?;:").upper() in EMPHASIS_KEYWORDS 
                              for w, _ in chunk)
@@ -505,6 +514,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
+            # Update tracking
+            prev_end = display_end
             cumulative += chunk_duration
         
         with open(output_path, "w", encoding="utf-8") as f:
