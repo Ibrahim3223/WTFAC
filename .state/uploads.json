@@ -1408,27 +1408,27 @@
     "ts": "2025-10-18T17:14:10.083085"
   },
   {
-    "channel": "World Briefing",
-    "entity": "nobody",
-    "content_hash": "bda9c1d8f4b4e332d4d44abd0125dcc7afea31d6",
-    "title": "What if nobody truly understands global news connections 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251019_020615.mp4",
-    "ts": "2025-10-19T02:06:18.218245"
+    "channel": "Famous Quotes Explained",
+    "entity": "true",
+    "content_hash": "121dce6e87b35fa11f5b3892e040bcafd8588907",
+    "title": "What if true wisdom means admitting ignorance 😱",
+    "video_path": "out/Famous Quotes Explained_Wisdom_Behind_Famous_Quotes_20251019_020413.mp4",
+    "ts": "2025-10-19T02:04:15.902145"
   },
   {
-    "channel": "GalacticUpdate",
+    "channel": "Universe Jumper",
+    "entity": "him",
+    "content_hash": "b87073f698c9971973e01fa91c35df5c02e973be",
+    "title": "What if a brave knight appeared in a ⚡",
+    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251019_021402.mp4",
+    "ts": "2025-10-19T02:14:05.888489"
+  },
+  {
+    "channel": "BehindTheFame",
     "entity": "the",
-    "content_hash": "0215664d9ae84dbd7420e54a661b3279fcd725cc",
-    "title": "What if the International Space Station holds a ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251019_021241.mp4",
-    "ts": "2025-10-19T02:12:44.373824"
-  },
-  {
-    "channel": "NextGen Update",
-    "entity": "robot",
-    "content_hash": "b74ce45c1a188b899834a4b44804015e2cd2a188",
-    "title": "What if robots are already thinking like us ⚡",
-    "video_path": "out/NextGen Update_Latest_Technology_Breakthroughs_Innovations_20251019_021850.mp4",
-    "ts": "2025-10-19T02:18:53.021766"
+    "content_hash": "80386ef00805e54031e904275c64e8b8432d9783",
+    "title": "What if nobody truly sees the spotlight's hidden weight 🔥",
+    "video_path": "out/BehindTheFame_Celebrity_Success_Stories_Behind_the_Fame_Tales_20251019_022028.mp4",
+    "ts": "2025-10-19T02:20:31.583047"
   }
 ]
