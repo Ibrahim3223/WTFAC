@@ -5,7 +5,7 @@ Multiple caption styles with emphasis system and emoji injection
 """
 import os
 import random
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional, Any
 
 
 # ============================================================================
