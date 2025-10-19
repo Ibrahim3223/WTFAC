@@ -19,9 +19,14 @@ try:
     from aeneas.task import Task
     AENEAS_AVAILABLE = True
     logger.info("✅ aeneas available for perfect forced alignment")
-except ImportError:
-    logger.warning("⚠️ aeneas not available - will use fallback methods")
-    logger.info("   💡 For perfect sync, install: apt-get install espeak libespeak-dev && pip install aeneas")
+except ImportError as e:
+    logger.warning(f"⚠️ aeneas not available: {e}")
+    logger.info("   💡 For perfect sync, install:")
+    logger.info("   💡   sudo apt-get install espeak libespeak-dev python3-dev")
+    logger.info("   💡   pip install numpy Cython aeneas")
+except Exception as e:
+    logger.warning(f"⚠️ aeneas import error: {e}")
+    logger.info("   System will use fallback methods")
 
 
 class ForcedAligner:
