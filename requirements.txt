@@ -40,4 +40,17 @@ tqdm>=4.66.0
 # Optional: For better logging
 colorlog>=6.8.0
 
-pyyaml>=6.0
+# ============================================================
+# OPTIONAL: Perfect Caption Sync with Whisper
+# ============================================================
+# Uncomment ONE of these for perfect caption timing:
+# (System works fine without them, just uses TTS timings)
+
+# Option 1: faster-whisper (RECOMMENDED - much faster, same accuracy)
+# faster-whisper>=1.0.0
+
+# Option 2: openai-whisper (slower but works everywhere)
+# openai-whisper>=20231117
+
+# Note: If neither is installed, captions will use TTS word timings
+# with smart offset adjustments. Still good quality!
