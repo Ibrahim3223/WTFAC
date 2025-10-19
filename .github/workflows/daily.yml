@@ -38,11 +38,16 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
-      - name: Setup FFmpeg (system package - fast & reliable)
+      - name: Setup FFmpeg and aeneas dependencies
         run: |
+          echo "📦 Installing system dependencies for forced alignment..."
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg
-          ffmpeg -version
+          sudo apt-get install -y -qq ffmpeg espeak libespeak-dev python3-dev
+          echo "✅ FFmpeg version:"
+          ffmpeg -version | head -n1
+          echo "✅ eSpeak version:"
+          espeak --version
+          echo "🎯 System dependencies ready for bulletproof caption sync!"
 
       # ---------- PRE: .state'i 'state' branch'inden geri yükle (worktree-safe) ----------
       - name: Restore .state from 'state' branch (worktree-safe)
@@ -129,17 +134,15 @@ jobs:
           restore-keys: |
             chstate-${{ inputs.environment }}-
 
-      - name: Install deps
+      - name: Install Python dependencies
         run: |
+          echo "📦 Installing Python packages..."
           python -m pip install -U pip
           pip install -r requirements.txt
+          echo "✅ Python dependencies installed"
           
-          # CRITICAL: Force install faster-whisper for perfect caption sync
-          # This bypasses cache and ensures Whisper is always available
-          echo "🎯 Installing Whisper for perfect caption sync..."
-          pip install --force-reinstall --no-deps faster-whisper
-          pip install ctranslate2 huggingface-hub tokenizers onnxruntime
-          echo "✅ Whisper installed successfully"
+          # Verify aeneas installation
+          python -c "from aeneas.executetask import ExecuteTask; print('✅ aeneas ready for forced alignment!')" || echo "⚠️ aeneas not available - will use fallback"
 
       - name: Build video
         env:
@@ -154,16 +157,16 @@ jobs:
           TTS_SSML: "0"                     # SSML prosody for all topics
           TTS_RATE: "+12%"                  # Universal speech speed
 
-          # ===== CAPTIONS / KARAOKE (Perfect Sync with Whisper) =====
+          # ===== CAPTIONS / KARAOKE (Bulletproof Forced Alignment) =====
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER: "1"
-          KARAOKE_INACTIVE: "#FFD700"
-          KARAOKE_ACTIVE: "#3EA6FF"
-          KARAOKE_OUTLINE: "#000000"
-          KARAOKE_OFFSET_MS: "0"            # Perfect sync with Whisper
-          KARAOKE_SPEED: "1.0"              # No tempo adjustment
-          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust Whisper timing
+          KARAOKE_INACTIVE: "#FFD700"       # Gold (inactive words)
+          KARAOKE_ACTIVE: "#3EA6FF"         # Blue (active words)
+          KARAOKE_OUTLINE: "#000000"        # Black outline
+          KARAOKE_OFFSET_MS: "0"            # Forced alignment = perfect sync (no offset needed)
+          KARAOKE_SPEED: "1.0"              # No tempo adjustment needed
+          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust forced alignment timing
           KARAOKE_RAMP_PCT: "0.0"           # No progressive speed
           KARAOKE_EARLY_END_MS: "0"         # Full duration
           CAPTION_LEAD_MS: "0"              # No lead offset
