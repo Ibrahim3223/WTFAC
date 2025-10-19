@@ -45,7 +45,7 @@ class CaptionRenderer:
         audio_segments: List[Dict[str, Any]],
         output_dir: str
     ) -> List[str]:
-        """Render captions on all video segments with forced alignment."""
+        """Render captions on all video segments with TTS word-level timing."""
         from autoshorts.captions.forced_aligner import align_text_to_audio
         
         captioned_segments = []
@@ -61,7 +61,7 @@ class CaptionRenderer:
                 
                 logger.info(f"      Rendering caption {i+1}/{len(video_segments)}: {text[:50]}...")
                 
-                # BULLETPROOF: Forced alignment with multiple fallbacks
+                # Use TTS word timings with smart validation
                 if audio_path and os.path.exists(audio_path):
                     words = align_text_to_audio(
                         text=text,
@@ -69,7 +69,7 @@ class CaptionRenderer:
                         tts_word_timings=tts_word_timings,
                         total_duration=duration
                     )
-                    logger.info(f"      ✅ Aligned: {len(words)} words with perfect sync")
+                    logger.info(f"      ✅ Aligned: {len(words)} words with precise sync")
                 else:
                     # No audio file - use TTS timings or estimation
                     words = self._ultra_precise_timing(tts_word_timings, duration) if tts_word_timings else self._smart_fallback_timings(text, duration)
@@ -82,7 +82,7 @@ class CaptionRenderer:
                     is_hook=is_hook,
                     sentence_type=sentence_type,
                     temp_dir=output_dir,
-                    use_offset=(not use_whisper_for_batch)
+                    use_offset=False  # TTS timings are already precise
                 )
                 
                 if captioned_path and os.path.exists(captioned_path):
@@ -116,7 +116,7 @@ class CaptionRenderer:
         temp_dir: str = None,
         use_offset: bool = False
     ) -> str:
-        """Render captions with perfect sync."""
+        """Render captions with precise sync."""
         try:
             if duration <= 0:
                 duration = ffprobe_duration(video_path)
@@ -191,89 +191,7 @@ class CaptionRenderer:
             return video_path  # Return uncaptioned video instead of failing
     
     # ========================================================================
-    # WHISPER INTEGRATION
-    # ========================================================================
-    
-    def _extract_whisper_timings(
-        self, 
-        audio_path: str, 
-        expected_text: str
-    ) -> List[Tuple[str, float]]:
-        """Extract word-level timings from audio using Whisper."""
-        try:
-            if self.faster_whisper_model:
-                return self._extract_faster_whisper_timings(audio_path)
-            elif self.whisper_model:
-                return self._extract_openai_whisper_timings(audio_path)
-            else:
-                return []
-        except Exception as e:
-            logger.debug(f"      Whisper extraction failed: {e}")
-            return []
-    
-    def _extract_faster_whisper_timings(self, audio_path: str) -> List[Tuple[str, float]]:
-        """Extract timings using faster-whisper."""
-        segments, info = self.faster_whisper_model.transcribe(
-            audio_path,
-            word_timestamps=True,
-            language="en"
-        )
-        
-        word_timings = []
-        
-        for segment in segments:
-            if hasattr(segment, 'words') and segment.words:
-                for word in segment.words:
-                    word_text = word.word.strip()
-                    if not word_text:
-                        continue
-                    
-                    duration = word.end - word.start
-                    duration = max(self.MIN_WORD_DURATION, round(duration, 3))
-                    
-                    word_timings.append((word_text, duration))
-        
-        if word_timings:
-            total = sum(d for _, d in word_timings)
-            logger.debug(f"      📊 Whisper: {len(word_timings)} words, {total:.2f}s")
-            return word_timings
-        
-        return []
-    
-    def _extract_openai_whisper_timings(self, audio_path: str) -> List[Tuple[str, float]]:
-        """Extract timings using openai-whisper."""
-        result = self.whisper_model.transcribe(
-            audio_path,
-            word_timestamps=True,
-            language="en"
-        )
-        
-        word_timings = []
-        
-        if 'segments' in result:
-            for segment in result['segments']:
-                if 'words' in segment:
-                    for word_data in segment['words']:
-                        word_text = word_data.get('word', '').strip()
-                        if not word_text:
-                            continue
-                        
-                        start = word_data.get('start', 0)
-                        end = word_data.get('end', start)
-                        duration = end - start
-                        duration = max(self.MIN_WORD_DURATION, round(duration, 3))
-                        
-                        word_timings.append((word_text, duration))
-        
-        if word_timings:
-            total = sum(d for _, d in word_timings)
-            logger.debug(f"      📊 Whisper: {len(word_timings)} words, {total:.2f}s")
-            return word_timings
-        
-        return []
-    
-    # ========================================================================
-    # TIMING VALIDATION (fallback when Whisper not available)
+    # TIMING VALIDATION (only used as last-resort fallback)
     # ========================================================================
     
     def _ultra_precise_timing(
