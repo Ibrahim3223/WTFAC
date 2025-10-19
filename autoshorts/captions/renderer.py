@@ -24,6 +24,23 @@ class CaptionRenderer:
     TIMING_PRECISION = 0.001  # 1ms precision
     FADE_DURATION = 0.08      # 80ms smooth fade in/out
     
+    # PRE-EMPTIVE TIMING - Altyazıları öne çek (TTS delay'i kompanze et)
+    # NOT: Bu değerleri channels.yml'de "caption_offset" ile override edebilirsiniz
+    WORD_OFFSET = -0.12       # Her kelimeyi 120ms öne çek
+    CHUNK_OFFSET = -0.15      # Her chunk başlangıcını 150ms öne çek (daha agresif)
+    
+    def __init__(self, caption_offset: Optional[float] = None):
+        """
+        Initialize caption renderer.
+        
+        Args:
+            caption_offset: Custom timing offset (negative = earlier, positive = later)
+                          If provided, overrides CHUNK_OFFSET
+        """
+        if caption_offset is not None:
+            self.CHUNK_OFFSET = caption_offset
+            logger.info(f"      ⚙️ Custom caption offset: {caption_offset:.3f}s")
+    
     def render_captions(
         self,
         video_segments: List[str],
@@ -277,8 +294,8 @@ class CaptionRenderer:
         output_path: str
     ):
         """
-        Write ultra-smooth ASS with fade transitions.
-        Each word appears exactly when spoken, with smooth fade in/out.
+        Write ultra-smooth ASS with fade transitions and pre-emptive timing.
+        Each word appears BEFORE it's spoken (compensates for TTS delay).
         """
         if not words:
             return
@@ -326,8 +343,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             chunk_text = " ".join(w.upper() for w, _ in chunk)
             chunk_duration = sum(d for _, d in chunk)
             
-            start = cumulative
-            end = cumulative + chunk_duration
+            # Adaptive offset - hook için daha agresif
+            offset = self.CHUNK_OFFSET * 1.3 if is_hook else self.CHUNK_OFFSET
+            
+            # Apply pre-emptive offset - altyazı öne çekilir
+            start = max(0.0, cumulative + offset)
+            end = start + chunk_duration
+            
+            # Ensure we don't go past total duration
+            if end > total_duration:
+                end = total_duration
+                if start >= end:
+                    break
             
             # Add fade in/out for smoothness
             fade_in = min(self.FADE_DURATION, chunk_duration * 0.2)
@@ -343,22 +370,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             # Build smooth transition tags
             if has_emphasis:
-                # Emphasis: pop in effect
-                effect_tags = f"{{\\fad({int(fade_in*1000)},{int(fade_out*1000)})\\t(0,100,\\fscx110\\fscy110)\\t(100,200,\\fscx100\\fscy100)}}"
+                # Emphasis: pop in effect with extra punch
+                effect_tags = f"{{\\fad({int(fade_in*1000)},{int(fade_out*1000)})\\t(0,120,\\fscx115\\fscy115)\\t(120,240,\\fscx100\\fscy100)}}"
             else:
-                # Normal: smooth fade
+                # Normal: smooth fade only
                 effect_tags = f"{{\\fad({int(fade_in*1000)},{int(fade_out*1000)})}}"
             
             # Write precise Dialogue event
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
-            cumulative = end
+            # Update cumulative with ORIGINAL timing (not offset)
+            cumulative += chunk_duration
+            
+            # Debug log for first few chunks
+            if i < 2:
+                logger.debug(f"      Chunk {i+1}: '{chunk_text[:30]}...' @ {start:.3f}s (offset: {offset:.3f}s)")
         
         # Write to file
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
         
-        logger.debug(f"      ✨ ASS: {len(chunks)} smooth chunks, {cumulative:.3f}s total")
+        final_time = start + chunk_duration if chunks else 0.0
+        logger.debug(f"      ✨ ASS: {len(chunks)} chunks, offset: {self.CHUNK_OFFSET:.3f}s, total: {final_time:.3f}s")
     
     def _create_smooth_chunks(
         self, 
