@@ -12,70 +12,74 @@ from typing import List, Tuple, Dict, Optional, Any
 # VIRAL CAPTION STYLES - Based on TikTok/CapCut trending formats
 # ============================================================================
 
+# ============================================================================
+# CAPCUT-STYLE CAPTION STYLES - Clean, modern, NO effects
+# ============================================================================
+
 CAPTION_STYLES = {
-    # Style 1: VIRAL BOLD - Most popular on TikTok (40% of viral shorts)
-    "viral_bold": {
-        "name": "Viral Bold",
-        "fontname": "Montserrat Black",
-        "fontsize_normal": 52,
-        "fontsize_hook": 58,
-        "fontsize_emphasis": 62,  # Bigger for power words
-        "outline": 4,
-        "shadow": "3",
-        "glow": True,
-        "bounce": True,
+    # Style 1: CAPCUT CLASSIC - Yellow/White, thick outline
+    "capcut_classic": {
+        "name": "CapCut Classic",
+        "fontname": "Arial Black",
+        "fontsize_normal": 58,
+        "fontsize_hook": 64,
+        "fontsize_emphasis": 58,  # No size change
+        "outline": 6,  # Thick outline
+        "shadow": "4",
+        "glow": False,
+        "bounce": False,  # NO bounce
         "color_inactive": "&H00FFFFFF",  # White
         "color_active": "&H0000FFFF",    # Yellow
         "color_outline": "&H00000000",   # Black
-        "color_emphasis": "&H000099FF",  # Orange for power words
-        "margin_v_normal": 330,
-        "margin_v_hook": 270
-    },
-    
-    # Style 2: CLEAN IMPACT - Professional but engaging (30% of viral shorts)
-    "clean_impact": {
-        "name": "Clean Impact",
-        "fontname": "Arial Black",
-        "fontsize_normal": 50,
-        "fontsize_hook": 56,
-        "fontsize_emphasis": 60,
-        "outline": 3,
-        "shadow": "2",
-        "glow": False,
-        "bounce": True,
-        "color_inactive": "&H00AAAAAA",  # Light gray
-        "color_active": "&H00FFFFFF",    # White
-        "color_outline": "&H00000000",   # Black
-        "color_emphasis": "&H0000FFFF",  # Yellow for power words
+        "color_emphasis": "&H0000FFFF",  # Same as active
         "margin_v_normal": 320,
-        "margin_v_hook": 260
+        "margin_v_hook": 280
     },
     
-    # Style 3: NEON POP - High energy, gaming style (20% of viral shorts)
-    "neon_pop": {
-        "name": "Neon Pop",
+    # Style 2: CAPCUT NEON - Bright magenta/cyan
+    "capcut_neon": {
+        "name": "CapCut Neon",
         "fontname": "Impact",
-        "fontsize_normal": 54,
-        "fontsize_hook": 60,
-        "fontsize_emphasis": 64,
-        "outline": 5,
-        "shadow": "4",
-        "glow": True,
-        "bounce": True,
+        "fontsize_normal": 60,
+        "fontsize_hook": 66,
+        "fontsize_emphasis": 60,
+        "outline": 7,
+        "shadow": "5",
+        "glow": False,
+        "bounce": False,
         "color_inactive": "&H00FFFFFF",  # White
         "color_active": "&H00FF00FF",    # Magenta
         "color_outline": "&H00000000",   # Black
-        "color_emphasis": "&H0000FFFF",  # Cyan for power words
-        "margin_v_normal": 340,
-        "margin_v_hook": 280
+        "color_emphasis": "&H00FF00FF",
+        "margin_v_normal": 330,
+        "margin_v_hook": 290
+    },
+    
+    # Style 3: CAPCUT CLEAN - Pure white, minimal
+    "capcut_clean": {
+        "name": "CapCut Clean",
+        "fontname": "Montserrat Black",
+        "fontsize_normal": 56,
+        "fontsize_hook": 62,
+        "fontsize_emphasis": 56,
+        "outline": 5,
+        "shadow": "3",
+        "glow": False,
+        "bounce": False,
+        "color_inactive": "&H00FFFFFF",  # White
+        "color_active": "&H00FFFFFF",    # White (no change)
+        "color_outline": "&H00000000",   # Black
+        "color_emphasis": "&H00FFFFFF",
+        "margin_v_normal": 310,
+        "margin_v_hook": 270
     }
 }
 
 # Weight distribution for A/B testing
 STYLE_WEIGHTS = {
-    "viral_bold": 0.50,      # 50% - Most popular
-    "clean_impact": 0.35,    # 35% - Professional
-    "neon_pop": 0.15        # 15% - High energy
+    "capcut_classic": 0.50,  # Most popular
+    "capcut_neon": 0.30,     # High energy
+    "capcut_clean": 0.20     # Minimal
 }
 
 # ============================================================================
