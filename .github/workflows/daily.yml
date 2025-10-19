@@ -38,10 +38,11 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
-      - name: Setup FFmpeg (fast + cached)
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        with:
-          ffmpeg-version: release
+      - name: Setup FFmpeg (system package - fast & reliable)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version
 
       # ---------- PRE: .state'i 'state' branch'inden geri yükle (worktree-safe) ----------
       - name: Restore .state from 'state' branch (worktree-safe)
