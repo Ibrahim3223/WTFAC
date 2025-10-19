@@ -99,12 +99,11 @@ class ShortsOrchestrator:
         self.downloader = VideoDownloader()
         self.segment_maker = SegmentMaker()
         
-        # Initialize caption renderer with FORCED ALIGNMENT (bulletproof)
+        # Initialize caption renderer with TTS word-level timing (excellent quality)
         logger.info("Initializing caption renderer...")
         try:
             caption_offset = getattr(settings, 'CAPTION_OFFSET', None)
             
-            # UPDATED: No use_whisper parameter - we always use forced alignment
             self.caption_renderer = CaptionRenderer(
                 caption_offset=caption_offset
             )
@@ -419,7 +418,7 @@ class ShortsOrchestrator:
             
             logger.info(f"   ✅ Created {len(video_segments)} segments")
             
-            # Step 5: Add captions (with FORCED ALIGNMENT - bulletproof!)
+            # Step 5: Add captions (with TTS word-level timing - excellent quality!)
             logger.info("   📝 Adding captions...")
             
             captioned_segments = self.caption_renderer.render_captions(
