@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Edge-TTS handler with word timing support.
+Edge-TTS handler with word timing support - ATEMPO-AWARE
+CRITICAL FIX: Word timings must be scaled by atempo factor!
 """
 import re
 import asyncio
@@ -47,20 +48,25 @@ class TTSHandler:
             
         Returns:
             Tuple of (duration_seconds, word_durations)
-            word_durations is list of (word, duration_seconds)
+            word_durations is list of (word, duration_seconds) AFTER atempo
         """
         text = (text or "").strip()
         if not text:
             self._generate_silence(wav_out, 1.0)
             return 1.0, []
         
+        # CRITICAL: Get atempo factor FIRST
+        atempo = self._rate_to_atempo(self.rate)
+        
         # Try Edge-TTS with word boundaries
         try:
             marks = self._edge_stream_tts(text, wav_out)
-            duration = self._apply_atempo(wav_out)
-            words = self._merge_marks_to_words(text, marks, duration)
+            duration = self._apply_atempo(wav_out, atempo)
             
-            print(f"   TTS: {len(words)} words | {duration:.2f}s")
+            # CRITICAL: Pass atempo to word merger
+            words = self._merge_marks_to_words(text, marks, duration, atempo)
+            
+            print(f"   TTS: {len(words)} words | {duration:.2f}s (atempo={atempo:.2f})")
             return duration, words
             
         except Exception as e:
@@ -69,7 +75,7 @@ class TTSHandler:
         # Fallback: Edge-TTS without marks
         try:
             self._edge_simple(text, wav_out)
-            duration = self._apply_atempo(wav_out)
+            duration = self._apply_atempo(wav_out, atempo)
             words = self._equal_split_words(text, duration)
             
             print(f"   TTS (no marks): {len(words)} words | {duration:.2f}s")
@@ -81,7 +87,7 @@ class TTSHandler:
         # Last resort: Google TTS
         try:
             self._google_tts(text, wav_out)
-            duration = self._apply_atempo(wav_out)
+            duration = self._apply_atempo(wav_out, atempo)
             words = self._equal_split_words(text, duration)
             
             print(f"   TTS (Google fallback): {len(words)} words | {duration:.2f}s")
@@ -150,19 +156,16 @@ class TTSHandler:
         with open(mp3_path, "wb") as f:
             f.write(r.content)
     
-    def _apply_atempo(self, wav_out: str) -> float:
+    def _apply_atempo(self, wav_out: str, atempo: float) -> float:
         """Convert MP3 to WAV with tempo adjustment."""
         mp3_path = wav_out.replace(".wav", ".mp3")
-        
-        # Parse atempo from rate
-        atempo = self._rate_to_atempo(self.rate)
         
         # Convert with atempo
         run([
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
             "-i", mp3_path,
             "-ar", "48000", "-ac", "1", "-acodec", "pcm_s16le",
-            "-af", f"dynaudnorm=g=7:f=250,atempo={atempo}",
+            "-af", f"dynaudnorm=g=7:f=250,atempo={atempo:.3f}",
             wav_out
         ])
         
@@ -200,9 +203,24 @@ class TTSHandler:
         self, 
         text: str, 
         marks: List[Dict[str, Any]], 
-        total: float
+        total_duration: float,
+        atempo: float = 1.0
     ) -> List[Tuple[str, float]]:
-        """Merge Edge-TTS word boundaries into word durations."""
+        """
+        Merge Edge-TTS word boundaries into word durations.
+        
+        CRITICAL: Marks are in ORIGINAL time (before atempo).
+        We must scale them to match actual audio duration!
+        
+        Args:
+            text: Original text
+            marks: Word boundary marks from Edge-TTS (ORIGINAL time)
+            total_duration: Actual audio duration AFTER atempo
+            atempo: Speed multiplier that was applied
+            
+        Returns:
+            List of (word, duration) tuples in ACTUAL time
+        """
         words = [w for w in re.split(r"\s+", text.strip()) if w]
         
         if not words:
@@ -214,37 +232,63 @@ class TTSHandler:
         if marks and len(marks) >= len(words) * 0.7:
             N = min(len(words), len(marks))
             
-            # Raw durations from marks
-            raw_durs = [max(0.05, float(marks[i]["t1"] - marks[i]["t0"])) for i in range(N)]
+            # STEP 1: Extract raw durations from marks (ORIGINAL time)
+            raw_durs = []
+            for i in range(N):
+                t0 = float(marks[i]["t0"])
+                t1 = float(marks[i]["t1"])
+                dur = max(0.05, t1 - t0)
+                raw_durs.append(dur)
+            
+            # STEP 2: Calculate total time in ORIGINAL marks
             sum_raw = sum(raw_durs)
             
-            # Scale to match actual duration
-            scale = (total / sum_raw) if sum_raw > 0 else 1.0
+            # STEP 3: CRITICAL - Apply atempo scaling
+            # If atempo=1.12, audio is 1.12x faster, so timings are 1/1.12 shorter
+            scaled_durs = [dur / atempo for dur in raw_durs]
+            sum_scaled = sum(scaled_durs)
+            
+            # STEP 4: Final adjustment to match exact duration
+            # (In case of small rounding errors)
+            if sum_scaled > 0:
+                correction_factor = total_duration / sum_scaled
+            else:
+                correction_factor = 1.0
             
             for i in range(N):
-                scaled_dur = max(0.08, raw_durs[i] * scale)
-                out.append((words[i], scaled_dur))
+                final_dur = max(0.05, scaled_durs[i] * correction_factor)
+                out.append((words[i], final_dur))
             
-            # Handle remaining words
+            # Handle remaining words if any
             if len(words) > N:
                 used_time = sum(d for _, d in out)
-                remain = max(0.0, total - used_time)
+                remain = max(0.0, total_duration - used_time)
                 each = remain / (len(words) - N) if (len(words) - N) > 0 else 0.1
                 
                 for i in range(N, len(words)):
-                    out.append((words[i], max(0.08, each)))
+                    out.append((words[i], max(0.05, each)))
             
-            # Final adjustment to match total exactly
+            # STEP 5: Final precision adjustment
             current_total = sum(d for _, d in out)
-            if abs(current_total - total) > 0.05:
-                diff = total - current_total
+            if abs(current_total - total_duration) > 0.01:
+                diff = total_duration - current_total
                 if out:
                     last_word, last_dur = out[-1]
-                    out[-1] = (last_word, max(0.08, last_dur + diff))
+                    out[-1] = (last_word, max(0.05, last_dur + diff))
+            
+            # Debug log
+            import logging
+            logger = logging.getLogger(__name__)
+            final_total = sum(d for _, d in out)
+            logger.debug(
+                f"      Word timing: raw={sum_raw:.2f}s → "
+                f"scaled={sum_scaled:.2f}s (atempo={atempo:.2f}) → "
+                f"final={final_total:.2f}s (target={total_duration:.2f}s)"
+            )
         
         else:
             # Fallback: equal split
-            out = self._equal_split_words(text, total)
+            out = self._equal_split_words(text, total_duration)
         
         return out
     
@@ -255,7 +299,7 @@ class TTSHandler:
         if not words:
             return []
         
-        each = max(0.08, duration / len(words))
+        each = max(0.05, duration / len(words))
         out = [(w, each) for w in words]
         
         # Adjust last word to match total exactly
@@ -264,7 +308,7 @@ class TTSHandler:
             diff = duration - current_sum
             if abs(diff) > 0.01:
                 last_word, last_dur = out[-1]
-                out[-1] = (last_word, max(0.08, last_dur + diff))
+                out[-1] = (last_word, max(0.05, last_dur + diff))
         
         return out
     
