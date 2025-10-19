@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Karaoke ASS subtitle builder - VIRAL OPTIMIZED
-Multiple caption styles with emphasis system and emoji injection
+Karaoke ASS subtitle builder - VIBRANT EDITION
+Ultra-modern caption styles with gradient effects and smooth animations
 """
 import os
 import random
@@ -9,77 +9,181 @@ from typing import List, Tuple, Dict, Optional, Any
 
 
 # ============================================================================
-# VIRAL CAPTION STYLES - Based on TikTok/CapCut trending formats
-# ============================================================================
-
-# ============================================================================
-# CAPCUT-STYLE CAPTION STYLES - Clean, modern, NO effects
+# VIBRANT CAPTION STYLES - Modern, colorful, eye-catching
 # ============================================================================
 
 CAPTION_STYLES = {
-    # Style 1: CAPCUT CLASSIC - Yellow/White, thick outline
-    "capcut_classic": {
-        "name": "CapCut Classic",
+    # Style 1: NEON GRADIENT - Electric blue to cyan
+    "neon_gradient": {
+        "name": "Neon Gradient",
         "fontname": "Arial Black",
         "fontsize_normal": 58,
-        "fontsize_hook": 64,
-        "fontsize_emphasis": 58,  # No size change
-        "outline": 6,  # Thick outline
+        "fontsize_hook": 66,
+        "fontsize_emphasis": 64,
+        "outline": 6,
         "shadow": "4",
-        "glow": False,
-        "bounce": False,  # NO bounce
+        "glow": True,
+        "bounce": True,
         "color_inactive": "&H00FFFFFF",  # White
-        "color_active": "&H0000FFFF",    # Yellow
+        "color_active": "&H00FFFF00",    # Cyan (BGR format)
         "color_outline": "&H00000000",   # Black
-        "color_emphasis": "&H0000FFFF",  # Same as active
+        "color_emphasis": "&H0000FFFF",  # Yellow
+        "color_secondary": "&H00FF8800", # Light blue for gradient
         "margin_v_normal": 320,
         "margin_v_hook": 280
     },
     
-    # Style 2: CAPCUT NEON - Bright magenta/cyan
-    "capcut_neon": {
-        "name": "CapCut Neon",
+    # Style 2: FIRE GRADIENT - Orange to yellow
+    "fire_gradient": {
+        "name": "Fire Gradient",
         "fontname": "Impact",
         "fontsize_normal": 60,
-        "fontsize_hook": 66,
-        "fontsize_emphasis": 60,
+        "fontsize_hook": 68,
+        "fontsize_emphasis": 66,
         "outline": 7,
         "shadow": "5",
-        "glow": False,
-        "bounce": False,
+        "glow": True,
+        "bounce": True,
         "color_inactive": "&H00FFFFFF",  # White
-        "color_active": "&H00FF00FF",    # Magenta
+        "color_active": "&H0000A5FF",    # Orange (BGR)
         "color_outline": "&H00000000",   # Black
-        "color_emphasis": "&H00FF00FF",
+        "color_emphasis": "&H0000FFFF",  # Yellow
+        "color_secondary": "&H0000D4FF", # Light orange
         "margin_v_normal": 330,
         "margin_v_hook": 290
     },
     
-    # Style 3: CAPCUT CLEAN - Pure white, minimal
-    "capcut_clean": {
-        "name": "CapCut Clean",
+    # Style 3: PURPLE VIBES - Deep purple to magenta
+    "purple_vibes": {
+        "name": "Purple Vibes",
         "fontname": "Montserrat Black",
-        "fontsize_normal": 56,
-        "fontsize_hook": 62,
-        "fontsize_emphasis": 56,
-        "outline": 5,
-        "shadow": "3",
-        "glow": False,
-        "bounce": False,
+        "fontsize_normal": 58,
+        "fontsize_hook": 66,
+        "fontsize_emphasis": 64,
+        "outline": 6,
+        "shadow": "4",
+        "glow": True,
+        "bounce": True,
         "color_inactive": "&H00FFFFFF",  # White
-        "color_active": "&H00FFFFFF",    # White (no change)
+        "color_active": "&H00FF00FF",    # Magenta (BGR)
         "color_outline": "&H00000000",   # Black
-        "color_emphasis": "&H00FFFFFF",
-        "margin_v_normal": 310,
-        "margin_v_hook": 270
+        "color_emphasis": "&H00FF00FF",  # Magenta
+        "color_secondary": "&H00CC00FF", # Light purple
+        "margin_v_normal": 320,
+        "margin_v_hook": 280
+    },
+    
+    # Style 4: LIME PUNCH - Bright lime green
+    "lime_punch": {
+        "name": "Lime Punch",
+        "fontname": "Arial Black",
+        "fontsize_normal": 60,
+        "fontsize_hook": 68,
+        "fontsize_emphasis": 66,
+        "outline": 7,
+        "shadow": "5",
+        "glow": True,
+        "bounce": True,
+        "color_inactive": "&H00FFFFFF",  # White
+        "color_active": "&H0000FF00",    # Lime green (BGR)
+        "color_outline": "&H00000000",   # Black
+        "color_emphasis": "&H0000FFFF",  # Yellow
+        "color_secondary": "&H0000DD00", # Light lime
+        "margin_v_normal": 330,
+        "margin_v_hook": 290
+    },
+    
+    # Style 5: HOT PINK - Vibrant hot pink
+    "hot_pink": {
+        "name": "Hot Pink",
+        "fontname": "Impact",
+        "fontsize_normal": 58,
+        "fontsize_hook": 66,
+        "fontsize_emphasis": 64,
+        "outline": 6,
+        "shadow": "4",
+        "glow": True,
+        "bounce": True,
+        "color_inactive": "&H00FFFFFF",  # White
+        "color_active": "&H00FF1493",    # Hot pink (BGR)
+        "color_outline": "&H00000000",   # Black
+        "color_emphasis": "&H0000FFFF",  # Yellow
+        "color_secondary": "&H00FF69B4", # Light pink
+        "margin_v_normal": 320,
+        "margin_v_hook": 280
+    },
+    
+    # Style 6: CLASSIC YELLOW - Traditional but vibrant
+    "classic_yellow": {
+        "name": "Classic Yellow",
+        "fontname": "Arial Black",
+        "fontsize_normal": 60,
+        "fontsize_hook": 68,
+        "fontsize_emphasis": 66,
+        "outline": 7,
+        "shadow": "5",
+        "glow": True,
+        "bounce": True,
+        "color_inactive": "&H00FFFFFF",  # White
+        "color_active": "&H0000FFFF",    # Yellow (BGR)
+        "color_outline": "&H00000000",   # Black
+        "color_emphasis": "&H0000FFFF",  # Yellow
+        "color_secondary": "&H0000DDFF", # Light yellow
+        "margin_v_normal": 330,
+        "margin_v_hook": 290
+    },
+    
+    # Style 7: OCEAN WAVE - Turquoise to cyan
+    "ocean_wave": {
+        "name": "Ocean Wave",
+        "fontname": "Montserrat Black",
+        "fontsize_normal": 58,
+        "fontsize_hook": 66,
+        "fontsize_emphasis": 64,
+        "outline": 6,
+        "shadow": "4",
+        "glow": True,
+        "bounce": True,
+        "color_inactive": "&H00FFFFFF",  # White
+        "color_active": "&H00FFCC00",    # Turquoise (BGR)
+        "color_outline": "&H00000000",   # Black
+        "color_emphasis": "&H00FFFF00",  # Cyan
+        "color_secondary": "&H00FFDD00", # Light turquoise
+        "margin_v_normal": 320,
+        "margin_v_hook": 280
+    },
+    
+    # Style 8: SUNSET GLOW - Red-orange gradient
+    "sunset_glow": {
+        "name": "Sunset Glow",
+        "fontname": "Impact",
+        "fontsize_normal": 60,
+        "fontsize_hook": 68,
+        "fontsize_emphasis": 66,
+        "outline": 7,
+        "shadow": "5",
+        "glow": True,
+        "bounce": True,
+        "color_inactive": "&H00FFFFFF",  # White
+        "color_active": "&H000045FF",    # Red-orange (BGR)
+        "color_outline": "&H00000000",   # Black
+        "color_emphasis": "&H0000A5FF",  # Orange
+        "color_secondary": "&H000070FF", # Light red-orange
+        "margin_v_normal": 330,
+        "margin_v_hook": 290
     }
 }
 
-# Weight distribution for A/B testing
+# Dynamic weight distribution - favor vibrant styles
 STYLE_WEIGHTS = {
-    "capcut_classic": 0.50,  # Most popular
-    "capcut_neon": 0.30,     # High energy
-    "capcut_clean": 0.20     # Minimal
+    "neon_gradient": 0.15,   # Electric energy
+    "fire_gradient": 0.15,   # High energy
+    "purple_vibes": 0.12,    # Trendy
+    "lime_punch": 0.10,      # Attention-grabbing
+    "hot_pink": 0.10,        # Bold
+    "classic_yellow": 0.20,  # Most popular/safe
+    "ocean_wave": 0.10,      # Calm but vibrant
+    "sunset_glow": 0.08      # Dramatic
 }
 
 # ============================================================================
@@ -87,64 +191,108 @@ STYLE_WEIGHTS = {
 # ============================================================================
 
 EMPHASIS_KEYWORDS = {
-    "NEVER", "ALWAYS", "SECRET", "HIDDEN", "SHOCKING", "INSANE",
-    "BANNED", "ILLEGAL", "IMPOSSIBLE", "CRAZY", "VIRAL", "BREAKING",
-    "URGENT", "WARNING", "STOP", "WAIT", "INSTANTLY", "FOREVER",
-    "ONLY", "FIRST", "LAST", "BEST", "WORST", "NOBODY", "EVERYONE"
+    # Extreme emotions
+    "NEVER", "ALWAYS", "IMPOSSIBLE", "INSANE", "CRAZY", "SHOCKING",
+    "UNBELIEVABLE", "INCREDIBLE", "AMAZING", "STUNNING", "MIND-BLOWING",
+    
+    # Urgency
+    "NOW", "IMMEDIATELY", "INSTANTLY", "URGENT", "BREAKING", "ALERT",
+    "STOP", "WAIT", "ATTENTION", "WARNING", "DANGER",
+    
+    # Exclusivity
+    "SECRET", "HIDDEN", "BANNED", "ILLEGAL", "FORBIDDEN", "RARE",
+    "EXCLUSIVE", "LIMITED", "FIRST", "LAST", "ONLY", "UNIQUE",
+    
+    # Superlatives
+    "BEST", "WORST", "BIGGEST", "SMALLEST", "FASTEST", "SLOWEST",
+    "MOST", "LEAST", "ULTIMATE", "SUPREME", "MAXIMUM",
+    
+    # Social proof
+    "VIRAL", "TRENDING", "POPULAR", "FAMOUS", "EVERYONE", "NOBODY",
+    "MILLIONS", "THOUSANDS", "BILLION"
 }
 
 # ============================================================================
-# EMOJI INJECTION - Context-aware emoji placement
+# EMOJI INJECTION - Enhanced context-aware emoji placement
 # ============================================================================
 
 EMOJI_MAP = {
-    # Emotion/Reaction
+    # Extreme emotions
     "shocking": "🤯", "insane": "🤯", "crazy": "🤯", "mind": "🤯",
-    "fire": "🔥", "hot": "🔥", "amazing": "🔥", "incredible": "🔥",
-    "warning": "⚠️", "danger": "⚠️", "careful": "⚠️", "watch": "👀",
-    "secret": "🤫", "hidden": "🤫", "never": "🚫", "banned": "🚫",
+    "unbelievable": "😱", "incredible": "😱", "amazing": "😲", "wow": "😮",
+    
+    # Fire/Energy
+    "fire": "🔥", "hot": "🔥", "lit": "🔥", "energy": "⚡",
+    "explosive": "💥", "boom": "💥", "power": "💪",
+    
+    # Warnings
+    "warning": "⚠️", "danger": "⚠️", "careful": "⚠️", "stop": "🛑",
+    "alert": "🚨", "urgent": "🚨", "breaking": "📢",
+    
+    # Secrets/Mystery
+    "secret": "🤫", "hidden": "🤫", "mystery": "🔍", "discover": "🔍",
+    "forbidden": "🚫", "banned": "🚫", "illegal": "🚫",
     
     # Money/Success
     "money": "💰", "rich": "💰", "expensive": "💰", "cost": "💰",
-    "profit": "💸", "success": "✨", "win": "🏆", "best": "🏆",
+    "profit": "💸", "cash": "💵", "dollar": "💵",
+    "success": "✨", "win": "🏆", "champion": "🏆", "best": "👑",
     
     # Trending/Viral
-    "viral": "📈", "trending": "📈", "popular": "📈", "views": "👁️",
-    "subscribe": "🔔", "follow": "❤️", "like": "👍", "comment": "💬",
+    "viral": "📈", "trending": "📈", "popular": "📈", "famous": "⭐",
+    "views": "👁️", "million": "💯", "billions": "💯",
+    "subscribe": "🔔", "follow": "❤️", "like": "👍", "love": "❤️",
     
     # Science/Tech
-    "science": "🔬", "research": "🔬", "study": "📚", "brain": "🧠",
+    "science": "🔬", "research": "🔬", "study": "📚", "learn": "📖",
+    "brain": "🧠", "smart": "🧠", "genius": "🧠",
     "technology": "🤖", "robot": "🤖", "ai": "🤖", "future": "🚀",
+    "space": "🌌", "universe": "🌌", "galaxy": "🌌",
     
     # Nature/Animals
-    "animal": "🐾", "nature": "🌿", "ocean": "🌊", "water": "💧",
-    "earth": "🌍", "world": "🌍", "planet": "🪐", "space": "🌌",
+    "animal": "🐾", "nature": "🌿", "plant": "🌱", "tree": "🌳",
+    "ocean": "🌊", "water": "💧", "sea": "🌊", "beach": "🏖️",
+    "earth": "🌍", "world": "🌍", "planet": "🪐", "global": "🌍",
     
     # Time/Speed
     "fast": "⚡", "quick": "⚡", "instant": "⚡", "speed": "⚡",
-    "slow": "🐌", "wait": "⏱️", "time": "⏰", "ancient": "🕰️"
+    "rapid": "💨", "turbo": "🏃", "zoom": "💨",
+    "slow": "🐌", "wait": "⏱️", "time": "⏰", "clock": "⏰",
+    "ancient": "🕰️", "history": "📜", "old": "👴",
+    
+    # Food/Drink
+    "food": "🍔", "eat": "🍕", "delicious": "😋", "yummy": "😋",
+    "drink": "🥤", "coffee": "☕", "tea": "🍵",
+    
+    # Emotions
+    "happy": "😊", "sad": "😢", "angry": "😠", "laugh": "😂",
+    "cry": "😭", "scared": "😨", "surprised": "😮",
+    
+    # Actions
+    "think": "🤔", "question": "❓", "answer": "✅", "check": "✅",
+    "wrong": "❌", "mistake": "❌", "fail": "❌",
+    "correct": "✔️", "perfect": "💯", "hundred": "💯"
 }
 
 
-def inject_emojis(text: str) -> str:
+def inject_emojis(text: str, max_emojis: int = 2) -> str:
     """
     Inject contextually appropriate emojis into text.
-    Prioritizes first occurrence of keywords.
+    Prioritizes first occurrence and limits total emojis.
     """
     words = text.lower().split()
     injected = []
-    emoji_used = False
+    emoji_count = 0
     
     for word in words:
         # Clean word for matching
-        clean_word = word.strip(".,!?;:")
+        clean_word = word.strip(".,!?;:'\"")
         
-        # Check if word has an emoji mapping
-        if not emoji_used and clean_word in EMOJI_MAP:
-            # Add emoji after the word
+        # Check if word has an emoji mapping and we haven't hit limit
+        if emoji_count < max_emojis and clean_word in EMOJI_MAP:
             emoji = EMOJI_MAP[clean_word]
             injected.append(f"{word} {emoji}")
-            emoji_used = True  # Only one emoji per sentence
+            emoji_count += 1
         else:
             injected.append(word)
     
@@ -159,7 +307,7 @@ def build_karaoke_ass(
     style_name: Optional[str] = None
 ) -> str:
     """
-    Build karaoke-style ASS subtitle with viral optimizations.
+    Build karaoke-style ASS subtitle with vibrant gradient effects.
     
     Args:
         text: Full sentence text
@@ -197,13 +345,14 @@ def build_karaoke_ass(
     active = style["color_active"]
     outline_c = style["color_outline"]
     emphasis_c = style["color_emphasis"]
+    secondary_c = style.get("color_secondary", active)
     
     # Effects
     use_bounce = style.get("bounce", True) and settings.KARAOKE_EFFECTS
     use_glow = style.get("glow", False) and settings.KARAOKE_EFFECTS
     
     # Inject emojis into text
-    text_with_emoji = inject_emojis(text)
+    text_with_emoji = inject_emojis(text, max_emojis=2)
     
     # Convert words to uppercase
     words_upper = [(w.upper(), d) for w, d in words if w.strip()]
@@ -216,24 +365,24 @@ def build_karaoke_ass(
     # Convert to centiseconds
     ds = [max(8, int(round(d * 100))) for _, d in words_upper]
     
-    # Build effect tags
+    # Build smooth effect tags
     shake_tag = ""
     blur_tag = ""
     
     if use_bounce:
         if is_hook:
-            # More aggressive bounce for hook
-            shake_tag = r"\t(0,40,\fscx110\fscy110)\t(40,80,\fscx90\fscy90)\t(80,120,\fscx100\fscy100)"
+            # Aggressive bounce for hook with smooth easing
+            shake_tag = r"\t(0,50,\1.5,\fscx115\fscy115)\t(50,100,\1.5,\fscx95\fscy95)\t(100,150,\fscx100\fscy100)"
         else:
-            # Subtle bounce for normal text
-            shake_tag = r"\t(0,50,\fscx105\fscy105)\t(50,100,\fscx95\fscy95)\t(100,150,\fscx100\fscy100)"
+            # Subtle bounce with smooth easing
+            shake_tag = r"\t(0,60,\1.5,\fscx108\fscy108)\t(60,120,\1.5,\fscx98\fscy98)\t(120,180,\fscx100\fscy100)"
     
     if use_glow:
-        blur_tag = r"\blur3"
+        blur_tag = r"\blur3.5\bord" + str(outline + 1)
     else:
-        blur_tag = r"\blur1"
+        blur_tag = r"\blur1.5"
     
-    # Build karaoke line with emphasis detection
+    # Build karaoke line with emphasis detection and gradient colors
     kline_parts = []
     for i, (word_text, _) in enumerate(words_upper):
         duration_cs = ds[i]
@@ -243,41 +392,45 @@ def build_karaoke_ass(
         is_emphasis = clean_word in EMPHASIS_KEYWORDS
         
         if is_emphasis:
-            # Special treatment for emphasis words
-            tags = f"\\k{duration_cs}\\fs{fontsize_emphasis}\\c{emphasis_c}{shake_tag}{blur_tag}"
+            # Special treatment for emphasis words - vibrant glow
+            tags = f"\\k{duration_cs}\\fs{fontsize_emphasis}\\c{emphasis_c}\\3c{secondary_c}{shake_tag}{blur_tag}\\t(0,{duration_cs*5},\\fscx105\\fscy105)"
         else:
-            # Normal word
-            tags = f"\\k{duration_cs}{shake_tag}{blur_tag}"
+            # Normal word with smooth color transition
+            tags = f"\\k{duration_cs}\\c{active}\\3c{secondary_c}{shake_tag}{blur_tag}"
         
         kline_parts.append(f"{{{tags}}}{word_text}")
     
     kline = " ".join(kline_parts)
     
-    # Build ASS file
+    # Build ASS file with vibrant styling
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
+WrapStyle: 0
+ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Base,{fontname},{fontsize},{inactive},{active},{outline_c},&H7F000000,1,0,0,0,100,100,0,0,1,{outline},{shadow},2,50,50,{margin_v},0
+Style: Base,{fontname},{fontsize},{inactive},{active},{outline_c},&H7F000000,1,0,0,0,100,100,1,0,1,{outline},{shadow},2,50,50,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad{shadow}}}{kline}
+Dialogue: 0,0:00:00.00,{_ass_time(seg_dur)},Base,,0,0,{margin_v},,{{\\bord{outline}\\shad{shadow}\\blur1.5}}{kline}
 """
     
     return ass
 
 
 def _ass_time(s: float) -> str:
-    """Convert seconds to ASS time format."""
+    """Convert seconds to ASS time format with precision."""
     h = int(s // 3600)
     s -= h * 3600
     m = int(s // 60)
     s -= m * 60
-    return f"{h:d}:{m:02d}:{s:05.2f}"
+    cs = int(round((s - int(s)) * 100))
+    s = int(s)
+    return f"{h:d}:{m:02d}:{s:02d}.{cs:02d}"
 
 
 # ============================================================================
@@ -296,4 +449,18 @@ def get_style_info(style_name: str) -> Dict[str, Any]:
     """Get information about a specific style."""
     if style_name in CAPTION_STYLES:
         return CAPTION_STYLES[style_name]
-    return CAPTION_STYLES["viral_bold"]  # Default
+    return CAPTION_STYLES["classic_yellow"]  # Default to safe choice
+
+
+def list_all_styles() -> List[str]:
+    """List all available caption styles."""
+    return list(CAPTION_STYLES.keys())
+
+
+def get_style_preview(style_name: str) -> str:
+    """Get a human-readable preview of a style."""
+    if style_name not in CAPTION_STYLES:
+        return "Style not found"
+    
+    style = CAPTION_STYLES[style_name]
+    return f"{style['name']} - {style['fontname']} @ {style['fontsize_normal']}px"
