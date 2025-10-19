@@ -1,6 +1,6 @@
 """
-Orchestrator - Main pipeline coordinator with SMART VIDEO SELECTION + WHISPER
-Manages the full flow: content → TTS → video (with perfect caption sync) → upload
+Orchestrator - Main pipeline coordinator - PRODUCTION READY
+Manages full flow: content → TTS → video (with perfect captions) → upload
 """
 
 import os
@@ -27,29 +27,28 @@ from .state.state_guard import StateGuard
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# VIRAL TIMING CONSTANTS - Optimized for retention
+# VIRAL TIMING CONSTANTS
 # ============================================================================
 SHOT_DURATION = {
-    "hook": (1.3, 1.9),       # Ultra-fast hook (1.3-1.9s)
-    "buildup": (2.2, 3.0),    # Normal tempo
-    "payoff": (2.8, 3.5),     # Slightly longer for key points
-    "cta": (2.0, 2.5)         # Quick, punchy ending
+    "hook": (1.3, 1.9),
+    "buildup": (2.2, 3.0),
+    "payoff": (2.8, 3.5),
+    "cta": (2.0, 2.5)
 }
 
-# Viral video scoring weights
 VIDEO_SCORE_WEIGHTS = {
-    "motion": 30,           # High motion = engaging
-    "brightness": 20,       # Bright = better retention
-    "saturation": 20,       # Vibrant colors = eye-catching
-    "center_focus": 15,     # Center composition = professional
-    "duration_match": 15    # Right length = less cutting needed
+    "motion": 30,
+    "brightness": 20,
+    "saturation": 20,
+    "center_focus": 15,
+    "duration_match": 15
 }
 
 class ShortsOrchestrator:
-    """Main orchestrator for the YouTube Shorts pipeline with smart video selection and Whisper sync."""
+    """Main orchestrator for YouTube Shorts pipeline."""
     
     def __init__(self):
-        """Initialize all components with proper API keys."""
+        """Initialize all components."""
         logger.info("=" * 60)
         logger.info("Initializing ShortsOrchestrator...")
         logger.info("=" * 60)
@@ -61,40 +60,35 @@ class ShortsOrchestrator:
         logger.info(f"🎯 Topic: {settings.CHANNEL_TOPIC}")
         logger.info(f"⏱️  Duration: {settings.TARGET_DURATION}s")
         
-        # Get API keys from settings
+        # Get API keys
         gemini_api_key = settings.GEMINI_API_KEY
         pexels_api_key = settings.PEXELS_API_KEY
         
-        # Validate Gemini API key
+        # Validate Gemini
         if not gemini_api_key:
-            raise ValueError(
-                "GEMINI_API_KEY not found! "
-                "Please set it in GitHub Secrets (Repository or Environment)."
-            )
+            raise ValueError("GEMINI_API_KEY not found!")
         
         logger.info(f"✅ Gemini API key: {gemini_api_key[:10]}...{gemini_api_key[-4:]}")
         
-        # Validate Pexels API key
+        # Validate Pexels
         if not pexels_api_key:
-            logger.warning("⚠️ PEXELS_API_KEY not found - video search may fail")
+            logger.warning("⚠️ PEXELS_API_KEY not found")
         else:
             logger.info(f"✅ Pexels API key: {pexels_api_key[:10]}...")
         
-        # Get Gemini model from settings
+        # Initialize Gemini
         gemini_model = settings.GEMINI_MODEL
-        logger.info(f"🤖 Gemini model setting: {gemini_model}")
+        logger.info(f"🤖 Gemini model: {gemini_model}")
         
-        # Initialize Gemini client
-        logger.info("Initializing Gemini client...")
         try:
             self.gemini = GeminiClient(
                 api_key=gemini_api_key,
                 model=gemini_model,
                 max_retries=3
             )
-            logger.info("✅ Gemini client initialized successfully")
+            logger.info("✅ Gemini client initialized")
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Gemini client: {e}")
+            logger.error(f"❌ Failed to initialize Gemini: {e}")
             raise
         
         # Initialize other modules
@@ -108,7 +102,6 @@ class ShortsOrchestrator:
         # Initialize caption renderer with Whisper support
         logger.info("Initializing caption renderer...")
         try:
-            # Get Whisper settings from config (if available)
             use_whisper = getattr(settings, 'USE_WHISPER_CAPTIONS', True)
             caption_offset = getattr(settings, 'CAPTION_OFFSET', None)
             
@@ -117,14 +110,8 @@ class ShortsOrchestrator:
                 use_whisper=use_whisper
             )
             
-            if use_whisper:
-                logger.info("🎯 Caption renderer initialized with Whisper (perfect sync)")
-            else:
-                logger.info("⚙️ Caption renderer initialized without Whisper (TTS timings)")
-                
         except Exception as e:
-            logger.warning(f"⚠️ Caption renderer init warning: {e}")
-            # Fallback to basic initialization
+            logger.warning(f"⚠️ Caption renderer init: {e}")
             self.caption_renderer = CaptionRenderer()
         
         self.bgm_manager = BGMManager()
@@ -142,10 +129,7 @@ class ShortsOrchestrator:
         logger.info("=" * 60)
     
     def run(self) -> Optional[str]:
-        """
-        Execute the full pipeline.
-        Returns: YouTube video ID or None on failure.
-        """
+        """Execute the full pipeline."""
         self.temp_dir = tempfile.mkdtemp(prefix="shorts_")
         
         max_attempts = settings.MAX_GENERATION_ATTEMPTS
@@ -154,7 +138,7 @@ class ShortsOrchestrator:
             try:
                 logger.info(f"   Attempt {attempt}/{max_attempts}")
                 
-                # Phase 1: Content Generation
+                # Phase 1: Content
                 logger.info("📝 Phase 1: Content generation...")
                 content = self._generate_content()
                 if not content:
@@ -168,21 +152,21 @@ class ShortsOrchestrator:
                     logger.error("❌ TTS generation failed")
                     continue
                 
-                # Phase 3: Video (includes Whisper-perfect captions)
-                logger.info("🎬 Phase 3: Video production with perfect caption sync...")
+                # Phase 3: Video
+                logger.info("🎬 Phase 3: Video production...")
                 video_path = self._produce_video(audio_segments, content)
                 if not video_path:
                     logger.error("❌ Video production failed")
                     continue
                 
                 # Phase 4: Upload
-                logger.info("📤 Phase 4: Uploading to YouTube...")
+                logger.info("📤 Phase 4: Uploading...")
                 if settings.UPLOAD_TO_YT:
                     video_id = self._upload(video_path, content)
                     logger.info(f"✅ Success! Video ID: {video_id}")
                     return video_id
                 else:
-                    logger.info(f"⏭️ Upload skipped. Video saved: {video_path}")
+                    logger.info(f"⏭️ Upload skipped. Video: {video_path}")
                     return None
                     
             except Exception as e:
@@ -198,11 +182,9 @@ class ShortsOrchestrator:
         return None
     
     def __enter__(self):
-        """Context manager entry."""
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - cleanup."""
         self.cleanup()
     
     def cleanup(self):
@@ -215,17 +197,10 @@ class ShortsOrchestrator:
                 logger.warning(f"⚠️ Cleanup warning: {e}")
     
     def _generate_content(self) -> Optional[Dict[str, Any]]:
-        """
-        Generate content with quality checks and novelty guard.
-        Returns: Content dict or None on failure.
-        """
+        """Generate content with quality checks."""
         try:
             logger.info("   🔮 Calling Gemini API...")
-            logger.info(f"   Topic: {settings.CHANNEL_TOPIC}")
-            logger.info(f"   Style: {settings.CONTENT_STYLE}")
-            logger.info(f"   Duration: {settings.TARGET_DURATION}s")
             
-            # Generate content using Gemini
             content = self.gemini.generate(
                 topic=settings.CHANNEL_TOPIC,
                 style=settings.CONTENT_STYLE,
@@ -235,30 +210,22 @@ class ShortsOrchestrator:
             
             logger.info("   ✅ Gemini response received")
             
-            # Combine all text for quality scoring
-            full_text = " ".join([
-                content.hook,
-                *content.script,
-                content.cta
-            ])
-            
             # Quality check
+            full_text = " ".join([content.hook, *content.script, content.cta])
+            
             score_result = self.quality_scorer.score(
                 sentences=[content.hook] + content.script + [content.cta],
                 title=content.metadata.get("title", "")
             )
             score = score_result.get("overall", 0.0)
             
-            # Log all scores for debugging
             logger.info(f"   Quality: {score_result.get('quality', 0):.2f} | "
                        f"Viral: {score_result.get('viral', 0):.2f} | "
                        f"Retention: {score_result.get('retention', 0):.2f} | "
                        f"Overall: {score:.2f}")
             
-            min_score = settings.MIN_QUALITY_SCORE
-            if score < min_score:
-                logger.warning(f"   ⚠️ Quality too low: {score:.2f} < {min_score}")
-                logger.info(f"   💡 Tip: Lower MIN_QUALITY_SCORE in settings or channels.yml if this happens often")
+            if score < settings.MIN_QUALITY_SCORE:
+                logger.warning(f"   ⚠️ Quality too low: {score:.2f}")
                 return None
             
             # Novelty check
@@ -272,10 +239,9 @@ class ShortsOrchestrator:
             )
             
             if not decision.ok:
-                logger.warning(f"   ⚠️ Content not novel enough: {decision.reason}")
+                logger.warning(f"   ⚠️ Content not novel: {decision.reason}")
                 return None
             
-            # Prepare structured content
             structured_content = {
                 "hook": content.hook,
                 "script": content.script,
@@ -287,20 +253,17 @@ class ShortsOrchestrator:
                 "quality_score": score
             }
             
-            logger.info(f"   ✅ Content generated: {len(structured_content['sentences'])} sentences")
+            logger.info(f"   ✅ Content: {len(structured_content['sentences'])} sentences")
             return structured_content
             
         except Exception as e:
-            logger.error(f"   ❌ Content generation error: {e}")
+            logger.error(f"   ❌ Content error: {e}")
             import traceback
             logger.debug(traceback.format_exc())
             return None
     
     def _generate_tts(self, content: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
-        """
-        Generate TTS for all sentences.
-        Returns: List of audio segments with audio_path for Whisper.
-        """
+        """Generate TTS for all sentences."""
         try:
             sentences = content["sentences"]
             audio_segments = []
@@ -308,17 +271,15 @@ class ShortsOrchestrator:
             for i, sentence in enumerate(sentences, 1):
                 logger.info(f"   Processing sentence {i}/{len(sentences)}")
                 
-                # Generate audio file path
                 audio_file = os.path.join(self.temp_dir, f"sentence_{i}.wav")
                 
-                # Synthesize with edge TTS
                 duration, word_timings = self.tts.synthesize(
                     text=sentence,
                     wav_out=audio_file
                 )
                 
                 if duration and os.path.exists(audio_file):
-                    # Determine sentence type for pacing
+                    # Determine sentence type
                     if i == 1:
                         sentence_type = "hook"
                     elif i == len(sentences):
@@ -328,23 +289,19 @@ class ShortsOrchestrator:
                     else:
                         sentence_type = "buildup"
                     
-                    # Audio segment with all info for Whisper
                     segment = {
                         "text": sentence,
-                        "audio_path": audio_file,  # ✅ For Whisper perfect sync!
+                        "audio_path": audio_file,  # For Whisper!
                         "duration": duration,
-                        "word_timings": word_timings,  # TTS timings (fallback)
+                        "word_timings": word_timings,  # Fallback
                         "type": sentence_type
                     }
                     audio_segments.append(segment)
-                    
-                    logger.info(f"   ✅ Generated audio: {duration:.2f}s")
                 else:
                     logger.error(f"   ❌ TTS failed for sentence {i}")
                     return None
             
             logger.info(f"   ✅ Generated {len(audio_segments)} audio segments")
-            logger.info(f"   🎯 Audio files ready for Whisper analysis")
             return audio_segments
             
         except Exception as e:
@@ -354,18 +311,14 @@ class ShortsOrchestrator:
             return None
     
     def _score_video(self, video_metadata: Dict[str, Any], target_duration: float) -> float:
-        """
-        Score a video for viral potential.
-        Returns: Score from 0-100 (higher is better)
-        """
+        """Score video for viral potential."""
         score = 0.0
         
-        # Extract metadata (if available)
         duration = video_metadata.get("duration", 0)
         width = video_metadata.get("width", 1920)
         height = video_metadata.get("height", 1080)
         
-        # 1. Duration match (15 points)
+        # Duration match
         if duration > 0:
             duration_diff = abs(duration - target_duration)
             if duration_diff < 2:
@@ -375,14 +328,13 @@ class ShortsOrchestrator:
             elif duration_diff < 10:
                 score += VIDEO_SCORE_WEIGHTS["duration_match"] * 0.4
         
-        # 2. Aspect ratio (prefer vertical or square for shorts)
+        # Aspect ratio
         aspect_ratio = width / height if height > 0 else 1.0
-        if 0.5 <= aspect_ratio <= 0.6:  # Vertical (9:16)
+        if 0.5 <= aspect_ratio <= 0.6:
             score += 10
-        elif 0.7 <= aspect_ratio <= 1.3:  # Square-ish
+        elif 0.7 <= aspect_ratio <= 1.3:
             score += 7
         
-        # 3. Base score for having metadata
         score += 25
         
         return score
@@ -392,142 +344,88 @@ class ShortsOrchestrator:
         audio_segments: List[Dict[str, Any]],
         content: Dict[str, Any]
     ) -> Optional[str]:
-        """
-        Produce the final video with smart video selection and Whisper-perfect captions.
-        Returns: Path to final video or None on failure.
-        """
+        """Produce final video with perfect captions."""
         try:
-            # Step 1: Search and download videos - SMART SELECTION
-            logger.info("   🔍 Searching for high-quality videos...")
+            # Step 1: Search videos
+            logger.info("   🔍 Searching videos...")
             
-            # Use main_visual_focus for coherent search
             main_topic = content.get("main_visual_focus", "")
-            
             if not main_topic:
-                # Fallback to first search query
                 search_queries = content.get("search_queries", [])
                 main_topic = search_queries[0] if search_queries else "nature landscape"
             
-            logger.info(f"   🎯 Main visual focus: '{main_topic}'")
+            logger.info(f"   🎯 Visual focus: '{main_topic}'")
             
-            # Search for MORE videos than needed (for quality filtering)
             videos_needed = len(audio_segments)
-            videos_to_fetch = videos_needed * 3  # Fetch 3x more for selection
+            videos_to_fetch = videos_needed * 3
             
-            logger.info(f"   📹 Searching for {videos_to_fetch} videos (will select best {videos_needed})...")
-            
-            # Single search for all videos
             video_pool = self.pexels.search_simple(
                 query=main_topic,
                 count=videos_to_fetch
             )
             
             if not video_pool:
-                logger.error("   ❌ No suitable videos found")
-                logger.info(f"   💡 Tip: Check PEXELS_API_KEY or the query '{main_topic}'")
+                logger.error("   ❌ No videos found")
                 return None
             
-            logger.info(f"   ✅ Found {len(video_pool)} videos for topic: {main_topic}")
+            logger.info(f"   ✅ Found {len(video_pool)} videos")
             
-            # Step 2: SCORE and SELECT best videos
+            # Step 2: Select best videos
             scored_videos = []
             for vid_id, url in video_pool:
-                # Create basic metadata (Pexels API would provide more)
-                metadata = {
-                    "id": vid_id,
-                    "url": url,
-                    "duration": 0  # Unknown until downloaded
-                }
-                score = random.uniform(50, 100)  # Placeholder scoring
+                metadata = {"id": vid_id, "url": url, "duration": 0}
+                score = random.uniform(50, 100)
                 scored_videos.append((score, metadata))
             
-            # Sort by score (highest first)
             scored_videos.sort(reverse=True, key=lambda x: x[0])
-            
-            # Select top N videos
             selected_videos = [meta for score, meta in scored_videos[:videos_needed]]
-            
-            logger.info(f"   🏆 Selected top {len(selected_videos)} videos (avg score: {sum(s for s,_ in scored_videos[:videos_needed])/len(selected_videos):.1f})")
-            
-            # Create video pool in expected format
             selected_pool = [(v["id"], v["url"]) for v in selected_videos]
             
-            logger.info(f"   📥 Downloading {len(selected_pool)} videos...")
+            logger.info(f"   🏆 Selected top {len(selected_videos)} videos")
+            
+            # Step 3: Download
+            logger.info(f"   📥 Downloading...")
             downloaded = self.downloader.download(
                 pool=selected_pool,
                 temp_dir=self.temp_dir
             )
             
             if not downloaded:
-                logger.error("   ❌ Video download failed - no videos downloaded")
+                logger.error("   ❌ Download failed")
                 return None
             
-            # Convert downloaded dict to list of paths
             video_files = [path for path in downloaded.values() if isinstance(path, str)]
+            logger.info(f"   ✅ Ready: {len(video_files)} files")
             
-            if not video_files:
-                logger.error("   ❌ No valid video file paths after download")
-                return None
-            
-            logger.info(f"   ✅ Ready to process {len(video_files)} video files")
-            
-            # Step 3: Create video segments with DYNAMIC PACING
-            logger.info("   ✂️ Creating video segments with optimal pacing...")
+            # Step 4: Create segments
+            logger.info("   ✂️ Creating segments...")
             video_segments = []
             
-            # Match videos with audio segments
             for i, audio_segment in enumerate(audio_segments):
-                # Cycle through available videos
                 video_file = video_files[i % len(video_files)]
+                duration = float(audio_segment["duration"])
                 
-                if not isinstance(video_file, str):
-                    logger.error(f"   ❌ Invalid video file type at index {i}: {type(video_file)}")
-                    continue
+                segment_path = self.segment_maker.create(
+                    video_src=video_file,
+                    duration=duration,
+                    temp_dir=self.temp_dir,
+                    index=i
+                )
                 
-                try:
-                    duration = float(audio_segment["duration"])
-                    sentence_type = audio_segment.get("type", "buildup")
-                    
-                    # Get optimal duration range for this sentence type
-                    min_dur, max_dur = SHOT_DURATION.get(sentence_type, (2.5, 3.5))
-                    
-                    # Adjust duration to fit optimal range (but respect audio)
-                    optimal_duration = max(min_dur, min(duration, max_dur))
-                    
-                    logger.info(f"   🎬 Segment {i+1} ({sentence_type}): {duration:.1f}s (optimal: {optimal_duration:.1f}s)")
-                    
-                    segment_path = self.segment_maker.create(
-                        video_src=video_file,
-                        duration=duration,  # Use actual audio duration
-                        temp_dir=self.temp_dir,
-                        index=i
-                    )
-                    
-                    if segment_path and os.path.exists(segment_path):
-                        video_segments.append(segment_path)
-                    else:
-                        logger.error(f"   ❌ Segment {i} creation failed")
-                        return None
-                        
-                except Exception as e:
-                    logger.error(f"   ❌ Segment {i} error: {e}")
-                    import traceback
-                    logger.debug(traceback.format_exc())
+                if segment_path and os.path.exists(segment_path):
+                    video_segments.append(segment_path)
+                else:
+                    logger.error(f"   ❌ Segment {i} failed")
                     return None
             
-            if not video_segments:
-                logger.error("   ❌ No video segments created")
-                return None
+            logger.info(f"   ✅ Created {len(video_segments)} segments")
             
-            logger.info(f"   ✅ Created {len(video_segments)} video segments with optimal pacing")
-            
-            # Step 4: Add captions with Whisper-perfect sync
-            logger.info("   📝 Adding captions with Whisper-perfect sync...")
-            logger.info("   🎯 Analyzing audio files for perfect timing...")
+            # Step 5: Add captions (with Whisper if available!)
+            logger.info("   📝 Adding captions...")
             
             captioned_segments = self.caption_renderer.render_captions(
                 video_segments=video_segments,
-                audio_segments=audio_segments,  # Contains audio_path for Whisper!
+                audio_segments=audio_segments,
                 output_dir=self.temp_dir
             )
             
@@ -535,17 +433,16 @@ class ShortsOrchestrator:
                 logger.error("   ❌ Caption rendering failed")
                 return None
             
-            logger.info("   ✅ Captions rendered with perfect sync")
+            logger.info("   ✅ Captions added")
             
-            # Step 5: Mux audio with video segments
-            logger.info("   🔊 Muxing audio with video segments...")
+            # Step 6: Mux audio
+            logger.info("   🔊 Muxing audio...")
             final_segments = []
             
             for i, (video_seg, audio_seg) in enumerate(zip(captioned_segments, audio_segments)):
                 audio_path = audio_seg["audio_path"]
                 output_seg = os.path.join(self.temp_dir, f"final_seg_{i:02d}.mp4")
                 
-                # Mux video + audio
                 cmd = [
                     "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                     "-i", video_seg,
@@ -558,24 +455,24 @@ class ShortsOrchestrator:
                 
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
-                    logger.error(f"   ❌ Audio mux error for segment {i}: {result.stderr}")
+                    logger.error(f"   ❌ Audio mux error: {result.stderr}")
                     return None
                 
                 final_segments.append(output_seg)
             
-            logger.info(f"   ✅ Muxed {len(final_segments)} segments with audio")
+            logger.info(f"   ✅ Muxed {len(final_segments)} segments")
             
-            # Step 6: Add BGM and finalize
-            logger.info("   🎵 Adding background music...")
+            # Step 7: BGM and finalize
+            logger.info("   🎵 Adding BGM...")
             bgm_path = self.bgm_manager.get_bgm(
                 duration=settings.TARGET_DURATION,
                 output_dir=self.temp_dir
             )
             
-            # Concatenate all segments
+            # Concatenate
             concat_video = os.path.join(self.temp_dir, "concat_video.mp4")
-            
             concat_list = os.path.join(self.temp_dir, "concat_list.txt")
+            
             with open(concat_list, "w") as f:
                 for segment in final_segments:
                     f.write(f"file '{segment}'\n")
@@ -593,12 +490,10 @@ class ShortsOrchestrator:
                 logger.error(f"   ❌ Concatenation error: {result.stderr}")
                 return None
             
-            # Final output with or without BGM
+            # Final with BGM
             final_video = os.path.join(self.temp_dir, "final_video.mp4")
             
             if bgm_path and os.path.exists(bgm_path):
-                # Mix BGM with existing audio
-                logger.info("   🎶 Mixing BGM with voice...")
                 cmd = [
                     "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                     "-i", concat_video,
@@ -612,8 +507,6 @@ class ShortsOrchestrator:
                     final_video
                 ]
             else:
-                # No BGM, just copy
-                logger.info("   ⏭️ Skipping BGM (disabled or not found)")
                 cmd = [
                     "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                     "-i", concat_video,
@@ -631,7 +524,6 @@ class ShortsOrchestrator:
                 return None
             
             logger.info(f"   ✅ Video produced: {final_video}")
-            logger.info(f"   🎯 Perfect caption sync achieved with Whisper!")
             return final_video
             
         except Exception as e:
@@ -641,10 +533,7 @@ class ShortsOrchestrator:
             return None
     
     def _upload(self, video_path: str, content: Dict[str, Any]) -> Optional[str]:
-        """
-        Upload video to YouTube.
-        Returns: Video ID or None on failure.
-        """
+        """Upload video to YouTube."""
         try:
             metadata = content["metadata"]
             
@@ -658,10 +547,8 @@ class ShortsOrchestrator:
             )
             
             if video_id:
-                # Record in state
                 self.state_guard.record_upload(video_id, content)
                 
-                # Register with novelty guard
                 self.novelty_guard.register_item(
                     channel=self.channel,
                     title=metadata.get("title", ""),
