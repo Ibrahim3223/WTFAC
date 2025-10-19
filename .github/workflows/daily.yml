@@ -137,7 +137,12 @@ jobs:
       - name: Install Python dependencies
         run: |
           echo "📦 Installing Python packages..."
-          python -m pip install -U pip
+          python -m pip install -U pip setuptools wheel
+          
+          # CRITICAL: Install numpy first (aeneas build dependency)
+          pip install "numpy>=1.26,<2"
+          
+          # Install all other dependencies
           pip install -r requirements.txt
           echo "✅ Python dependencies installed"
           
