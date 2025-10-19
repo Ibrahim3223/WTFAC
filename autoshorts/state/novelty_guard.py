@@ -231,6 +231,8 @@ class NoveltyGuard:
     def _init_db(self):
         conn = self._conn()
         cur = conn.cursor()
+        
+        # Create table if not exists
         cur.execute("""
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY,
@@ -250,10 +252,27 @@ class NoveltyGuard:
             sub_topic TEXT
         );
         """)
+        
+        # Migration: Add sub_topic column if it doesn't exist
+        try:
+            cur.execute("SELECT sub_topic FROM items LIMIT 1;")
+        except sqlite3.OperationalError:
+            # Column doesn't exist, add it
+            import logging
+            logging.getLogger(__name__).info("[NoveltyGuard] Migrating database: adding sub_topic column")
+            cur.execute("ALTER TABLE items ADD COLUMN sub_topic TEXT;")
+        
+        # Create indexes
         cur.execute("CREATE INDEX IF NOT EXISTS idx_items_channel_ts ON items(channel, ts);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_items_simhash ON items(simhash);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_items_searchterm_ts ON items(channel, search_term, ts);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_items_subtopic ON items(channel, sub_topic, ts);")
+        
+        # Create sub_topic index (safe now)
+        try:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_items_subtopic ON items(channel, sub_topic, ts);")
+        except sqlite3.OperationalError:
+            pass  # Index might fail if column was just added
+        
         conn.commit()
         conn.close()
 
