@@ -123,11 +123,17 @@ CRITICAL REQUIREMENTS:
 
 MAIN_VISUAL_FOCUS RULES - CRITICAL:
 - This is THE SINGLE TOPIC for ALL video footage
-- Use 1-2 words only (e.g. "pangolin", "arctic fox", "coral reef")
-- Must be something that appears in stock video libraries
-- Will be used to search Pexels for ALL video clips
-- Good examples: "hoopoe bird", "pistol shrimp", "nature sunset", "city street"
-- Bad examples: "mind blowing facts", "unusual behaviors", "cognitive science"
+- Use GENERIC, COMMON terms that exist in stock video libraries
+- NEVER use specific species names unless very common (dog, cat, lion, elephant OK; archerfish, pistol shrimp NOT OK)
+- Prefer broader categories: "tropical fish" over "archerfish", "ocean creatures" over "pistol shrimp"
+- Think: "What footage is actually available on Pexels?"
+- Good examples: "tropical fish", "bird flying", "wildlife close up", "ocean life", "nature forest"
+- Bad examples: "archerfish", "hoopoe bird", "pistol shrimp", "pangolin"
+- When topic is a rare animal: use its habitat or category instead
+  * Archerfish → "tropical fish underwater"
+  * Hoopoe → "colorful bird"
+  * Pangolin → "wildlife closeup"
+  * Pistol shrimp → "ocean creatures"
 
 OUTPUT FORMAT (valid JSON only):
 {{
