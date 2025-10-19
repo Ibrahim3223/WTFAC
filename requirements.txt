@@ -34,6 +34,7 @@ Pillow>=10.0.0
 pydub>=0.25.0   # Requires FFmpeg runtime (system package)
 
 # --- Numeric / ML toolstack ---
+# CRITICAL: numpy MUST be installed BEFORE aeneas (build dependency)
 numpy>=1.26,<2
 scikit-learn>=1.3.0
 
@@ -47,6 +48,8 @@ colorlog>=6.8.0
 # ============================================================
 # Perfect Caption Sync - Bulletproof Forced Alignment
 # ============================================================
+# CRITICAL: Install numpy first (above), then aeneas
+# aeneas requires numpy during build time, not just runtime
 aeneas>=1.7.3
 # Battle-tested forced alignment for phoneme-level precision (±10ms)
 # Aligns known text to audio with perfect synchronization
@@ -72,6 +75,7 @@ aeneas>=1.7.3
 # ============================================================
 # - FFmpeg is required as a system-level binary for pydub and aeneas
 # - eSpeak is required as a system-level package for aeneas
+# - numpy must be installed BEFORE aeneas (build-time dependency)
 # - If only one Gemini SDK is used, the other line can be removed
 # - aeneas provides 3-layer fallback: aeneas → TTS timings → estimation
 # ============================================================
