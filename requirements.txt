@@ -1,10 +1,11 @@
 # ============================================================
-# YouTube Shorts Automation - Requirements (merged)
+# YouTube Shorts Automation - Requirements (Production Ready)
 # ============================================================
 
-# --- Core AI/ML (Gemini SDKs: yalnızca birini kullanıyorsanız diğerini kaldırın) ---
+# --- Core AI/ML (Gemini SDKs) ---
 google-genai>=0.2.0           # import: google.genai
 google-generativeai>=0.8.3    # import: google.generativeai
+# Note: Keep both if unsure which one is used, or remove unused one
 
 # --- Config / Validation / Env ---
 pyyaml>=6.0
@@ -30,26 +31,47 @@ feedparser>=6.0.0
 Pillow>=10.0.0
 
 # --- Audio/Video utilities ---
-pydub>=0.25.0   # FFmpeg runtime gerekir (sistem paketi)
+pydub>=0.25.0   # Requires FFmpeg runtime (system package)
 
 # --- Numeric / ML toolstack ---
 numpy>=1.26,<2
 scikit-learn>=1.3.0
 
 # --- ML / Embeddings ---
-sentence-transformers>=2.7.0   # (daha yeni gereksinim olduğu için 2.7.0'ı koruduk)
+sentence-transformers>=2.7.0
 
-# --- CLI / Logging (opsiyonel ama faydalı) ---
+# --- CLI / Logging (optional but useful) ---
 tqdm>=4.66.0
 colorlog>=6.8.0
 
 # ============================================================
-# Perfect Caption Sync (Whisper) — etkin kullanıyorsanız yükleyin
+# Perfect Caption Sync - Bulletproof Forced Alignment
 # ============================================================
-faster-whisper>=1.0.0
-av>=11.0.0                  # PyAV: faster-whisper için gerekli
-openai-whisper>=20231117    # Fallback olarak (opsiyonel, isterseniz kaldırın)
+aeneas>=1.7.3
+# Battle-tested forced alignment for phoneme-level precision (±10ms)
+# Aligns known text to audio with perfect synchronization
+# Handles pauses, tempo changes, and speech variations flawlessly
+# 
+# System dependencies required (install via apt/yum):
+# - espeak or espeak-ng (TTS engine)
+# - libespeak-dev or espeak-ng-dev (development headers)
+# - ffmpeg (audio/video processing)
+# - python3-dev (Python headers)
+#
+# Installation on Ubuntu/Debian:
+#   sudo apt-get install espeak libespeak-dev ffmpeg python3-dev
+#
+# Installation on CentOS/RHEL:
+#   sudo yum install espeak espeak-devel ffmpeg python3-devel
+#
+# Verification:
+#   python -c "from aeneas.executetask import ExecuteTask; print('✅ aeneas ready!')"
 
-# Notlar:
-# - 'pydub' ve Whisper için FFmpeg ikilisi gereklidir (sistem düzeyinde).
-# - Eğer yalnızca tek Gemini SDK'sı kullanıyorsanız, diğeri satırı silinebilir.
+# ============================================================
+# Notes:
+# ============================================================
+# - FFmpeg is required as a system-level binary for pydub and aeneas
+# - eSpeak is required as a system-level package for aeneas
+# - If only one Gemini SDK is used, the other line can be removed
+# - aeneas provides 3-layer fallback: aeneas → TTS timings → estimation
+# ============================================================
