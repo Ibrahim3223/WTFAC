@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Karaoke ASS subtitle builder - VIBRANT PRODUCTION VERSION
-Ultra-modern caption styles with vibrant colors and smooth animations
+Karaoke ASS subtitle builder - CLEAN PRODUCTION VERSION
+Modern caption styles - NO EMOJI, NO WATERMARK injection
+Text stays EXACTLY as provided - clean and professional
 """
-import os
 import random
-from typing import List, Tuple, Dict, Optional, Any
+from typing import List, Dict, Optional, Any
 
 
 # ============================================================================
@@ -30,7 +30,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000DDFF", # Light yellow
-        "margin_v": 320  # FIXED: Consistent position
+        "margin_v": 320
     },
     
     # Style 2: NEON CYAN - Electric energy
@@ -49,7 +49,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H00FFAA00", # Light cyan
-        "margin_v": 320  # FIXED: Single margin_v
+        "margin_v": 320
     },
     
     # Style 3: HOT PINK - Bold and attention-grabbing
@@ -68,7 +68,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H00FF69B4", # Light pink
-        "margin_v": 320  # FIXED: Single margin_v
+        "margin_v": 320
     },
     
     # Style 4: LIME GREEN - Fresh and vibrant
@@ -87,7 +87,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000DD00", # Light lime
-        "margin_v": 330  # FIXED: Single margin_v
+        "margin_v": 330
     },
     
     # Style 5: ORANGE FIRE - Warm and energetic
@@ -106,7 +106,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H0000BBFF", # Light orange
-        "margin_v": 330  # FIXED: Single margin_v
+        "margin_v": 330
     },
     
     # Style 6: PURPLE VIBES - Trendy and modern
@@ -125,7 +125,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H00FF00FF",  # Magenta
         "color_secondary": "&H00CC00FF", # Light purple
-        "margin_v": 320  # FIXED: Single margin_v
+        "margin_v": 320
     },
     
     # Style 7: TURQUOISE WAVE - Cool and calming
@@ -144,7 +144,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H00FFFF00",  # Cyan
         "color_secondary": "&H00FFDD00", # Light turquoise
-        "margin_v": 320  # FIXED: Single margin_v
+        "margin_v": 320
     },
     
     # Style 8: RED HOT - Intense and dramatic
@@ -163,7 +163,7 @@ CAPTION_STYLES = {
         "color_outline": "&H00000000",   # Black
         "color_emphasis": "&H0000FFFF",  # Yellow
         "color_secondary": "&H000033FF", # Light red
-        "margin_v": 330  # FIXED: Single margin_v
+        "margin_v": 330
     }
 }
 
@@ -205,66 +205,6 @@ EMPHASIS_KEYWORDS = {
     "MILLIONS", "THOUSANDS", "BILLION"
 }
 
-# ============================================================================
-# EMOJI INJECTION - Context-aware emoji placement
-# ============================================================================
-
-EMOJI_MAP = {
-    # Extreme emotions
-    "shocking": "🤯", "insane": "🤯", "crazy": "🤯", "mind": "🤯",
-    "unbelievable": "😱", "incredible": "😱", "amazing": "😲", "wow": "😮",
-    
-    # Fire/Energy
-    "fire": "🔥", "hot": "🔥", "lit": "🔥", "energy": "⚡",
-    "explosive": "💥", "boom": "💥", "power": "💪",
-    
-    # Warnings
-    "warning": "⚠️", "danger": "⚠️", "careful": "⚠️", "stop": "🛑",
-    "alert": "🚨", "urgent": "🚨", "breaking": "📢",
-    
-    # Secrets/Mystery
-    "secret": "🤫", "hidden": "🤫", "mystery": "🔍", "discover": "🔍",
-    "forbidden": "🚫", "banned": "🚫", "illegal": "🚫",
-    
-    # Money/Success
-    "money": "💰", "rich": "💰", "expensive": "💰", "cost": "💰",
-    "profit": "💸", "cash": "💵", "dollar": "💵",
-    "success": "✨", "win": "🏆", "champion": "🏆", "best": "👑",
-    
-    # Trending/Viral
-    "viral": "📈", "trending": "📈", "popular": "📈", "famous": "⭐",
-    "views": "👁️", "million": "💯", "billions": "💯",
-    "subscribe": "🔔", "follow": "❤️", "like": "👍", "love": "❤️",
-    
-    # Science/Tech
-    "science": "🔬", "research": "🔬", "study": "📚", "learn": "📖",
-    "brain": "🧠", "smart": "🧠", "genius": "🧠",
-    "technology": "🤖", "robot": "🤖", "ai": "🤖", "future": "🚀",
-    
-    # Nature/Time/Actions
-    "fast": "⚡", "slow": "🐌", "time": "⏰", "earth": "🌍",
-    "think": "🤔", "question": "❓", "correct": "✅", "wrong": "❌"
-}
-
-
-def inject_emojis(text: str, max_emojis: int = 2) -> str:
-    """Inject contextually appropriate emojis into text."""
-    words = text.lower().split()
-    injected = []
-    emoji_count = 0
-    
-    for word in words:
-        clean_word = word.strip(".,!?;:'\"")
-        
-        if emoji_count < max_emojis and clean_word in EMOJI_MAP:
-            emoji = EMOJI_MAP[clean_word]
-            injected.append(f"{word} {emoji}")
-            emoji_count += 1
-        else:
-            injected.append(word)
-    
-    return " ".join(injected)
-
 
 def get_random_style() -> str:
     """Get a random caption style based on weights."""
@@ -284,36 +224,3 @@ def get_style_info(style_name: str) -> Dict[str, Any]:
 def list_all_styles() -> List[str]:
     """List all available caption styles."""
     return list(CAPTION_STYLES.keys())
-
-
-# ============================================================================
-# BACKWARD COMPATIBILITY - Legacy function (not used in new system)
-# ============================================================================
-
-def build_karaoke_ass(
-    text: str,
-    seg_dur: float,
-    words: List[Tuple[str, float]],
-    is_hook: bool = False,
-    style_name: Optional[str] = None
-) -> str:
-    """
-    DEPRECATED: Legacy function for backward compatibility.
-    New system uses renderer.py's _write_smooth_ass instead.
-    
-    This function is kept only for imports that haven't been updated yet.
-    """
-    # Just return a minimal ASS file
-    return """[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial Black,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,7,5,2,50,50,330,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,0:00:10.00,Default,,0,0,0,,Placeholder text
-"""
