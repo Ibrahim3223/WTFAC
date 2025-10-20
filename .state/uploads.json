@@ -1792,11 +1792,11 @@
     "ts": "2025-10-20T16:57:11.132638"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "pov",
-    "content_hash": "a461b865f4e0fc1be116dcafafb5121f9723d23c",
-    "title": "What if pov: a massive shelf cloud races towards you 😱",
-    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251020_170507.mp4",
-    "ts": "2025-10-20T17:05:10.262492"
+    "channel": "Focus Rituals",
+    "entity": "task",
+    "content_hash": "dbfc39f93ae9f9ff461a59951cfded9ab65815e5",
+    "title": "15 Things About One That'll Blow Your Mind 💡",
+    "video_path": "out/Focus Rituals_One_Practical_Routine_for_Better_Focus_20251020_170532.mp4",
+    "ts": "2025-10-20T17:05:35.700257"
   }
 ]
