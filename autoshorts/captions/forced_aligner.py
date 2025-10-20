@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # stable-ts import (lazy load)
 _STABLE_TS_AVAILABLE = False
-_stable_model = None
+_stable_models = {}  # Cache models per language
 
 try:
     import stable_whisper
@@ -39,53 +39,55 @@ class ForcedAligner:
     MAX_WORD_DURATION = 3.0   # 3 saniye maximum
     WHISPER_MODEL = "base"    # base model: hız/kalite dengesi optimal
     
-    def __init__(self, language: str = "tr"):
+    def __init__(self, language: str = "en"):
         """
         Initialize aligner.
         
         Args:
-            language: Language code for stable-ts (tr, en, etc.)
+            language: Language code for stable-ts (en, tr, es, etc.)
         """
         self.language = language
-        self._ensure_stable_model()
-        
-        if _STABLE_TS_AVAILABLE:
-            logger.info(f"      🎯 Caption aligner: stable-ts mode ({self.language.upper()}) - MILISANIYE HASSASİYETİ")
-        else:
-            logger.info("      ℹ️ Caption aligner: TTS fallback mode")
+        logger.info(f"      🎯 Caption aligner: stable-ts mode ({self.language.upper()})")
     
-    def _ensure_stable_model(self):
-        """Lazy load stable-ts model (only once)."""
-        global _stable_model
+    def _get_stable_model(self, language: str):
+        """Get or load stable-ts model for specific language (with caching)."""
+        global _stable_models
         
         if not _STABLE_TS_AVAILABLE:
-            return
+            return None
+        
+        # Return cached model if exists
+        if language in _stable_models:
+            return _stable_models[language]
         
         try:
-            # Load model (once)
-            if _stable_model is None:
-                logger.info(f"      📦 Loading stable-ts model: {self.WHISPER_MODEL}...")
-                
-                # Suppress warnings
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    _stable_model = stable_whisper.load_model(
-                        self.WHISPER_MODEL,
-                        device="cpu"  # CPU yeterli, GPU gereksiz
-                    )
-                
-                logger.info("      ✅ stable-ts model loaded (CPU)")
+            logger.info(f"      📦 Loading stable-ts model: {self.WHISPER_MODEL} ({language.upper()})...")
+            
+            # Suppress warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                model = stable_whisper.load_model(
+                    self.WHISPER_MODEL,
+                    device="cpu"  # CPU yeterli, GPU gereksiz
+                )
+            
+            # Cache model
+            _stable_models[language] = model
+            logger.info(f"      ✅ stable-ts model loaded (CPU) for {language.upper()}")
+            return model
         
         except Exception as e:
             logger.error(f"      ❌ stable-ts model load failed: {e}")
             logger.info("      ℹ️ Falling back to TTS timings")
+            return None
     
     def align(
         self,
         text: str,
         audio_path: str,
         tts_word_timings: Optional[List[Tuple[str, float]]] = None,
-        total_duration: Optional[float] = None
+        total_duration: Optional[float] = None,
+        language: Optional[str] = None
     ) -> List[Tuple[str, float]]:
         """
         Milisaniye hassasiyetinde caption alignment.
@@ -95,15 +97,19 @@ class ForcedAligner:
             audio_path: Path to audio file
             tts_word_timings: TTS word timings (fallback)
             total_duration: Total audio duration (validation)
+            language: Override language (if different from init)
         
         Returns:
             List of (word, duration) tuples with milisecond precision
         """
+        # Use override language if provided
+        lang = language or self.language
+        
         # Strategy 1: stable-ts forced alignment (BEST - ~10-20ms precision)
         if _STABLE_TS_AVAILABLE and os.path.exists(audio_path):
             try:
-                logger.debug(f"      🎯 stable-ts alignment: {audio_path}")
-                words = self._stable_ts_align(text, audio_path, total_duration)
+                logger.debug(f"      🎯 stable-ts alignment: {audio_path} (lang: {lang.upper()})")
+                words = self._stable_ts_align(text, audio_path, total_duration, lang)
                 if words:
                     logger.debug(f"      ✅ stable-ts: {len(words)} words, word-level sync")
                     return words
@@ -131,7 +137,8 @@ class ForcedAligner:
         self,
         text: str,
         audio_path: str,
-        total_duration: Optional[float]
+        total_duration: Optional[float],
+        language: str
     ) -> Optional[List[Tuple[str, float]]]:
         """
         stable-ts forced alignment - word-level precision.
@@ -139,9 +146,9 @@ class ForcedAligner:
         Returns:
             List of (word, duration) or None if failed
         """
-        global _stable_model
+        model = self._get_stable_model(language)
         
-        if not _stable_model:
+        if not model:
             return None
         
         try:
@@ -149,9 +156,9 @@ class ForcedAligner:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 
-                result = _stable_model.transcribe(
+                result = model.transcribe(
                     audio_path,
-                    language=self.language,
+                    language=language,
                     word_timestamps=True,  # CRITICAL: word-level timestamps
                     regroup=False,  # Keep original word boundaries
                     verbose=False
@@ -173,17 +180,6 @@ class ForcedAligner:
             if not word_timings:
                 logger.warning("      ⚠️ stable-ts returned no words")
                 return None
-            
-            # Validate against known text (optional - stable-ts çok güvenilir)
-            stable_text = " ".join(w for w, _ in word_timings).lower()
-            known_text = text.lower()
-            
-            # Simple similarity check
-            if len(stable_text) < len(known_text) * 0.4:
-                logger.warning(f"      ⚠️ stable-ts text too different from known text")
-                logger.debug(f"         Known: {known_text[:100]}")
-                logger.debug(f"         stable-ts: {stable_text[:100]}")
-                # Don't fail - stable-ts is usually right
             
             # Validate total duration
             validated = self._validate_timings(word_timings, total_duration)
@@ -290,7 +286,7 @@ class ForcedAligner:
 # Global instance
 _aligner_instance = None
 
-def get_aligner(language: str = "tr") -> ForcedAligner:
+def get_aligner(language: str = "en") -> ForcedAligner:
     """Get or create global aligner instance."""
     global _aligner_instance
     if _aligner_instance is None:
@@ -303,7 +299,7 @@ def align_text_to_audio(
     audio_path: str,
     tts_word_timings: Optional[List[Tuple[str, float]]] = None,
     total_duration: Optional[float] = None,
-    language: str = "tr"
+    language: str = "en"
 ) -> List[Tuple[str, float]]:
     """
     Milisaniye hassasiyetinde caption alignment.
@@ -313,10 +309,10 @@ def align_text_to_audio(
         audio_path: Path to audio file
         tts_word_timings: TTS word timings (fallback)
         total_duration: Audio duration (validation)
-        language: Language code (tr, en, etc.)
+        language: Language code (en, tr, es, etc.) - CRITICAL for accuracy!
     
     Returns:
         List of (word, duration) tuples with milisecond precision
     """
     aligner = get_aligner(language=language)
-    return aligner.align(text, audio_path, tts_word_timings, total_duration)
+    return aligner.align(text, audio_path, tts_word_timings, total_duration, language=language)
