@@ -198,13 +198,13 @@ class ForcedAligner:
         total_duration: Optional[float]
     ) -> List[Tuple[str, float]]:
         """
-        Validate and fix word timings to match total duration.
+        AGGRESSIVE validation to prevent segment-internal drift.
         
         Ensures:
         - No word shorter than MIN_WORD_DURATION
         - No word longer than MAX_WORD_DURATION
-        - Total sum matches audio duration (±2%)
-        - Smooth distribution
+        - Total sum EXACTLY matches audio duration (±0.5%)
+        - Linear scaling to prevent cumulative drift
         """
         if not word_timings:
             return []
@@ -220,34 +220,46 @@ class ForcedAligner:
             dur = max(self.MIN_WORD_DURATION, min(dur, self.MAX_WORD_DURATION))
             fixed.append((word, dur))
         
-        # Validate total duration
+        # CRITICAL: AGGRESSIVE total duration matching
         if total_duration:
             current_total = sum(d for _, d in fixed)
             
-            # If mismatch > 2%, scale proportionally
-            if abs(current_total - total_duration) > total_duration * 0.02:
+            # ALWAYS scale if ANY mismatch (was 2%, now 0.5%)
+            if abs(current_total - total_duration) > total_duration * 0.005:
                 scale = total_duration / current_total if current_total > 0 else 1.0
-                logger.debug(f"      📏 Scaling timings: {scale:.3f}x")
+                logger.debug(f"      📏 Scaling timings: {scale:.3f}x (drift prevention)")
                 
                 fixed = [
                     (w, max(self.MIN_WORD_DURATION, d * scale))
                     for w, d in fixed
                 ]
             
-            # Fine-tune last word to exactly match
-            if fixed:
-                current_total = sum(d for _, d in fixed)
-                diff = total_duration - current_total
-                
-                # Distribute difference across last few words
-                if abs(diff) > 0.01:  # >10ms difference
-                    num_words_adjust = min(3, len(fixed))
-                    adjustment_per_word = diff / num_words_adjust
-                    
-                    for i in range(len(fixed) - num_words_adjust, len(fixed)):
-                        word, dur = fixed[i]
-                        new_dur = max(self.MIN_WORD_DURATION, dur + adjustment_per_word)
-                        fixed[i] = (word, round(new_dur, 3))
+            # CRITICAL: EXACT match with 1ms precision
+            current_total = sum(d for _, d in fixed)
+            diff = total_duration - current_total
+            
+            # Distribute ANY difference (was >10ms, now >1ms)
+            if abs(diff) > 0.001:
+                # Distribute across ALL words proportionally
+                # This prevents last-word artifacts
+                for i in range(len(fixed)):
+                    word, dur = fixed[i]
+                    weight = dur / current_total if current_total > 0 else 1.0 / len(fixed)
+                    adjustment = diff * weight
+                    new_dur = max(self.MIN_WORD_DURATION, dur + adjustment)
+                    fixed[i] = (word, round(new_dur, 3))
+            
+            # Final sanity check
+            final_total = sum(d for _, d in fixed)
+            if abs(final_total - total_duration) > 0.001:
+                # Last resort: adjust last word
+                last_word, last_dur = fixed[-1]
+                final_diff = total_duration - final_total
+                fixed[-1] = (last_word, max(self.MIN_WORD_DURATION, last_dur + final_diff))
+            
+            # Log validation
+            validated_total = sum(d for _, d in fixed)
+            logger.debug(f"      ✅ Timing validated: {validated_total:.3f}s (target: {total_duration:.3f}s, diff: {abs(validated_total - total_duration)*1000:.1f}ms)")
         
         return fixed
     
