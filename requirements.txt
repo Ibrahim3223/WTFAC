@@ -12,7 +12,7 @@ pydantic>=2.0
 python-dotenv>=1.0.0
 
 # --- Text-to-Speech ---
-edge-tts>=6.1.0
+edge-tts>=6.1.18  # CRITICAL: Latest version for API compatibility
 nest-asyncio>=1.5.0
 gtts>=2.5.0
 
