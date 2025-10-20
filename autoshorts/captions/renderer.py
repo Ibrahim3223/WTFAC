@@ -23,7 +23,7 @@ class CaptionRenderer:
     WORDS_PER_CHUNK = 3
     MIN_WORD_DURATION = 0.08
     TIMING_PRECISION = 0.001
-    FADE_DURATION = 0.05  # 50ms - minimal for fast videos
+    FADE_DURATION = 0.08  # 80ms - restored for smooth transitions
     
     # Smart offset for TTS timings fine-tuning
     CHUNK_OFFSET = -0.15
@@ -358,18 +358,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if start >= end:
                     break
             
-            # Minimal fade for fast videos (50ms max, 10% of duration)
-            fade_in = min(0.05, chunk_duration * 0.10)
-            fade_out = min(0.05, chunk_duration * 0.10)
+            # Minimal fade for smooth transitions (restored)
+            fade_in = min(self.FADE_DURATION, chunk_duration * 0.15)
+            fade_out = min(self.FADE_DURATION, chunk_duration * 0.15)
             
             start_str = self._ass_time_precise(start)
-            end_str = self._ass_time_precise(end)  # Use EXACT end, not shortened
+            end_str = self._ass_time_precise(end)  # Use EXACT end
             
-            # CLEAN & FAST: Minimal fade, NO scale animation
-            # Scale animations cause delays and eye strain in fast videos
-            fade_in_ms = int(fade_in * 1000)
-            fade_out_ms = int(fade_out * 1000)
-            effect_tags = f"{{\\fad({fade_in_ms},{fade_out_ms})}}"
+            # Emphasis animation (restored for visual impact)
+            has_emphasis = any(w.strip(".,!?;:").upper() in EMPHASIS_KEYWORDS 
+                             for w, _ in chunk)
+            
+            if has_emphasis:
+                effect_tags = f"{{\\fad({int(fade_in*1000)},{int(fade_out*1000)})\\t(0,120,\\fscx110\\fscy110)\\t(120,240,\\fscx100\\fscy100)}}"
+            else:
+                effect_tags = f"{{\\fad({int(fade_in*1000)},{int(fade_out*1000)})}}"
             
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
