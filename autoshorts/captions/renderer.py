@@ -301,7 +301,7 @@ class CaptionRenderer:
         output_path: str,
         use_offset: bool = False
     ):
-        """Write ultra-smooth ASS with fade transitions and NO overlap."""
+        """Write ultra-smooth ASS with EXACT timing (prevents segment-internal drift)."""
         if not words:
             logger.warning("      ⚠️ No words to write to ASS")
             return
@@ -317,8 +317,6 @@ class CaptionRenderer:
         fontsize = style.get("fontsize_hook" if is_hook else "fontsize_normal", 60)
         outline = style.get("outline", 7)
         shadow = style.get("shadow", "5")
-        
-        # CRITICAL FIX: Safe margin_v access with fallback
         margin_v = style.get("margin_v", 320)
         
         primary_color = style.get("color_active", "&H0000FFFF")
@@ -343,40 +341,29 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         max_words = 2 if is_hook else self.WORDS_PER_CHUNK
         chunks = self._create_smooth_chunks(words, max_words)
         
-        cumulative = 0.0
-        prev_end = 0.0  # Track previous caption end time
+        # CRITICAL: Track EXACT timing to prevent drift
+        cumulative_time = 0.0
         
         for i, chunk in enumerate(chunks):
-            # CLEAN TEXT - NO EMOJI, NO WATERMARK
             chunk_text = " ".join(w.upper() for w, _ in chunk)
             chunk_duration = sum(d for _, d in chunk)
             
-            if use_offset:
-                offset = self.CHUNK_OFFSET * 1.3 if is_hook else self.CHUNK_OFFSET
-                start = max(0.0, cumulative + offset)
-            else:
-                start = cumulative
-            
-            # CRITICAL: Ensure NO overlap - wait for previous to finish
-            if i > 0 and start < prev_end:
-                start = prev_end + 0.05  # 50ms gap minimum
-            
+            # EXACT start time (no fuzzy math)
+            start = cumulative_time
             end = start + chunk_duration
             
+            # CRITICAL: Don't let end exceed total duration
             if end > total_duration:
                 end = total_duration
                 if start >= end:
                     break
             
-            # Reduce fade duration to prevent overlap
+            # Fade effects (minimal to prevent timing issues)
             fade_in = min(self.FADE_DURATION, chunk_duration * 0.15)
             fade_out = min(self.FADE_DURATION, chunk_duration * 0.15)
             
-            # Shorten end by fade_out to prevent overlap
-            display_end = end - (fade_out * 0.5)
-            
             start_str = self._ass_time_precise(start)
-            end_str = self._ass_time_precise(display_end)
+            end_str = self._ass_time_precise(end)  # Use EXACT end, not shortened
             
             has_emphasis = any(w.strip(".,!?;:").upper() in EMPHASIS_KEYWORDS 
                              for w, _ in chunk)
@@ -388,9 +375,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
-            # Update tracking
-            prev_end = display_end
-            cumulative += chunk_duration
+            # CRITICAL: Update cumulative with EXACT chunk duration
+            cumulative_time += chunk_duration
+        
+        # VALIDATION: Check if we used all the time
+        if abs(cumulative_time - total_duration) > 0.01:
+            logger.warning(f"      ⚠️ ASS timing mismatch: used {cumulative_time:.3f}s of {total_duration:.3f}s (diff: {abs(cumulative_time - total_duration)*1000:.1f}ms)")
+        else:
+            logger.debug(f"      ✅ ASS timing perfect: {cumulative_time:.3f}s = {total_duration:.3f}s")
         
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
