@@ -44,26 +44,23 @@ tqdm>=4.66.0
 colorlog>=6.8.0
 
 # ============================================================
-# MILISANIYE HASSASİYETİNDE CAPTION SYNC - WhisperX
+# MILISANIYE HASSASİYETİNDE CAPTION SYNC - stable-ts
 # ============================================================
-# WhisperX: Whisper + forced alignment = phoneme-level precision
-# ~10ms hassasiyet - izleyicinin gözünü yormayan mükemmel sync!
+# stable-ts: faster-whisper + DTW alignment = word-level precision
+# ~10-20ms hassasiyet - izleyicinin gözünü yormayan mükemmel sync!
 #
-# WhisperX forced alignment sistemi:
-# 1. Whisper ile transcription
-# 2. wav2vec2 ile phoneme-level alignment
+# stable-ts forced alignment sistemi:
+# 1. faster-whisper ile transcription (hızlı!)
+# 2. DTW (Dynamic Time Warping) ile forced alignment
 # 3. Her kelime için start/end timestamps (milisaniye precision)
+# 4. Dependency problemleri YOK - production-ready!
 #
 # Installation:
-# pip install git+https://github.com/m-bain/whisperx.git
+# pip install stable-ts
 #
-# WhisperX dependencies (otomatik kurulur):
-whisperx>=3.1.1
-torch>=2.0.0
-torchaudio>=2.0.0
+stable-ts>=2.14.0
 faster-whisper>=0.10.0
-transformers>=4.30.0
-# pyannote.audio>=3.0.0  # Optional: speaker diarization için
+# torch ve torchaudio GEREKMİYOR - sadece CPU inference!
 
 # ============================================================
 # System Requirements:
