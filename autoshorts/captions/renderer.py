@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Caption rendering - PRODUCTION READY
-Excellent sync with Edge-TTS word-level timings
+Excellent sync with stable-ts word-level timings
+CRITICAL: Language-aware alignment!
 """
 import os
 import pathlib
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class CaptionRenderer:
-    """Render captions with TTS word-level precision."""
+    """Render captions with stable-ts word-level precision."""
     
     # Caption parameters
     WORDS_PER_CHUNK = 3
@@ -37,7 +38,10 @@ class CaptionRenderer:
         if caption_offset is not None:
             self.CHUNK_OFFSET = caption_offset
         
-        logger.info("      🎯 Caption renderer: TTS word-level timing (EXCELLENT quality)")
+        # Get language from settings (CRITICAL for stable-ts accuracy!)
+        self.language = getattr(settings, 'LANG', 'en').lower()
+        
+        logger.info(f"      🎯 Caption renderer: stable-ts ({self.language.upper()}) - WORD-LEVEL precision")
     
     def render_captions(
         self,
@@ -45,7 +49,7 @@ class CaptionRenderer:
         audio_segments: List[Dict[str, Any]],
         output_dir: str
     ) -> List[str]:
-        """Render captions on all video segments with TTS word-level timing."""
+        """Render captions on all video segments with stable-ts word-level timing."""
         from autoshorts.captions.forced_aligner import align_text_to_audio
         
         captioned_segments = []
@@ -61,15 +65,16 @@ class CaptionRenderer:
                 
                 logger.info(f"      Rendering caption {i+1}/{len(video_segments)}: {text[:50]}...")
                 
-                # Use TTS word timings with smart validation
+                # Use stable-ts with CORRECT LANGUAGE!
                 if audio_path and os.path.exists(audio_path):
                     words = align_text_to_audio(
                         text=text,
                         audio_path=audio_path,
                         tts_word_timings=tts_word_timings,
-                        total_duration=duration
+                        total_duration=duration,
+                        language=self.language  # CRITICAL: Pass correct language!
                     )
-                    logger.info(f"      ✅ Aligned: {len(words)} words with precise sync")
+                    logger.info(f"      ✅ Aligned: {len(words)} words with precise sync ({self.language.upper()})")
                 else:
                     # No audio file - use TTS timings or estimation
                     words = self._ultra_precise_timing(tts_word_timings, duration) if tts_word_timings else self._smart_fallback_timings(text, duration)
@@ -82,7 +87,7 @@ class CaptionRenderer:
                     is_hook=is_hook,
                     sentence_type=sentence_type,
                     temp_dir=output_dir,
-                    use_offset=False  # TTS timings are already precise
+                    use_offset=False  # stable-ts timings are already precise
                 )
                 
                 if captioned_path and os.path.exists(captioned_path):
@@ -285,7 +290,7 @@ class CaptionRenderer:
         return result
     
     # ========================================================================
-    # SMOOTH ASS WRITER
+    # SMOOTH ASS WRITER - CLEAN (NO EMOJI/WATERMARK)
     # ========================================================================
     
     def _write_smooth_ass(
@@ -342,6 +347,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         prev_end = 0.0  # Track previous caption end time
         
         for i, chunk in enumerate(chunks):
+            # CLEAN TEXT - NO EMOJI, NO WATERMARK
             chunk_text = " ".join(w.upper() for w, _ in chunk)
             chunk_duration = sum(d for _, d in chunk)
             
