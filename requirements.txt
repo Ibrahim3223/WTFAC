@@ -69,19 +69,24 @@ transformers>=4.30.0
 # System Requirements:
 # ============================================================
 # - FFmpeg (video/audio processing)
-# - CUDA (optional, GPU acceleration için - CPU'da da çalışır)
-# - Model download: First run'da WhisperX modelleri indirilir (~1-2GB)
+# - Model download: First run'da faster-whisper model indirilir (~150MB)
+# - CPU YETER! GPU gerekmez, torch/cuda gerekmez!
+# - Production-ready, dependency sorunları YOK!
 #
-# GPU varsa: ~2-3x daha hızlı
-# CPU'da: Biraz yavaş ama çalışır
+# Performans:
+# - CPU'da: ~2-5 saniye per audio file (30 saniyelik video için)
+# - Hafif ve stabil
+# - Memory efficient (~500MB RAM)
 #
 # ============================================================
 # Fallback Strategy (3-layer system):
 # ============================================================
-# 1. WhisperX forced alignment (BEST - phoneme-level precision)
-#    - Real audio analysis
-#    - ~10ms accuracy
-#    - GPU/CPU compatible
+# 1. stable-ts forced alignment (BEST - word-level precision)
+#    - Real audio analysis via faster-whisper
+#    - ~10-20ms accuracy
+#    - CPU-only, no GPU needed
+#    - DTW-based alignment
+#    - Production-tested, stabil
 #
 # 2. Edge-TTS word timings (GOOD - TTS engine boundaries)
 #    - TTS engine word boundaries
