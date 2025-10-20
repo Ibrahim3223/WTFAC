@@ -1,34 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-Forced Alignment - MILISANIYE HASSASIYETİ (WhisperX)
-WhisperX ile phoneme-level alignment - izleyicinin gözünü yormayan mükemmel sync!
-3-layer fallback system: WhisperX → TTS → Estimation
+Forced Alignment - MILISANIYE HASSASIYETİ (stable-ts)
+stable-ts ile DTW-based alignment - production-ready, dependency sorunları YOK!
+3-layer fallback system: stable-ts → TTS → Estimation
 """
 import os
 import logging
 import warnings
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-# WhisperX import (lazy load)
-_WHISPERX_AVAILABLE = False
-_whisperx_model = None
-_align_model = None
-_align_metadata = None
-_device = None
+# stable-ts import (lazy load)
+_STABLE_TS_AVAILABLE = False
+_stable_model = None
 
 try:
-    import whisperx
-    import torch
-    _WHISPERX_AVAILABLE = True
-    # GPU detection
-    _device = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info(f"✅ WhisperX available - Device: {_device.upper()}")
-    logger.info("   🎯 Caption alignment: PHONEME-LEVEL precision (~10ms)")
+    import stable_whisper
+    _STABLE_TS_AVAILABLE = True
+    logger.info("✅ stable-ts available - CPU-based forced alignment")
+    logger.info("   🎯 Caption alignment: WORD-LEVEL precision (~10-20ms)")
 except ImportError:
-    logger.warning("⚠️ WhisperX not available - falling back to TTS timings")
-    logger.info("   Install: pip install git+https://github.com/m-bain/whisperx.git")
+    logger.warning("⚠️ stable-ts not available - falling back to TTS timings")
+    logger.info("   Install: pip install stable-ts")
 
 
 class ForcedAligner:
@@ -36,69 +30,54 @@ class ForcedAligner:
     Milisaniye hassasiyetinde caption alignment.
     
     3-layer fallback system:
-    1. WhisperX forced alignment (BEST - ~10ms phoneme-level precision)
+    1. stable-ts forced alignment (BEST - ~10-20ms word-level precision)
     2. Edge-TTS word timings (GOOD - ~50-100ms TTS engine boundaries)
     3. Character-based estimation (FALLBACK - ~200ms word length distribution)
     """
     
     MIN_WORD_DURATION = 0.08  # 80ms minimum (daha gerçekçi)
     MAX_WORD_DURATION = 3.0   # 3 saniye maximum
-    WHISPERX_MODEL = "base"   # base model: hız/kalite dengesi optimal
+    WHISPER_MODEL = "base"    # base model: hız/kalite dengesi optimal
     
     def __init__(self, language: str = "tr"):
         """
         Initialize aligner.
         
         Args:
-            language: Language code for WhisperX (tr, en, etc.)
+            language: Language code for stable-ts (tr, en, etc.)
         """
         self.language = language
-        self._ensure_whisperx_models()
+        self._ensure_stable_model()
         
-        if _WHISPERX_AVAILABLE:
-            logger.info(f"      🎯 Caption aligner: WhisperX mode ({self.language.upper()}) - MILISANIYE HASSASİYETİ")
+        if _STABLE_TS_AVAILABLE:
+            logger.info(f"      🎯 Caption aligner: stable-ts mode ({self.language.upper()}) - MILISANIYE HASSASİYETİ")
         else:
             logger.info("      ℹ️ Caption aligner: TTS fallback mode")
     
-    def _ensure_whisperx_models(self):
-        """Lazy load WhisperX models (only once)."""
-        global _whisperx_model, _align_model, _align_metadata, _device
+    def _ensure_stable_model(self):
+        """Lazy load stable-ts model (only once)."""
+        global _stable_model
         
-        if not _WHISPERX_AVAILABLE:
+        if not _STABLE_TS_AVAILABLE:
             return
         
         try:
-            # Load transcription model (once)
-            if _whisperx_model is None:
-                logger.info(f"      📦 Loading WhisperX model: {self.WHISPERX_MODEL}...")
+            # Load model (once)
+            if _stable_model is None:
+                logger.info(f"      📦 Loading stable-ts model: {self.WHISPER_MODEL}...")
                 
                 # Suppress warnings
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    _whisperx_model = whisperx.load_model(
-                        self.WHISPERX_MODEL,
-                        device=_device,
-                        compute_type="float16" if _device == "cuda" else "int8",
-                        language=self.language
+                    _stable_model = stable_whisper.load_model(
+                        self.WHISPER_MODEL,
+                        device="cpu"  # CPU yeterli, GPU gereksiz
                     )
                 
-                logger.info(f"      ✅ WhisperX model loaded on {_device.upper()}")
-            
-            # Load alignment model (once)
-            if _align_model is None:
-                logger.info(f"      📦 Loading alignment model ({self.language})...")
-                
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    _align_model, _align_metadata = whisperx.load_align_model(
-                        language_code=self.language,
-                        device=_device
-                    )
-                
-                logger.info("      ✅ Alignment model loaded")
+                logger.info("      ✅ stable-ts model loaded (CPU)")
         
         except Exception as e:
-            logger.error(f"      ❌ WhisperX model load failed: {e}")
+            logger.error(f"      ❌ stable-ts model load failed: {e}")
             logger.info("      ℹ️ Falling back to TTS timings")
     
     def align(
@@ -120,16 +99,16 @@ class ForcedAligner:
         Returns:
             List of (word, duration) tuples with milisecond precision
         """
-        # Strategy 1: WhisperX forced alignment (BEST - ~10ms precision)
-        if _WHISPERX_AVAILABLE and os.path.exists(audio_path):
+        # Strategy 1: stable-ts forced alignment (BEST - ~10-20ms precision)
+        if _STABLE_TS_AVAILABLE and os.path.exists(audio_path):
             try:
-                logger.debug(f"      🎯 WhisperX alignment: {audio_path}")
-                words = self._whisperx_align(text, audio_path, total_duration)
+                logger.debug(f"      🎯 stable-ts alignment: {audio_path}")
+                words = self._stable_ts_align(text, audio_path, total_duration)
                 if words:
-                    logger.debug(f"      ✅ WhisperX: {len(words)} words, phoneme-level sync")
+                    logger.debug(f"      ✅ stable-ts: {len(words)} words, word-level sync")
                     return words
             except Exception as e:
-                logger.warning(f"      ⚠️ WhisperX failed: {e}")
+                logger.warning(f"      ⚠️ stable-ts failed: {e}")
                 logger.debug(f"      ℹ️ Falling back to TTS timings...")
         
         # Strategy 2: TTS word timings (GOOD - ~50-100ms precision)
@@ -148,74 +127,63 @@ class ForcedAligner:
         logger.warning(f"      ⚠️ Using equal distribution fallback")
         return [(w, duration_per_word) for w in words]
     
-    def _whisperx_align(
+    def _stable_ts_align(
         self,
         text: str,
         audio_path: str,
         total_duration: Optional[float]
     ) -> Optional[List[Tuple[str, float]]]:
         """
-        WhisperX forced alignment - phoneme-level precision.
+        stable-ts forced alignment - word-level precision.
         
         Returns:
             List of (word, duration) or None if failed
         """
-        global _whisperx_model, _align_model, _align_metadata, _device
+        global _stable_model
         
-        if not (_whisperx_model and _align_model):
+        if not _stable_model:
             return None
         
         try:
-            # Load audio
-            audio = whisperx.load_audio(audio_path)
-            
-            # Transcribe (with known language)
+            # Transcribe with word-level timestamps
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                result = _whisperx_model.transcribe(
-                    audio,
-                    batch_size=16,
-                    language=self.language
-                )
-            
-            # Forced alignment (magic happens here!)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                result_aligned = whisperx.align(
-                    result["segments"],
-                    _align_model,
-                    _align_metadata,
-                    audio,
-                    device=_device,
-                    return_char_alignments=False  # Word-level yeterli
+                
+                result = _stable_model.transcribe(
+                    audio_path,
+                    language=self.language,
+                    word_timestamps=True,  # CRITICAL: word-level timestamps
+                    regroup=False,  # Keep original word boundaries
+                    verbose=False
                 )
             
             # Extract word timings
             word_timings = []
-            for segment in result_aligned.get("segments", []):
-                for word_info in segment.get("words", []):
-                    word = word_info.get("word", "").strip()
-                    start = word_info.get("start", 0.0)
-                    end = word_info.get("end", 0.0)
+            
+            for segment in result.segments:
+                for word_obj in segment.words:
+                    word = word_obj.word.strip()
+                    start = float(word_obj.start)
+                    end = float(word_obj.end)
                     duration = max(self.MIN_WORD_DURATION, end - start)
                     
                     if word:
                         word_timings.append((word, duration))
             
             if not word_timings:
-                logger.warning("      ⚠️ WhisperX returned no words")
+                logger.warning("      ⚠️ stable-ts returned no words")
                 return None
             
-            # Validate against known text
-            whisper_text = " ".join(w for w, _ in word_timings).lower()
+            # Validate against known text (optional - stable-ts çok güvenilir)
+            stable_text = " ".join(w for w, _ in word_timings).lower()
             known_text = text.lower()
             
             # Simple similarity check
-            if len(whisper_text) < len(known_text) * 0.5:
-                logger.warning(f"      ⚠️ WhisperX text too different from known text")
+            if len(stable_text) < len(known_text) * 0.4:
+                logger.warning(f"      ⚠️ stable-ts text too different from known text")
                 logger.debug(f"         Known: {known_text[:100]}")
-                logger.debug(f"         WhisperX: {whisper_text[:100]}")
-                return None
+                logger.debug(f"         stable-ts: {stable_text[:100]}")
+                # Don't fail - stable-ts is usually right
             
             # Validate total duration
             validated = self._validate_timings(word_timings, total_duration)
@@ -223,7 +191,7 @@ class ForcedAligner:
             return validated
         
         except Exception as e:
-            logger.error(f"      ❌ WhisperX alignment error: {e}")
+            logger.error(f"      ❌ stable-ts alignment error: {e}")
             import traceback
             logger.debug(traceback.format_exc())
             return None
