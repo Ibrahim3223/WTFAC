@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Edge-TTS handler with word timing support - ATEMPO-AWARE
-Provides audio_path for Whisper integration
+Edge-TTS handler with word timing support - 401 ERROR FIX
+Robust retry logic + fallback strategies
 """
 import re
 import asyncio
 import logging
+import time
 from typing import List, Tuple, Dict, Any
 
 try:
@@ -28,6 +29,10 @@ logger = logging.getLogger(__name__)
 class TTSHandler:
     """Handle text-to-speech generation with word timing."""
     
+    # Retry configuration
+    MAX_RETRIES = 3
+    RETRY_DELAY = 1.0  # seconds
+    
     def __init__(self):
         """Initialize TTS handler."""
         self.voice = settings.VOICE
@@ -36,6 +41,8 @@ class TTSHandler:
         
         # Apply nest_asyncio for nested event loops
         nest_asyncio.apply()
+        
+        logger.info(f"   🎤 TTS initialized: voice={self.voice}, rate={self.rate}")
     
     def synthesize(
         self, 
@@ -43,7 +50,7 @@ class TTSHandler:
         wav_out: str
     ) -> Tuple[float, List[Tuple[str, float]]]:
         """
-        Synthesize speech from text.
+        Synthesize speech from text with robust retry logic.
         
         Args:
             text: Text to synthesize
@@ -52,11 +59,6 @@ class TTSHandler:
         Returns:
             Tuple of (duration_seconds, word_durations)
             word_durations is list of (word, duration_seconds) AFTER atempo
-            
-        Note:
-            The wav_out path is used by Whisper for perfect timing extraction.
-            Even if word_durations are returned, Whisper can re-analyze for
-            more accurate timing.
         """
         text = (text or "").strip()
         if not text:
@@ -66,33 +68,44 @@ class TTSHandler:
         # Get atempo factor
         atempo = self._rate_to_atempo(self.rate)
         
-        # Try Edge-TTS with word boundaries
-        try:
-            marks = self._edge_stream_tts(text, wav_out)
-            duration = self._apply_atempo(wav_out, atempo)
-            
-            # Merge marks to words with atempo scaling
-            words = self._merge_marks_to_words(text, marks, duration, atempo)
-            
-            logger.info(f"   ✅ Edge-TTS: {len(words)} words | {duration:.2f}s (atempo={atempo:.2f})")
-            return duration, words
-            
-        except Exception as e:
-            logger.warning(f"   ⚠️ Edge-TTS with marks failed: {e}")
+        # Try Edge-TTS with word boundaries (BEST - has word timing!)
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                marks = self._edge_stream_tts(text, wav_out)
+                duration = self._apply_atempo(wav_out, atempo)
+                
+                # Merge marks to words with atempo scaling
+                words = self._merge_marks_to_words(text, marks, duration, atempo)
+                
+                logger.info(f"   ✅ Edge-TTS: {len(words)} words | {duration:.2f}s (atempo={atempo:.2f})")
+                return duration, words
+                
+            except Exception as e:
+                if attempt < self.MAX_RETRIES - 1:
+                    logger.warning(f"   ⚠️ Edge-TTS attempt {attempt+1} failed: {e}, retrying in {self.RETRY_DELAY}s...")
+                    time.sleep(self.RETRY_DELAY)
+                    self.RETRY_DELAY *= 1.5  # Exponential backoff
+                else:
+                    logger.warning(f"   ⚠️ Edge-TTS with marks failed after {self.MAX_RETRIES} attempts: {e}")
         
-        # Fallback: Edge-TTS without marks
-        try:
-            self._edge_simple(text, wav_out)
-            duration = self._apply_atempo(wav_out, atempo)
-            words = self._equal_split_words(text, duration)
-            
-            logger.info(f"   ✅ Edge-TTS (no marks): {len(words)} words | {duration:.2f}s")
-            return duration, words
-            
-        except Exception as e2:
-            logger.warning(f"   ⚠️ Edge-TTS simple failed: {e2}")
+        # Fallback 1: Edge-TTS without marks (still good quality, no word timing)
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                self._edge_simple(text, wav_out)
+                duration = self._apply_atempo(wav_out, atempo)
+                words = self._equal_split_words(text, duration)
+                
+                logger.info(f"   ✅ Edge-TTS (no marks): {len(words)} words | {duration:.2f}s")
+                return duration, words
+                
+            except Exception as e2:
+                if attempt < self.MAX_RETRIES - 1:
+                    logger.warning(f"   ⚠️ Edge-TTS simple attempt {attempt+1} failed: {e2}, retrying...")
+                    time.sleep(self.RETRY_DELAY)
+                else:
+                    logger.warning(f"   ⚠️ Edge-TTS simple failed after {self.MAX_RETRIES} attempts: {e2}")
         
-        # Last resort: Google TTS
+        # Fallback 2: Google TTS (last resort, no word timing)
         try:
             self._google_tts(text, wav_out)
             duration = self._apply_atempo(wav_out, atempo)
@@ -107,33 +120,57 @@ class TTSHandler:
             return 4.0, []
     
     def _edge_stream_tts(self, text: str, wav_out: str) -> List[Dict[str, Any]]:
-        """Edge-TTS with word boundaries."""
+        """Edge-TTS with word boundaries and better error handling."""
         mp3_path = wav_out.replace(".wav", ".mp3")
         marks: List[Dict[str, Any]] = []
         
         async def _run():
             audio = bytearray()
-            comm = edge_tts.Communicate(text, voice=self.voice, rate=self.rate)
             
-            async for chunk in comm.stream():
-                chunk_type = chunk.get("type")
-                
-                if chunk_type == "audio":
-                    audio.extend(chunk.get("data", b""))
+            # Create communicate object with explicit parameters
+            comm = edge_tts.Communicate(
+                text=text, 
+                voice=self.voice, 
+                rate=self.rate,
+                # Add timeout to prevent hanging
+                proxy=None
+            )
+            
+            try:
+                async for chunk in comm.stream():
+                    chunk_type = chunk.get("type")
                     
-                elif chunk_type == "WordBoundary":
-                    offset = float(chunk.get("offset", 0)) / 10_000_000.0
-                    duration = float(chunk.get("duration", 0)) / 10_000_000.0
-                    marks.append({
-                        "t0": offset,
-                        "t1": offset + duration,
-                        "text": str(chunk.get("text", ""))
-                    })
-            
-            with open(mp3_path, "wb") as f:
-                f.write(bytes(audio))
+                    if chunk_type == "audio":
+                        audio.extend(chunk.get("data", b""))
+                        
+                    elif chunk_type == "WordBoundary":
+                        offset = float(chunk.get("offset", 0)) / 10_000_000.0
+                        duration = float(chunk.get("duration", 0)) / 10_000_000.0
+                        marks.append({
+                            "t0": offset,
+                            "t1": offset + duration,
+                            "text": str(chunk.get("text", ""))
+                        })
+                
+                # Save audio
+                if not audio:
+                    raise RuntimeError("No audio data received from Edge-TTS")
+                
+                with open(mp3_path, "wb") as f:
+                    f.write(bytes(audio))
+                    
+            except Exception as e:
+                # Clean up on error
+                import pathlib
+                pathlib.Path(mp3_path).unlink(missing_ok=True)
+                raise e
         
-        asyncio.run(_run())
+        # Run with timeout
+        try:
+            asyncio.run(asyncio.wait_for(_run(), timeout=30.0))
+        except asyncio.TimeoutError:
+            raise RuntimeError("Edge-TTS timeout after 30 seconds")
+        
         return marks
     
     def _edge_simple(self, text: str, wav_out: str):
@@ -144,7 +181,10 @@ class TTSHandler:
             comm = edge_tts.Communicate(text, voice=self.voice, rate=self.rate)
             await comm.save(mp3_path)
         
-        asyncio.run(_run())
+        try:
+            asyncio.run(asyncio.wait_for(_run(), timeout=30.0))
+        except asyncio.TimeoutError:
+            raise RuntimeError("Edge-TTS simple timeout after 30 seconds")
     
     def _google_tts(self, text: str, wav_out: str):
         """Google TTS fallback."""
