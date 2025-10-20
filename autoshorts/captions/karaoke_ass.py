@@ -5,7 +5,7 @@ Modern caption styles - NO EMOJI, NO WATERMARK injection
 Text stays EXACTLY as provided - clean and professional
 """
 import random
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 
 
 # ============================================================================
@@ -224,3 +224,36 @@ def get_style_info(style_name: str) -> Dict[str, Any]:
 def list_all_styles() -> List[str]:
     """List all available caption styles."""
     return list(CAPTION_STYLES.keys())
+
+
+# ============================================================================
+# BACKWARD COMPATIBILITY - Legacy function (not used in new system)
+# ============================================================================
+
+def build_karaoke_ass(
+    text: str,
+    seg_dur: float,
+    words: List[tuple],
+    is_hook: bool = False,
+    style_name: Optional[str] = None
+) -> str:
+    """
+    DEPRECATED: Legacy function for backward compatibility.
+    New system uses renderer.py's _write_smooth_ass instead.
+    
+    This function is kept only for imports that haven't been updated yet.
+    Returns a minimal placeholder ASS file.
+    """
+    return """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial Black,60,&H00FFFFFF,&H0000FFFF,&H00000000,&H00000000,-1,0,0,0,100,100,1,0,1,7,5,2,50,50,330,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:10.00,Default,,0,0,0,,{text}
+"""
