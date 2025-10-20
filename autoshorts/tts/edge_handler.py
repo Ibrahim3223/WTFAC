@@ -109,11 +109,9 @@ class TTSHandler:
                 # Rate limiting
                 self._rate_limit_wait()
                 
-                # Random User-Agent for 401 bypass
-                user_agent = self._get_random_user_agent()
                 logger.debug(f"   🔄 Edge-TTS attempt {attempt+1}/{self.MAX_RETRIES}")
                 
-                marks = self._edge_stream_tts(text, wav_out, user_agent)
+                marks = self._edge_stream_tts(text, wav_out)
                 duration = self._apply_atempo(wav_out, atempo)
                 
                 # Merge marks to words with atempo scaling
@@ -123,18 +121,22 @@ class TTSHandler:
                 return duration, words
                 
             except Exception as e:
-                error_msg = str(e).lower()
-                
-                # Check if 401 error
-                is_401 = "401" in error_msg or "unauthorized" in error_msg
+                # Safe error message extraction
+                try:
+                    error_msg = str(e).lower()
+                    is_401 = "401" in error_msg or "unauthorized" in error_msg
+                except:
+                    error_msg = "unknown error"
+                    is_401 = False
                 
                 if attempt < self.MAX_RETRIES - 1:
+                    error_preview = str(e)[:80] if len(str(e)) > 80 else str(e)
                     logger.warning(
-                        f"   ⚠️ Edge-TTS attempt {attempt+1} failed: {e[:100]}"
-                        f"{' (401 - rotating UA)' if is_401 else ''}"
+                        f"   ⚠️ Edge-TTS attempt {attempt+1} failed: {error_preview}"
+                        f"{' (401 detected)' if is_401 else ''}"
                     )
                     time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, self.MAX_RETRY_DELAY)  # Exponential backoff
+                    retry_delay = min(retry_delay * 1.5, self.MAX_RETRY_DELAY)
                 else:
                     logger.warning(f"   ⚠️ Edge-TTS with marks failed after {self.MAX_RETRIES} attempts")
         
@@ -179,25 +181,20 @@ class TTSHandler:
             self._generate_silence(wav_out, 4.0)
             return 4.0, []
     
-    def _edge_stream_tts(self, text: str, wav_out: str, user_agent: str) -> List[Dict[str, Any]]:
-        """Edge-TTS with word boundaries and User-Agent rotation."""
+    def _edge_stream_tts(self, text: str, wav_out: str) -> List[Dict[str, Any]]:
+        """Edge-TTS with word boundaries and robust error handling."""
         mp3_path = wav_out.replace(".wav", ".mp3")
         marks: List[Dict[str, Any]] = []
         
         async def _run():
             audio = bytearray()
             
-            # Create communicate object with custom headers
+            # Create communicate object
             comm = edge_tts.Communicate(
                 text=text, 
                 voice=self.voice, 
                 rate=self.rate
             )
-            
-            # Inject custom User-Agent (monkey patch)
-            # This bypasses 401 errors by mimicking different browsers
-            if hasattr(comm, 'session') and comm.session:
-                comm.session.headers.update({'User-Agent': user_agent})
             
             try:
                 async for chunk in comm.stream():
@@ -236,17 +233,12 @@ class TTSHandler:
         
         return marks
     
-    def _edge_simple(self, text: str, wav_out: str, user_agent: str):
-        """Simple Edge-TTS without word boundaries + User-Agent."""
+    def _edge_simple(self, text: str, wav_out: str):
+        """Simple Edge-TTS without word boundaries."""
         mp3_path = wav_out.replace(".wav", ".mp3")
         
         async def _run():
             comm = edge_tts.Communicate(text, voice=self.voice, rate=self.rate)
-            
-            # Inject User-Agent
-            if hasattr(comm, 'session') and comm.session:
-                comm.session.headers.update({'User-Agent': user_agent})
-            
             await comm.save(mp3_path)
         
         try:
