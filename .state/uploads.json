@@ -1792,11 +1792,19 @@
     "ts": "2025-10-20T16:57:11.132638"
   },
   {
-    "channel": "TrailScape 60",
-    "entity": "lake",
-    "content_hash": "4c9f389ca52eb97e1ba15d0794d1add85c3fbad8",
-    "title": "60 Things About Beautiful That'll Blow Your Mind 💡",
-    "video_path": "out/TrailScape 60_Beautiful_Trails_Landmarks_in_60s_20251020_170819.mp4",
-    "ts": "2025-10-20T17:08:22.882083"
+    "channel": "Weather Window 60",
+    "entity": "pov",
+    "content_hash": "a461b865f4e0fc1be116dcafafb5121f9723d23c",
+    "title": "What if pov: a massive shelf cloud races towards you 😱",
+    "video_path": "out/Weather Window 60_Fast_Visual_Weather_Explanations_20251020_170507.mp4",
+    "ts": "2025-10-20T17:05:10.262492"
+  },
+  {
+    "channel": "Timelapse Lab",
+    "entity": "north",
+    "content_hash": "5a9eae728eb01a077eb03dd194783eac4e93d76f",
+    "title": "Nobody knows why stars draw perfect circles in 💡",
+    "video_path": "out/Timelapse Lab_Visual_Science_Through_Time_20251020_171156.mp4",
+    "ts": "2025-10-20T17:11:59.293919"
   }
 ]
