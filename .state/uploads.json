@@ -1984,19 +1984,11 @@
     "ts": "2025-10-21T13:29:03.847914"
   },
   {
-    "channel": "World Briefing",
-    "entity": "nobody",
-    "content_hash": "efff76e155d7985a2d40133e9ac8be115ed91d22",
-    "title": "What if nobody truly sees global news movement... until now 🤯",
-    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251021_162442.mp4",
-    "ts": "2025-10-21T16:24:44.115876"
-  },
-  {
-    "channel": "GalacticUpdate",
-    "entity": "know",
-    "content_hash": "63ec5180d0e8ea94d4f7b59c1d133b43ec6a7e7a",
-    "title": "Nobody knows why black holes devour light... until ✨",
-    "video_path": "out/GalacticUpdate_Latest_Space_Discoveries_Cosmic_News_20251021_163249.mp4",
-    "ts": "2025-10-21T16:32:52.891005"
+    "channel": "Universe Jumper",
+    "entity": "knight",
+    "content_hash": "92416eed325d8b98a7a98f7bb5a194d064ab36d4",
+    "title": "What if a knight appeared in deep space ⚡",
+    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251021_162937.mp4",
+    "ts": "2025-10-21T16:29:40.397020"
   }
 ]
