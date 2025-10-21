@@ -206,7 +206,7 @@ class CaptionRenderer:
         # If total exceeds target by >0.5%, scale DOWN
         if current_total > total_duration * 1.005:
             scale = total_duration / current_total
-            logger.debug(f"      📏 Scaling DOWN: {scale:.3f}x (prevent overflow)")
+            logger.info(f"      📏 Scaling DOWN: {scale:.3f}x (prevent overflow)")
             fixed = [
                 (w, max(self.MIN_WORD_DURATION, round(d * scale, 3)))
                 for w, d in fixed
@@ -238,7 +238,7 @@ class CaptionRenderer:
         # Validation log
         validated_total = sum(d for _, d in fixed)
         diff_ms = abs(validated_total - total_duration) * 1000
-        logger.debug(f"      ✅ Validated: {validated_total:.3f}s (target: {total_duration:.3f}s, diff: {diff_ms:.1f}ms)")
+        logger.info(f"      ✅ Validated: {validated_total:.3f}s (target: {total_duration:.3f}s, diff: {diff_ms:.1f}ms)")
         
         return fixed
     
@@ -350,7 +350,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if diff_ms > 10:
             logger.warning(f"      ⚠️ ASS timing diff: {diff_ms:.1f}ms")
         else:
-            logger.debug(f"      ✅ ASS timing exact: {cumulative_time:.3f}s")
+            logger.info(f"      ✅ ASS timing exact: {cumulative_time:.3f}s")
         
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
