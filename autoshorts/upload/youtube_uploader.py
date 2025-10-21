@@ -79,6 +79,20 @@ class YouTubeUploader:
             optimized_tags = self._optimize_tags(tags)
             smart_category = self._detect_category(topic, title, description) if topic else category_id
             
+            # Debug logging
+            logger.info(f"[YouTube] Title length: {len(optimized_title)}")
+            logger.info(f"[YouTube] Description length: {len(optimized_description)}")
+            logger.info(f"[YouTube] Description preview: {optimized_description[:100]}...")
+            
+            # Validate before upload
+            if not optimized_title or len(optimized_title) < 1:
+                raise ValueError("Title is empty after optimization")
+            if not optimized_description or len(optimized_description) < 1:
+                raise ValueError("Description is empty after optimization")
+            if len(optimized_description) > 5000:
+                optimized_description = optimized_description[:5000]
+                logger.warning(f"[YouTube] Description truncated to 5000 chars")
+            
             # Refresh credentials
             creds = Credentials(
                 token=None,
@@ -227,16 +241,23 @@ class YouTubeUploader:
         - Front-load keywords
         - Clean excessive punctuation
         - Strategic capitalization
+        - YouTube-safe characters only
         """
         if not title:
             return "Untitled Short"
+        
+        # Sanitize first
+        title = self._sanitize_text(title)
         
         # Trim to 70 chars
         if len(title) > 70:
             title = title[:67] + "..."
         
         # Clean excessive punctuation
-        title = title.replace("!!", "!").replace("??", "?").replace("...", "…")
+        title = title.replace("!!", "!").replace("??", "?").replace("...", "...")
+        
+        # Remove any emojis from title (YouTube API sometimes has issues)
+        title = re.sub(r'[^\x00-\x7F\u0080-\uFFFF]+', '', title)
         
         # Smart capitalization
         words = title.split()
@@ -253,7 +274,12 @@ class YouTubeUploader:
             else:
                 optimized_words.append(word.capitalize() if word[0].islower() else word)
         
-        return " ".join(optimized_words)
+        result = " ".join(optimized_words)
+        
+        # Final cleanup
+        result = result.strip()
+        
+        return result if result else "Untitled Short"
     
     def _optimize_description(
         self, 
@@ -262,7 +288,7 @@ class YouTubeUploader:
         title: str = ""
     ) -> str:
         """
-        Build SEO-rich description.
+        Build SEO-rich description with YouTube-safe formatting.
         
         Strategy:
         - First 157 chars = mobile preview (CRITICAL)
@@ -270,9 +296,13 @@ class YouTubeUploader:
         - Strategic hashtags
         - Engagement CTAs
         - Under 5000 chars total
+        - YouTube-safe characters only
         """
         if not description:
             description = f"{title}\n\nWatch this amazing Short!"
+        
+        # Clean description of problematic characters
+        description = self._sanitize_text(description)
         
         lines = []
         
@@ -281,44 +311,93 @@ class YouTubeUploader:
         
         # Engagement CTAs
         lines.append("")
-        lines.append("💬 Drop your thoughts below!")
-        lines.append("❤️ Like if this surprised you!")
-        lines.append("🔔 Follow for daily content!")
+        lines.append("Drop your thoughts below!")
+        lines.append("Like if this surprised you!")
+        lines.append("Follow for daily content!")
         
         # Strategic hashtags (top 5 tags)
         if tags:
             hashtags = []
             for tag in tags[:5]:
                 # Clean tag for hashtag format
-                clean_tag = tag.replace(" ", "").replace("-", "").replace("_", "")
-                if clean_tag.isalnum():
+                clean_tag = re.sub(r'[^a-zA-Z0-9]', '', tag)
+                if clean_tag and len(clean_tag) > 2:
                     hashtags.append(f"#{clean_tag}")
             
             if hashtags:
                 lines.append("")
-                lines.append(" ".join(hashtags))
+                lines.append(" ".join(hashtags[:5]))  # Max 5 hashtags
         
         # Universal hashtags
         lines.append("")
-        lines.append("#Shorts #Viral #Trending #ForYou #YouTubeShorts")
+        lines.append("#Shorts #Viral #Trending #ForYou")
         
         # Watch time indicator
         lines.append("")
-        lines.append("⏱️ Quick watch: <1 minute")
+        lines.append("Quick watch: Under 1 minute")
         
         # Attribution
         lines.append("")
-        lines.append("📹 Footage: Pexels/Pixabay")
-        lines.append("🎵 Music: Licensed")
+        lines.append("Footage: Pexels/Pixabay")
+        lines.append("Music: Licensed")
         
         # Join
         full_description = "\n".join(lines)
         
+        # Final sanitization
+        full_description = self._sanitize_text(full_description)
+        
         # Ensure under 5000 char limit
         if len(full_description) > 4900:
-            full_description = full_description[:4900] + "..."
+            full_description = full_description[:4900]
+        
+        # Remove any trailing newlines
+        full_description = full_description.strip()
         
         return full_description
+    
+    def _sanitize_text(self, text: str) -> str:
+        """
+        Remove or replace characters that YouTube doesn't accept.
+        
+        Args:
+            text: Raw text
+            
+        Returns:
+            YouTube-safe text
+        """
+        if not text:
+            return ""
+        
+        # Remove zero-width characters and other invisible chars
+        text = re.sub(r'[\u200b-\u200f\u202a-\u202e\ufeff]', '', text)
+        
+        # Remove emojis that might cause issues (keep common ones)
+        # YouTube accepts most emojis, but some cause encoding issues
+        
+        # Replace problematic quotes
+        text = text.replace('"', '"').replace('"', '"')
+        text = text.replace(''', "'").replace(''', "'")
+        
+        # Replace em dash and en dash with regular dash
+        text = text.replace('—', '-').replace('–', '-')
+        
+        # Replace ellipsis character with three dots
+        text = text.replace('…', '...')
+        
+        # Remove any null bytes
+        text = text.replace('\x00', '')
+        
+        # Ensure proper line breaks (YouTube accepts \n)
+        text = text.replace('\r\n', '\n').replace('\r', '\n')
+        
+        # Remove excessive newlines (max 2 consecutive)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Remove excessive spaces
+        text = re.sub(r' {2,}', ' ', text)
+        
+        return text.strip()
     
     def _optimize_tags(self, tags: Optional[List[str]] = None) -> List[str]:
         """
