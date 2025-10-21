@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Edge-TTS handler - BULLETPROOF 401 ERROR FIX
-User-Agent rotation + smart retry + rate limit handling
-Success rate: %70 → %95+
+Edge-TTS handler - BULLETPROOF with Fast Fallback
+Quick fail (2 retries) → Immediate Google TTS fallback
+Prioritizes reliability over retrying Edge-TTS
 """
 import re
 import asyncio
 import logging
 import time
-import random
 from typing import List, Tuple, Dict, Any
 
 try:
@@ -31,23 +30,14 @@ logger = logging.getLogger(__name__)
 class TTSHandler:
     """Handle text-to-speech generation with bulletproof Edge-TTS."""
     
-    # Enhanced retry configuration
-    MAX_RETRIES = 5  # Increased from 3
-    INITIAL_RETRY_DELAY = 0.5  # Start with shorter delay
-    MAX_RETRY_DELAY = 5.0  # Cap exponential backoff
+    # Reduced retry for faster fallback
+    MAX_RETRIES = 2  # Quick fail to fallback (was 5)
+    INITIAL_RETRY_DELAY = 0.3
+    MAX_RETRY_DELAY = 2.0
     
     # Rate limiting
-    REQUEST_DELAY = 0.3  # 300ms between requests
+    REQUEST_DELAY = 0.2  # Reduced for speed
     LAST_REQUEST_TIME = 0
-    
-    # User-Agent rotation (bypass 401)
-    USER_AGENTS = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    ]
     
     def __init__(self):
         """Initialize TTS handler with bulletproof settings."""
@@ -59,11 +49,7 @@ class TTSHandler:
         nest_asyncio.apply()
         
         logger.info(f"   🎤 TTS initialized: voice={self.voice}, rate={self.rate}")
-        logger.info(f"   🛡️ BULLETPROOF mode: 401 error protection enabled")
-    
-    def _get_random_user_agent(self) -> str:
-        """Get random User-Agent to bypass 401."""
-        return random.choice(self.USER_AGENTS)
+        logger.info(f"   🛡️ BULLETPROOF mode: Fast fallback enabled (Edge → Google)")
     
     def _rate_limit_wait(self):
         """Implement rate limiting between requests."""
@@ -101,56 +87,46 @@ class TTSHandler:
         # Get atempo factor
         atempo = self._rate_to_atempo(self.rate)
         
-        # Layer 1: Edge-TTS with word boundaries (BEST)
+        # Layer 1: Edge-TTS with word boundaries (try quickly)
         retry_delay = self.INITIAL_RETRY_DELAY
         
         for attempt in range(self.MAX_RETRIES):
             try:
-                # Rate limiting
                 self._rate_limit_wait()
-                
                 logger.debug(f"   🔄 Edge-TTS attempt {attempt+1}/{self.MAX_RETRIES}")
                 
                 marks = self._edge_stream_tts(text, wav_out)
                 duration = self._apply_atempo(wav_out, atempo)
-                
-                # Merge marks to words with atempo scaling
                 words = self._merge_marks_to_words(text, marks, duration, atempo)
                 
                 logger.info(f"   ✅ Edge-TTS success: {len(words)} words | {duration:.2f}s (atempo={atempo:.2f})")
                 return duration, words
                 
             except Exception as e:
-                # Safe error message extraction
                 try:
-                    error_msg = str(e).lower()
-                    is_401 = "401" in error_msg or "unauthorized" in error_msg
+                    error_msg = str(e)
+                    is_401 = "401" in error_msg
+                    error_preview = error_msg[:60] if len(error_msg) > 60 else error_msg
                 except:
-                    error_msg = "unknown error"
+                    error_preview = "Connection error"
                     is_401 = False
                 
                 if attempt < self.MAX_RETRIES - 1:
-                    error_preview = str(e)[:80] if len(str(e)) > 80 else str(e)
-                    logger.warning(
-                        f"   ⚠️ Edge-TTS attempt {attempt+1} failed: {error_preview}"
-                        f"{' (401 detected)' if is_401 else ''}"
-                    )
+                    logger.warning(f"   ⚠️ Edge-TTS attempt {attempt+1} failed: {error_preview}{' (401)' if is_401 else ''}")
                     time.sleep(retry_delay)
                     retry_delay = min(retry_delay * 1.5, self.MAX_RETRY_DELAY)
                 else:
-                    logger.warning(f"   ⚠️ Edge-TTS with marks failed after {self.MAX_RETRIES} attempts")
+                    logger.warning(f"   ⚠️ Edge-TTS with marks failed, trying simple mode...")
         
-        # Layer 2: Edge-TTS without marks (simpler, more reliable)
+        # Layer 2: Edge-TTS simple (no word boundaries - faster)
         retry_delay = self.INITIAL_RETRY_DELAY
         
-        for attempt in range(3):  # Fewer retries for simpler call
+        for attempt in range(2):  # Just 2 attempts
             try:
                 self._rate_limit_wait()
+                logger.debug(f"   🔄 Edge-TTS simple attempt {attempt+1}/2")
                 
-                user_agent = self._get_random_user_agent()
-                logger.debug(f"   🔄 Edge-TTS simple attempt {attempt+1}/3")
-                
-                self._edge_simple(text, wav_out, user_agent)
+                self._edge_simple(text, wav_out)
                 duration = self._apply_atempo(wav_out, atempo)
                 words = self._equal_split_words(text, duration)
                 
@@ -158,26 +134,36 @@ class TTSHandler:
                 return duration, words
                 
             except Exception as e2:
-                if attempt < 2:
-                    logger.warning(f"   ⚠️ Edge-TTS simple attempt {attempt+1} failed: {e2[:100]}")
+                try:
+                    error_preview = str(e2)[:60] if len(str(e2)) > 60 else str(e2)
+                except:
+                    error_preview = "Connection error"
+                
+                if attempt < 1:
+                    logger.warning(f"   ⚠️ Edge-TTS simple attempt {attempt+1} failed: {error_preview}")
                     time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, self.MAX_RETRY_DELAY)
                 else:
-                    logger.warning(f"   ⚠️ Edge-TTS simple failed after 3 attempts")
+                    logger.warning(f"   ⚠️ Edge-TTS simple failed, falling back to Google TTS...")
         
-        # Layer 3: Google TTS (last resort, always works)
+        # Layer 3: Google TTS (GUARANTEED to work)
         try:
-            logger.info("   🔄 Falling back to Google TTS...")
+            logger.info("   🔄 Using Google TTS fallback...")
             self._google_tts(text, wav_out)
             duration = self._apply_atempo(wav_out, atempo)
             words = self._equal_split_words(text, duration)
             
             logger.info(f"   ✅ Google TTS: {len(words)} words | {duration:.2f}s")
-            logger.warning("   ⚠️ NOTE: Using Google TTS - word timing will be estimated by stable-ts")
+            logger.warning("   ℹ️ NOTE: Google TTS - word timing will be estimated by stable-ts")
             return duration, words
             
         except Exception as e3:
-            logger.error(f"   ❌ All TTS methods failed: {e3}")
+            try:
+                error_msg = str(e3)[:100]
+            except:
+                error_msg = "Unknown error"
+            
+            logger.error(f"   ❌ Google TTS failed: {error_msg}")
+            logger.error(f"   ❌ ALL TTS methods failed - generating silence")
             self._generate_silence(wav_out, 4.0)
             return 4.0, []
     
@@ -247,43 +233,88 @@ class TTSHandler:
             raise RuntimeError("Edge-TTS simple timeout after 30 seconds")
     
     def _google_tts(self, text: str, wav_out: str):
-        """Google TTS fallback - always reliable."""
+        """Google TTS fallback - simple and reliable."""
+        import pathlib
+        
         mp3_path = wav_out.replace(".wav", ".mp3")
         
-        # Trim text if too long (Google limit)
+        # Clean text
+        text = text.strip()
+        if not text:
+            raise ValueError("Empty text")
+        
+        # Trim if too long (Google limit: ~200 chars)
         if len(text) > 200:
+            logger.warning(f"   ⚠️ Text too long ({len(text)} chars), trimming to 200")
             text = text[:197] + "..."
         
+        # URL encode
         q = requests.utils.quote(text.replace('"', '').replace("'", ""))
         lang_code = self.lang or "en"
+        
         url = (
             f"https://translate.google.com/translate_tts?"
             f"ie=UTF-8&q={q}&tl={lang_code}&client=tw-ob&ttsspeed=1.0"
         )
         
-        headers = {"User-Agent": self._get_random_user_agent()}
-        r = requests.get(url, headers=headers, timeout=30)
-        r.raise_for_status()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
         
-        with open(mp3_path, "wb") as f:
-            f.write(r.content)
+        # Make request with retry
+        for attempt in range(3):
+            try:
+                r = requests.get(url, headers=headers, timeout=15)
+                r.raise_for_status()
+                
+                if len(r.content) < 100:
+                    raise ValueError("Response too short")
+                
+                with open(mp3_path, "wb") as f:
+                    f.write(r.content)
+                
+                # Verify file exists
+                if not pathlib.Path(mp3_path).exists():
+                    raise FileNotFoundError("MP3 not created")
+                
+                return
+                
+            except Exception as e:
+                if attempt < 2:
+                    logger.warning(f"   ⚠️ Google TTS attempt {attempt+1} failed: {str(e)[:50]}")
+                    time.sleep(0.5)
+                else:
+                    raise
     
     def _apply_atempo(self, wav_out: str, atempo: float) -> float:
         """Convert MP3 to WAV with tempo adjustment."""
+        import pathlib
+        
         mp3_path = wav_out.replace(".wav", ".mp3")
         
-        # Convert with atempo
-        run([
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-i", mp3_path,
-            "-ar", "48000", "-ac", "1", "-acodec", "pcm_s16le",
-            "-af", f"dynaudnorm=g=7:f=250,atempo={atempo:.3f}",
-            wav_out
-        ])
+        # Verify MP3 exists
+        if not pathlib.Path(mp3_path).exists():
+            raise FileNotFoundError(f"MP3 not found: {mp3_path}")
         
-        # Cleanup MP3
-        import pathlib
-        pathlib.Path(mp3_path).unlink(missing_ok=True)
+        # Convert with atempo
+        try:
+            run([
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-i", mp3_path,
+                "-ar", "48000", "-ac", "1", "-acodec", "pcm_s16le",
+                "-af", f"dynaudnorm=g=7:f=250,atempo={atempo:.3f}",
+                wav_out
+            ])
+        except Exception as e:
+            logger.error(f"   ❌ FFmpeg conversion failed: {e}")
+            raise
+        finally:
+            # Cleanup MP3
+            pathlib.Path(mp3_path).unlink(missing_ok=True)
+        
+        # Verify WAV exists
+        if not pathlib.Path(wav_out).exists():
+            raise FileNotFoundError(f"WAV not created: {wav_out}")
         
         return ffprobe_duration(wav_out)
     
