@@ -338,23 +338,34 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if start >= end:
                     break
             
-            # NO FADE for perfect sync!
-            effect_tags = ""  # No effects at all!
-            
+            # Convert to ASS time strings
             start_str = self._ass_time(start)
             end_str = self._ass_time(end)
             
+            # CRITICAL: Calculate ACTUAL ASS duration after centisecond rounding
+            ass_start = self._ass_to_seconds(start_str)
+            ass_end = self._ass_to_seconds(end_str)
+            actual_ass_duration = ass_end - ass_start
+            
+            # Log if there's centisecond rounding difference
+            diff_ms = abs(chunk_duration - actual_ass_duration) * 1000
+            if diff_ms > 1.0:
+                logger.info(f"      🎯 Chunk {chunk_idx+1} ASS rounding: {diff_ms:.1f}ms diff")
+            
+            # NO EFFECTS for perfect sync!
+            effect_tags = ""
+            
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
-            # Update cumulative - use ACTUAL end time to prevent drift accumulation
-            cumulative_time = end
+            # Update cumulative - use ACTUAL ASS end time to prevent centisecond drift!
+            cumulative_time = ass_end
         
-        # Validation
+        # Validation - cumulative_time now reflects ACTUAL ASS timing
         diff_ms = abs(cumulative_time - total_duration) * 1000
         if diff_ms > 10:
-            logger.warning(f"      ⚠️ ASS timing diff: {diff_ms:.1f}ms")
+            logger.warning(f"      ⚠️ ASS cumulative drift: {diff_ms:.1f}ms")
         else:
-            logger.info(f"      ✅ ASS timing exact: {cumulative_time:.3f}s")
+            logger.info(f"      ✅ ASS cumulative exact: {cumulative_time:.3f}s (drift: {diff_ms:.1f}ms)")
         
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
@@ -458,3 +469,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         cs %= 100
         
         return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+    
+    def _ass_to_seconds(self, ass_time: str) -> float:
+        """
+        Convert ASS time string back to seconds.
+        
+        CRITICAL: This gives us the ACTUAL timing after centisecond rounding,
+        allowing us to track cumulative time without drift.
+        """
+        # Parse "h:mm:ss.cc" format
+        parts = ass_time.split(':')
+        h = int(parts[0])
+        m = int(parts[1])
+        s_and_cs = parts[2].split('.')
+        s = int(s_and_cs[0])
+        cs = int(s_and_cs[1]) if len(s_and_cs) > 1 else 0
+        
+        # Convert to seconds (centisecond precision)
+        total_seconds = h * 3600 + m * 60 + s + cs * 0.01
+        
+        return total_seconds
