@@ -338,34 +338,42 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if start >= end:
                     break
             
-            # Convert to ASS time strings
-            start_str = self._ass_time(start)
-            end_str = self._ass_time(end)
+            # CRITICAL: Frame-align timing for PERFECT FFmpeg sync!
+            frame_duration = 1.0 / settings.TARGET_FPS
+            start_frame = round(start / frame_duration)
+            end_frame = round(end / frame_duration)
             
-            # CRITICAL: Calculate ACTUAL ASS duration after centisecond rounding
+            # Convert back to seconds (frame-aligned)
+            start_aligned = start_frame * frame_duration
+            end_aligned = end_frame * frame_duration
+            
+            # Convert to ASS time strings
+            start_str = self._ass_time(start_aligned)
+            end_str = self._ass_time(end_aligned)
+            
+            # CRITICAL: Calculate ACTUAL ASS duration after centisecond + frame rounding
             ass_start = self._ass_to_seconds(start_str)
             ass_end = self._ass_to_seconds(end_str)
-            actual_ass_duration = ass_end - ass_start
             
-            # Log if there's centisecond rounding difference
-            diff_ms = abs(chunk_duration - actual_ass_duration) * 1000
-            if diff_ms > 1.0:
-                logger.info(f"      🎯 Chunk {chunk_idx+1} ASS rounding: {diff_ms:.1f}ms diff")
+            # Log frame alignment if significant
+            frame_shift_ms = abs(start - start_aligned) * 1000
+            if frame_shift_ms > 5.0:
+                logger.info(f"      🎬 Chunk {chunk_idx+1} frame-aligned: {frame_shift_ms:.1f}ms shift")
             
             # NO EFFECTS for perfect sync!
             effect_tags = ""
             
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
-            # Update cumulative - use ACTUAL ASS end time to prevent centisecond drift!
+            # Update cumulative - use ACTUAL ASS end time (frame-aligned!)
             cumulative_time = ass_end
         
-        # Validation - cumulative_time now reflects ACTUAL ASS timing
+        # Validation - cumulative_time now reflects ACTUAL frame-aligned ASS timing
         diff_ms = abs(cumulative_time - total_duration) * 1000
         if diff_ms > 10:
-            logger.warning(f"      ⚠️ ASS cumulative drift: {diff_ms:.1f}ms")
+            logger.warning(f"      ⚠️ Final drift: {diff_ms:.1f}ms (frame-aligned)")
         else:
-            logger.info(f"      ✅ ASS cumulative exact: {cumulative_time:.3f}s (drift: {diff_ms:.1f}ms)")
+            logger.info(f"      ✅ Frame-perfect sync: {cumulative_time:.3f}s (drift: {diff_ms:.1f}ms)")
         
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
