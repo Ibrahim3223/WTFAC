@@ -1,12 +1,13 @@
 """
-Gemini API Client for Content Generation - VIRAL OPTIMIZED
-Uses Google's official genai SDK with viral pattern templates
+Gemini API Client - TOPIC-DRIVEN VIRAL OPTIMIZATION
+No hardcoded modes - AI analyzes topic and adapts everything dynamically
 """
 
 import json
 import time
 import logging
 import random
+import re
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -28,84 +29,181 @@ class ContentResponse:
 
 
 # ============================================================================
-# VIRAL HOOK PATTERNS - Based on 100M+ view analysis
+# UNIVERSAL VIRAL HOOK FORMULAS - Work for ANY topic
 # ============================================================================
-HOOK_PATTERNS = {
-    "curiosity_gap": [
-        "WAIT— This {topic} fact changes everything you thought you knew.",
-        "You've been doing {topic} wrong your entire life. Here's why:",
-        "Scientists JUST discovered the truth about {topic}...",
-        "Everyone thinks {topic} works like this. They're all wrong.",
-        "The {topic} industry doesn't want you knowing this secret.",
-        "This {topic} discovery got banned in 3 countries. Here's what they found:",
-    ],
+HOOK_FORMULAS = [
+    # Curiosity Gap
+    "WAIT— This {topic_keyword} fact changes everything you thought you knew.",
+    "You've been wrong about {topic_keyword} your entire life. Here's why:",
+    "Scientists JUST discovered the truth about {topic_keyword}...",
+    "Everyone thinks {topic_keyword} works like this. They're ALL wrong.",
+    "This {topic_keyword} secret was hidden for decades. Until now.",
+    "97% of people don't know this about {topic_keyword}.",
     
-    "pattern_interrupt": [
-        "STOP scrolling. What you're about to see will blow your mind about {topic}.",
-        "Before you skip— this {topic} fact will haunt you forever.",
-        "POV: You finally understand why {topic} is so bizarre.",
-        "Hold up. Did you know {topic} actually does THIS?",
-        "Pause everything. This {topic} secret is insane.",
-    ],
+    # Pattern Interrupt
+    "STOP scrolling. What you're about to see will blow your mind.",
+    "Before you skip— this {topic_keyword} truth is insane.",
+    "POV: You finally understand why {topic_keyword} is so bizarre.",
+    "Hold up. Did you know {topic_keyword} actually does THIS?",
+    "Pause everything. This {topic_keyword} fact is unbelievable.",
     
-    "shocking_stat": [
-        "97% of people don't know this about {topic}. You're probably one of them.",
-        "Only 1 in 500 people have seen what {topic} actually looks like.",
-        "This {topic} happens every 3 seconds. Yet nobody talks about it.",
-        "Experts say {topic} will change within 5 years. Here's how:",
-    ],
+    # Shocking Revelation
+    "In {time_period}, something happened that changed {topic_keyword} forever.",
+    "This {topic_keyword} discovery got banned in 3 countries.",
+    "Only 1 in 500 people have seen what {topic_keyword} looks like.",
+    "Nobody talks about the REAL reason behind {topic_keyword}.",
     
-    "story_hook": [
-        "In 1847, someone discovered {topic}. What happened next was insane.",
-        "There's a place where {topic} defies all logic. Let me show you.",
-        "Imagine if {topic} disappeared tomorrow. This is what would happen:",
-        "Someone tried to explain {topic}. They were called crazy. But they were right.",
-    ],
+    # Story Hook
+    "There's a place where {topic_keyword} defies all logic.",
+    "Imagine if {topic_keyword} disappeared tomorrow. This would happen:",
+    "Someone tried to explain {topic_keyword}. They were called crazy. But they were right.",
     
-    "controversial": [
-        "Unpopular opinion: Everything you know about {topic} is a lie.",
-        "I'm about to ruin {topic} for you forever. You ready?",
-        "This {topic} myth needs to die. Here's the real story:",
-        "Nobody talks about the dark side of {topic}. Until now.",
-    ]
-}
-
-# Weight distribution for A/B testing
-HOOK_PATTERN_WEIGHTS = {
-    "curiosity_gap": 0.35,
-    "pattern_interrupt": 0.25,
-    "shocking_stat": 0.20,
-    "story_hook": 0.15,
-    "controversial": 0.05
-}
-
-# ============================================================================
-# STORYTELLING ANGLES - Rotate to keep content fresh
-# ============================================================================
-STORYTELLING_ANGLES = [
-    "historical_origin",
-    "scientific_explanation",
-    "hidden_secret",
-    "future_prediction",
-    "comparison",
-    "behind_the_scenes",
-    "myth_busting",
-    "personal_impact",
-    "extreme_example"
+    # Controversy
+    "Unpopular opinion: Everything you know about {topic_keyword} is a lie.",
+    "I'm about to ruin {topic_keyword} for you forever. Ready?",
+    "This {topic_keyword} myth needs to die. Here's the truth:",
+    
+    # Urgent/Breaking
+    "This just happened with {topic_keyword}. Nobody's talking about it.",
+    "Breaking: {topic_keyword} isn't what you think anymore.",
+    
+    # Simplification
+    "The {topic_keyword} explained in 30 seconds. Watch.",
+    "This is what they don't tell you about {topic_keyword}.",
 ]
 
+
 # ============================================================================
-# EMPHASIS KEYWORDS - Auto-capitalize in script
+# UNIVERSAL CTA STRATEGIES
 # ============================================================================
-EMPHASIS_KEYWORDS = {
-    "NEVER", "ALWAYS", "SECRET", "HIDDEN", "SHOCKING", "INSANE",
-    "BANNED", "ILLEGAL", "IMPOSSIBLE", "CRAZY", "VIRAL", "BREAKING",
-    "URGENT", "WARNING", "STOP", "WAIT", "INSTANTLY", "FOREVER"
+CTA_STRATEGIES = {
+    "comment_question": [
+        "Drop a 💬 if you knew this!",
+        "Comment your reaction below!",
+        "What's your take? Comment now!",
+        "Did this surprise you? Let me know!",
+        "Have you experienced this? Share!",
+    ],
+    
+    "engagement_challenge": [
+        "Tag someone who needs to see this!",
+        "Share this if it blew your mind!",
+        "Save this before it's too late!",
+        "Screen record and repost!",
+        "Send this to your group chat!",
+    ],
+    
+    "follow_tease": [
+        "Follow for daily mind-blowing facts!",
+        "Part 2 drops tonight—follow!",
+        "More coming tomorrow. Don't miss it!",
+        "Hit follow—you'll want the next one!",
+        "Follow so you don't miss what's next!",
+    ],
+    
+    "controversy_spark": [
+        "Agree or disagree? Comment your take!",
+        "This is controversial—what do YOU think?",
+        "Hot take. Am I wrong? Comment!",
+        "Change my mind in the comments!",
+        "Unpopular opinion? You decide!",
+    ],
+    
+    "value_anchor": [
+        "Bookmark this—you'll need it later!",
+        "Save this tip before you forget!",
+        "Screenshot this for future reference!",
+        "Keep this handy for next time!",
+        "Save this—it's a game changer!",
+    ],
+    
+    "continuation": [
+        "Wait for the next part—it gets crazier!",
+        "This is just the beginning. Follow!",
+        "Part 2 is even more shocking!",
+        "The twist? That's in tomorrow's video!",
+        "You won't BELIEVE what happens next!",
+    ],
 }
+
+
+# ============================================================================
+# TOPIC ANALYZER - Extract keywords and category
+# ============================================================================
+class TopicAnalyzer:
+    """Smart topic analysis to extract themes and keywords"""
+    
+    # Category detection patterns
+    CATEGORY_PATTERNS = {
+        "education": ["facts", "learn", "explain", "teach", "science", "history", "geography", "knowledge"],
+        "entertainment": ["story", "funny", "comedy", "movie", "film", "celebrity", "drama", "imagine"],
+        "howto": ["how to", "fix", "repair", "diy", "tutorial", "guide", "tips", "tricks", "hack"],
+        "news": ["news", "update", "daily", "latest", "breaking", "current", "today", "headlines"],
+        "tech": ["tech", "ai", "robot", "future", "innovation", "gadget", "computer", "digital"],
+        "lifestyle": ["life", "habit", "wellness", "health", "fitness", "food", "cooking", "home"],
+        "travel": ["travel", "country", "place", "destination", "city", "world", "explore", "visit"],
+        "sports": ["sport", "game", "player", "team", "match", "cricket", "football", "athlete"],
+        "animals": ["animal", "wildlife", "pet", "nature", "creature", "species", "zoo"],
+        "inspiration": ["motivation", "inspire", "success", "quote", "wisdom", "life lesson"],
+    }
+    
+    @staticmethod
+    def analyze(topic: str) -> Dict[str, Any]:
+        """
+        Analyze topic and extract key information.
+        
+        Args:
+            topic: Channel topic description
+            
+        Returns:
+            Dict with category, keywords, and emotional_tone
+        """
+        topic_lower = topic.lower()
+        
+        # Detect category
+        category = "education"  # Default
+        max_matches = 0
+        
+        for cat, patterns in TopicAnalyzer.CATEGORY_PATTERNS.items():
+            matches = sum(1 for pattern in patterns if pattern in topic_lower)
+            if matches > max_matches:
+                max_matches = matches
+                category = cat
+        
+        # Extract main keywords (nouns/important words)
+        # Remove common words
+        stop_words = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", 
+                     "of", "with", "by", "from", "about", "that", "this", "these", "those"}
+        
+        words = re.findall(r'\b[a-z]+\b', topic_lower)
+        keywords = [w for w in words if len(w) > 3 and w not in stop_words]
+        
+        # Get top 3-5 most meaningful keywords
+        main_keywords = keywords[:5] if len(keywords) >= 5 else keywords
+        
+        # Detect emotional tone
+        emotional_tone = "neutral"
+        if any(word in topic_lower for word in ["horror", "scary", "dark", "creepy", "mystery"]):
+            emotional_tone = "suspenseful"
+        elif any(word in topic_lower for word in ["fun", "funny", "comedy", "humor", "joke"]):
+            emotional_tone = "playful"
+        elif any(word in topic_lower for word in ["motivat", "inspir", "success", "achieve"]):
+            emotional_tone = "inspirational"
+        elif any(word in topic_lower for word in ["breaking", "urgent", "alert", "warning"]):
+            emotional_tone = "urgent"
+        elif any(word in topic_lower for word in ["cute", "adorable", "sweet", "wholesome"]):
+            emotional_tone = "wholesome"
+        
+        return {
+            "category": category,
+            "keywords": main_keywords,
+            "emotional_tone": emotional_tone,
+            "primary_keyword": main_keywords[0] if main_keywords else "content"
+        }
 
 
 class GeminiClient:
-    """Client for Gemini API interactions with viral optimization"""
+    """Topic-driven viral content generator"""
     
     MODELS = {
         "flash": "gemini-2.5-flash",
@@ -127,19 +225,14 @@ class GeminiClient:
         if not api_key:
             raise ValueError("Gemini API key is required")
         
-        logger.info(f"[Gemini] API key provided: {api_key[:10]}...{api_key[-4:]}")
+        logger.info(f"[Gemini] API key: {api_key[:10]}...{api_key[-4:]}")
         
         self.client = genai.Client(api_key=api_key)
-        
-        if model in self.MODELS:
-            self.model = self.MODELS[model]
-        else:
-            self.model = model
-        
+        self.model = self.MODELS.get(model, model)
         self.max_retries = max_retries
         self.timeout = timeout
         
-        logger.info(f"[Gemini] Initialized with model: {self.model}")
+        logger.info(f"[Gemini] Model: {self.model}")
     
     def generate(
         self,
@@ -148,191 +241,273 @@ class GeminiClient:
         duration: int,
         additional_context: Optional[str] = None
     ) -> ContentResponse:
-        """Generate video content using Gemini with viral patterns"""
-        # Select random hook pattern based on weights
-        hook_type = random.choices(
-            list(HOOK_PATTERN_WEIGHTS.keys()),
-            weights=list(HOOK_PATTERN_WEIGHTS.values())
-        )[0]
+        """Generate content analyzing topic dynamically"""
         
-        # Select random storytelling angle
-        angle = random.choice(STORYTELLING_ANGLES)
+        # Analyze topic to understand what we're working with
+        analysis = TopicAnalyzer.analyze(topic)
         
-        logger.info(f"[Gemini] Using hook pattern: {hook_type}, angle: {angle}")
+        logger.info(f"[Gemini] Topic analysis:")
+        logger.info(f"  Category: {analysis['category']}")
+        logger.info(f"  Keywords: {analysis['keywords']}")
+        logger.info(f"  Tone: {analysis['emotional_tone']}")
         
-        prompt = self._build_viral_prompt(
-            topic, style, duration, hook_type, angle, additional_context
+        # Select random hook formula
+        hook_formula = random.choice(HOOK_FORMULAS)
+        
+        # Select random CTA strategy
+        cta_strategy = random.choice(list(CTA_STRATEGIES.keys()))
+        
+        prompt = self._build_smart_prompt(
+            topic, style, duration, analysis,
+            hook_formula, cta_strategy, additional_context
         )
         
         try:
             raw_response = self._call_api_with_retry(prompt)
             content = self._parse_response(raw_response)
             
-            # Post-process: Add emphasis to keywords
-            content = self._add_emphasis(content)
+            # Enhance metadata with topic analysis
+            content = self._enhance_metadata(content, analysis, topic)
             
-            logger.info("[Gemini] Content generated successfully")
+            logger.info("[Gemini] ✅ Content generated successfully")
             return content
             
         except Exception as e:
-            logger.error(f"[Gemini] Generation failed: {e}")
+            logger.error(f"[Gemini] ❌ Generation failed: {e}")
             raise
     
-    def _build_viral_prompt(
+    def _build_smart_prompt(
         self,
         topic: str,
         style: str,
         duration: int,
-        hook_type: str,
-        angle: str,
+        analysis: Dict[str, Any],
+        hook_formula: str,
+        cta_strategy: str,
         additional_context: Optional[str] = None
     ) -> str:
-        """Build viral-optimized generation prompt"""
+        """Build intelligent prompt based on topic analysis"""
         
-        words_per_minute = 160  # Slightly faster for better pacing
+        words_per_minute = 165
         target_words = int((duration / 60) * words_per_minute)
         
-        # Dynamic sentence counts based on duration
+        # Dynamic structure
         if duration <= 25:
-            hook_sentences = "1 SHORT sentence"
-            script_sentences = "2-3"
-            cta_words = "5-7"
+            structure = "Hook (1 sentence) + Core (2 sentences) + CTA (5-7 words)"
+            script_count = 2
         elif duration <= 35:
-            hook_sentences = "1 sentence"
-            script_sentences = "3-4"
-            cta_words = "6-8"
+            structure = "Hook (1 sentence) + Core (3 sentences) + CTA (6-8 words)"
+            script_count = 3
         else:
-            hook_sentences = "1-2 sentences"
-            script_sentences = "4-5"
-            cta_words = "7-10"
+            structure = "Hook (1 sentence) + Core (4-5 sentences) + CTA (7-10 words)"
+            script_count = 4
         
-        # Get sample hooks for inspiration
-        hook_examples = HOOK_PATTERNS.get(hook_type, HOOK_PATTERNS["curiosity_gap"])
-        sample_hooks = random.sample(hook_examples, min(2, len(hook_examples)))
-        hook_inspiration = "\n".join([f"- {h.replace('{topic}', topic)}" for h in sample_hooks])
+        # Get sample CTAs
+        cta_examples = random.sample(CTA_STRATEGIES[cta_strategy], min(2, len(CTA_STRATEGIES[cta_strategy])))
         
-        # Angle descriptions
-        angle_instructions = {
-            "historical_origin": "Focus on WHERE this came from and WHY it started",
-            "scientific_explanation": "Explain the science/mechanism in simple terms with concrete examples",
-            "hidden_secret": "Reveal something most people don't know or misunderstand",
-            "future_prediction": "Show how this will change or evolve in the near future",
-            "comparison": "Compare this to something unexpected to create new perspective",
-            "behind_the_scenes": "Show what happens behind closed doors or away from public view",
-            "myth_busting": "Destroy a common misconception with hard facts",
-            "personal_impact": "Connect directly to the viewer's daily life with 'YOU' language",
-            "extreme_example": "Use the most extreme/unusual case to make the point memorable"
-        }
+        # Build topic-specific context
+        topic_context = f"""
+TOPIC ANALYSIS:
+• Category: {analysis['category'].upper()}
+• Primary focus: {analysis['primary_keyword']}
+• Emotional tone: {analysis['emotional_tone']}
+• Key themes: {', '.join(analysis['keywords'][:3])}
+"""
         
-        angle_guide = angle_instructions.get(angle, "Tell the story in an unexpected way")
-        
-        prompt = f"""Create a VIRAL {duration}-second YouTube Short script about: {topic}
+        prompt = f"""Create a VIRAL {duration}-second YouTube Short about:
 
-VIRAL REQUIREMENTS (CRITICAL):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. HOOK PATTERN: Use "{hook_type}" style
-   Examples for inspiration:
-   {hook_inspiration}
+📋 TOPIC: {topic}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-2. STORYTELLING ANGLE: {angle}
-   → {angle_guide}
+{topic_context}
 
-3. FIRST 3 SECONDS RULE:
-   - Hook must be {hook_sentences} MAX
-   - Must create immediate curiosity gap
-   - Use concrete numbers, names, or shocking facts
-   - NO generic phrases like "today we'll explore" or "let me tell you"
-   
-4. SCRIPT STRUCTURE ({script_sentences} sentences):
-   - Each sentence = ONE complete thought
-   - Every sentence should have visual potential (describable in stock footage)
-   - Build tension → payoff → resolution
-   - Use "YOU" language to connect with viewer
-   
-5. PACING:
-   - Vary sentence length: short (3-5 words) → medium (6-10 words) → short
-   - Never repeat similar sentence structures
-   - Keep momentum building
-   
-6. CTA (Call to Action - {cta_words} words MAX):
-   - Natural, conversational tone
-   - Ask for ONE action only (comment/like/follow)
-   - Tie back to the content theme
-   
-7. VISUAL FOCUS:
-   - main_visual_focus must be 2-4 words for stock video search
-   - Use GENERIC, COMMON terms that exist in Pexels/Pixabay
-   - Think: "What footage is actually available?"
-   - Good: "tropical fish", "city skyline", "desert landscape"
-   - Bad: "archerfish", "hoopoe bird", "specific building"
-   - When topic is rare: use broader category
-     * Rare animal → "wildlife closeup" or habitat type
-     * Specific person → their field/activity
-     * Obscure place → region/landscape type
+🎯 VIRAL FORMULA:
 
-CONTENT RULES:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Target word count: ~{target_words} words total
-- NO filler words: "basically", "actually", "literally", "you know"
-- NO clickbait that the content doesn't deliver
-- Use POWER WORDS: never, always, only, secret, hidden, instant, shocking
-- Include at least ONE number/statistic if relevant
-- Style: {style}
+1. HOOK (First 3 seconds - MAKE IT IMPOSSIBLE TO SCROLL):
+   Use this formula: "{hook_formula}"
+   
+   Replace {{topic_keyword}} with the most attention-grabbing word from the topic.
+   Replace {{time_period}} with specific dates if relevant.
+   
+   Hook MUST:
+   ✓ Stop scrolling in 1 second
+   ✓ Use POWER WORDS: WAIT, STOP, NEVER, SECRET, SHOCKING
+   ✓ Create immediate curiosity gap
+   ✓ Include specific number/name/place if possible
+   ✗ NO generic phrases ("today we'll explore")
+   ✗ NO boring starts
+
+2. SCRIPT ({script_count} sentences - BUILD THE STORY):
+   Structure: {structure}
+   
+   Each sentence MUST:
+   ✓ Be ONE complete thought (6-15 words)
+   ✓ Have visual potential (can find stock footage)
+   ✓ Build: tension → insight → payoff
+   ✓ Use "YOU" language to connect
+   ✓ Include specific details (numbers, names, facts)
+   
+   Variety is KEY:
+   • Mix short (4-6 words) with medium (8-12 words)
+   • Never repeat sentence structures
+   • Keep momentum building
+   • Each sentence reveals NEW information
+
+3. CTA (Call to Action - {cta_strategy} strategy):
+   Examples from this strategy:
+   {chr(10).join(f"   • {ex}" for ex in cta_examples)}
+   
+   Your CTA MUST:
+   ✓ Be natural and conversational
+   ✓ Tie directly to the content
+   ✓ Ask for ONE clear action
+   ✗ NOT generic "like and subscribe"
+
+4. VISUAL STRATEGY:
+   main_visual_focus: 2-4 words for PRIMARY stock footage
+   • Use GENERIC, COMMON terms that exist in Pexels/Pixabay
+   • Think: "What footage is ACTUALLY available?"
+   • Examples: "ocean waves", "city skyline", "forest path"
+   • NOT: "specific landmark", "rare animal", "unique person"
+   
+   search_queries: {script_count + 1} specific shots
+   • Each = noun phrase describing one visual
+   • Variety: wide shots, close-ups, action, beauty
+   • Must support narrative flow
+
+5. PACING & QUALITY:
+   • Target: ~{target_words} words total
+   • Style: {style}
+   • Emotional tone: {analysis['emotional_tone']}
+   • NO filler words: "basically", "actually", "literally"
+   • USE power words naturally: never, always, only, secret
+   • Include at least ONE statistic/number if relevant
+
+6. SEO OPTIMIZATION:
+   title: 
+   • 40-60 characters
+   • Front-load main keyword
+   • Create curiosity gap
+   • Format: "[Hook Element] | [Keyword]" OR "[Number] [Topic] [Benefit]"
+   
+   description:
+   • First 100 chars = mobile preview (CRITICAL)
+   • Expand on hook, create urgency
+   • Natural keyword inclusion
+   • End with question or CTA
+   
+   tags:
+   • 5 strategic tags:
+     * 1 viral broad term
+     * 2-3 niche specific terms  
+     * 1 long-tail phrase
+   • Based on topic category: {analysis['category']}
+   • Include year: 2025
 
 {additional_context or ''}
 
-OUTPUT FORMAT (valid JSON only - NO MARKDOWN):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT (VALID JSON ONLY - NO MARKDOWN):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 {{
-    "hook": "One sentence that stops the scroll (use {hook_type} pattern)",
+    "hook": "One powerful sentence using the formula above",
     "script": [
-        "First sentence (builds on hook)",
-        "Second sentence (adds detail/evidence)",
-        "Third sentence (delivers payoff or next layer)"
+        "First sentence building on hook",
+        "Second sentence adding evidence/detail",
+        "Third sentence delivering insight/payoff"
     ],
-    "cta": "Short, natural call to action ({cta_words} words)",
-    "main_visual_focus": "2-4 word search term for ALL video clips",
+    "cta": "Natural action call using {cta_strategy} (6-9 words)",
+    "main_visual_focus": "2-4 word generic search term",
     "search_queries": [
-        "specific scene 1 (noun phrase)",
-        "specific scene 2 (noun phrase)",
-        "specific scene 3 (noun phrase)"
+        "wide establishing shot",
+        "medium action shot",
+        "close up detail",
+        "beauty transition shot"
     ],
     "metadata": {{
-        "title": "Attention-grabbing title (40-50 chars, NO CLICKBAIT)",
-        "description": "Hook viewer to watch (90-100 chars)",
-        "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+        "title": "40-60 char SEO-optimized title with hook element",
+        "description": "100 char mobile-optimized description expanding the hook",
+        "tags": ["viral_term", "niche_keyword", "specific_phrase", "category_tag", "2025"]
     }}
 }}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRITICAL:
-- Return ONLY valid JSON
-- NO markdown code blocks (```json)
-- NO explanations before or after
-- Complete ALL fields before ending response
-- Make it IMPOSSIBLE to scroll past
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Return ONLY valid JSON (no ```json blocks)
+✓ Complete ALL fields
+✓ Make it IMPOSSIBLE to scroll past
+✓ Every word must EARN its place
+✓ Optimize for WATCH TIME + ENGAGEMENT
+✓ Be SPECIFIC, not generic
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
         
         return prompt
     
-    def _add_emphasis(self, content: ContentResponse) -> ContentResponse:
-        """Add emphasis to power keywords in script"""
-        emphasized_script = []
+    def _enhance_metadata(
+        self, 
+        content: ContentResponse,
+        analysis: Dict[str, Any],
+        topic: str
+    ) -> ContentResponse:
+        """Enhance metadata with smart topic analysis"""
         
-        for sentence in content.script:
-            words = sentence.split()
-            emphasized_words = []
-            
-            for word in words:
-                word_upper = word.upper().strip(".,!?")
-                if word_upper in EMPHASIS_KEYWORDS:
-                    # Capitalize the keyword
-                    emphasized_words.append(word_upper)
-                else:
-                    emphasized_words.append(word)
-            
-            emphasized_script.append(" ".join(emphasized_words))
+        # Smart tag selection based on category
+        category_tags = {
+            "education": ["educational", "learn", "knowledge", "facts", "didyouknow"],
+            "entertainment": ["entertainment", "fun", "interesting", "story", "amazing"],
+            "howto": ["diy", "howto", "tutorial", "tips", "lifehacks"],
+            "news": ["news", "update", "breaking", "latest", "current"],
+            "tech": ["tech", "technology", "ai", "innovation", "future"],
+            "lifestyle": ["lifestyle", "wellness", "health", "habits", "daily"],
+            "travel": ["travel", "explore", "world", "adventure", "destination"],
+            "sports": ["sports", "athletic", "game", "player", "highlights"],
+            "animals": ["animals", "wildlife", "nature", "pets", "creatures"],
+            "inspiration": ["motivation", "inspiration", "success", "mindset", "goals"],
+        }
         
-        content.script = emphasized_script
+        # Get category-specific tags
+        category = analysis.get("category", "education")
+        specific_tags = category_tags.get(category, ["interesting", "amazing"])
+        
+        # Build strategic tag list
+        strategic_tags = []
+        
+        # Add Gemini-generated tags (keep them)
+        if "tags" in content.metadata:
+            strategic_tags.extend(content.metadata["tags"][:5])
+        
+        # Add viral base tags
+        viral_tags = ["shorts", "viral", "trending", "fyp", "youtube shorts"]
+        strategic_tags.extend(random.sample(viral_tags, 2))
+        
+        # Add category-specific tags
+        strategic_tags.extend(random.sample(specific_tags, 2))
+        
+        # Add topic keywords as tags
+        for keyword in analysis.get("keywords", [])[:2]:
+            if len(keyword) > 3:
+                strategic_tags.append(keyword)
+        
+        # Add year
+        strategic_tags.append("2025")
+        
+        # Deduplicate and limit
+        strategic_tags = list(dict.fromkeys(strategic_tags))[:20]
+        
+        content.metadata["tags"] = strategic_tags
+        
+        # Ensure description has hashtags
+        if "description" in content.metadata:
+            desc = content.metadata["description"]
+            if "#" not in desc:
+                # Add relevant hashtags
+                hashtags = [f"#{tag.replace(' ', '')}" for tag in strategic_tags[:3]]
+                desc += f"\n\n{' '.join(hashtags)}"
+                content.metadata["description"] = desc
+        
         return content
     
     def _call_api_with_retry(self, prompt: str) -> str:
@@ -357,14 +532,12 @@ CRITICAL:
         raise last_error
     
     def _call_api(self, prompt: str) -> str:
-        """Make actual API call using official SDK"""
+        """Make API call"""
         try:
-            logger.info(f"[Gemini] Making API call with model: {self.model}")
-            
             config = types.GenerateContentConfig(
-                temperature=0.95,  # Increased for more creativity
-                top_k=50,  # Increased for more variety
-                top_p=0.97,  # Slightly higher for better diversity
+                temperature=0.92,
+                top_k=60,
+                top_p=0.95,
                 max_output_tokens=4096,
                 safety_settings=[
                     types.SafetySetting(
@@ -393,19 +566,19 @@ CRITICAL:
             )
             
             if response.text:
-                logger.info(f"[Gemini] ✅ API call successful")
+                logger.info("[Gemini] ✅ API successful")
                 return response.text
             
-            raise RuntimeError(f"Empty response from Gemini API")
+            raise RuntimeError("Empty response")
             
         except Exception as e:
-            logger.error(f"[Gemini] ❌ API call failed with model {self.model}: {e}")
-            raise RuntimeError(f"Gemini API call failed: {e}")
+            logger.error(f"[Gemini] ❌ API failed: {e}")
+            raise
     
     def _parse_response(self, raw_text: str) -> ContentResponse:
-        """Parse API response into structured content"""
+        """Parse response"""
         try:
-            # Clean the response
+            # Clean
             cleaned = raw_text.strip()
             if cleaned.startswith("```json"):
                 cleaned = cleaned[7:]
@@ -415,35 +588,35 @@ CRITICAL:
                 cleaned = cleaned[:-3]
             cleaned = cleaned.strip()
             
+            # Fix incomplete JSON
             if not cleaned.endswith("}"):
-                logger.warning("[Gemini] Response appears incomplete, attempting to fix...")
+                logger.warning("[Gemini] Fixing incomplete JSON...")
                 cleaned = self._fix_incomplete_json(cleaned)
             
             data = json.loads(cleaned)
             
-            # Validate required fields
+            # Validate
             required = ["hook", "script", "cta", "search_queries"]
             missing = [f for f in required if f not in data]
             if missing:
-                raise ValueError(f"Missing required fields: {missing}")
+                raise ValueError(f"Missing: {missing}")
             
-            # Handle main_visual_focus
+            # Ensure main_visual_focus
             if "main_visual_focus" not in data:
-                data["main_visual_focus"] = data["search_queries"][0] if data["search_queries"] else "nature"
-                logger.warning(f"[Gemini] main_visual_focus missing, using fallback: {data['main_visual_focus']}")
+                data["main_visual_focus"] = data["search_queries"][0] if data["search_queries"] else "nature landscape"
             
             # Validate types
             if not isinstance(data["script"], list):
-                raise ValueError("script must be a list")
+                raise ValueError("script must be list")
             if not isinstance(data["search_queries"], list):
-                raise ValueError("search_queries must be a list")
+                raise ValueError("search_queries must be list")
             
-            # Ensure metadata exists
+            # Ensure metadata
             if "metadata" not in data:
                 data["metadata"] = {
-                    "title": f"Amazing {data.get('hook', 'Video')[:40]}",
-                    "description": "Check out this amazing short!",
-                    "tags": ["shorts", "viral", "trending"]
+                    "title": f"{data['hook'][:50]}...",
+                    "description": f"{data['hook']} Watch to learn more!",
+                    "tags": ["shorts", "viral", "trending", "amazing", "2025"]
                 }
             
             return ContentResponse(
@@ -456,15 +629,15 @@ CRITICAL:
             )
             
         except json.JSONDecodeError as e:
-            logger.error(f"[Gemini] JSON parse error: {e}")
-            logger.error(f"[Gemini] Raw response: {raw_text[:500]}")
-            raise RuntimeError(f"Failed to parse Gemini response as JSON: {e}")
+            logger.error(f"[Gemini] JSON error: {e}")
+            logger.error(f"[Gemini] Raw: {raw_text[:500]}")
+            raise RuntimeError(f"Parse failed: {e}")
         except (KeyError, ValueError) as e:
-            logger.error(f"[Gemini] Content validation error: {e}")
-            raise RuntimeError(f"Invalid content structure: {e}")
+            logger.error(f"[Gemini] Validation error: {e}")
+            raise RuntimeError(f"Invalid structure: {e}")
     
     def _fix_incomplete_json(self, text: str) -> str:
-        """Try to fix incomplete JSON"""
+        """Fix incomplete JSON"""
         open_braces = text.count("{") - text.count("}")
         open_brackets = text.count("[") - text.count("]")
         
@@ -475,26 +648,21 @@ CRITICAL:
         text += "]" * open_brackets
         text += "}" * open_braces
         
-        logger.info(f"[Gemini] Fixed JSON by adding {open_braces} braces and {open_brackets} brackets")
         return text
     
     def test_connection(self) -> bool:
-        """Test API connection"""
+        """Test connection"""
         try:
-            logger.info("[Gemini] Testing API connection...")
-            
             response = self.client.models.generate_content(
                 model=self.model,
-                contents="Say 'Hello' in JSON format: {\"message\": \"Hello\"}"
+                contents='Say "OK" in JSON: {"status": "OK"}'
             )
             
             if response.text:
-                logger.info("[Gemini] ✅ API connection successful")
+                logger.info("[Gemini] ✅ Connection OK")
                 return True
-            
-            logger.error("[Gemini] ❌ Empty response from API")
             return False
             
         except Exception as e:
-            logger.error(f"[Gemini] ❌ API connection failed: {e}")
+            logger.error(f"[Gemini] ❌ Connection failed: {e}")
             return False
