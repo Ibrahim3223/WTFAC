@@ -107,11 +107,12 @@ class ForcedAligner:
         lang = language or self.language
         
         # Strategy 1: Edge-TTS word timings (BEST if available - from TTS engine)
-        if tts_word_timings:
+        if tts_word_timings and len(tts_word_timings) > 0:
             logger.debug(f"      ✅ Using Edge-TTS word timings: {len(tts_word_timings)} words")
             return self._validate_timings(tts_word_timings, total_duration)
         
         # Strategy 2: stable-ts FORCED ALIGNMENT (EXCELLENT - %99 accuracy with known text!)
+        # This is triggered when Google TTS or Edge-TTS simple is used
         if _STABLE_TS_AVAILABLE and os.path.exists(audio_path):
             try:
                 logger.debug(f"      🎯 stable-ts FORCED ALIGNMENT: {audio_path} (lang: {lang.upper()})")
@@ -123,6 +124,11 @@ class ForcedAligner:
                     return words
             except Exception as e:
                 logger.warning(f"      ⚠️ stable-ts failed: {e}")
+                logger.debug(f"      ℹ️ Falling back to estimation")
+        else:
+            if not _STABLE_TS_AVAILABLE:
+                logger.warning(f"      ⚠️ stable-ts not available - install: pip install stable-ts")
+            logger.debug(f"      ℹ️ Using estimation (no forced alignment)")
         
         # Strategy 3: Smart estimation (FALLBACK - %80 accuracy)
         if total_duration:
