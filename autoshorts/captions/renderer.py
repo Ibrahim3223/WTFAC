@@ -316,19 +316,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         max_words = 2 if is_hook else self.WORDS_PER_CHUNK
         chunks = self._create_chunks(words, max_words)
         
-        # CRITICAL: Exact cumulative timing
+        # CRITICAL: CHUNK-LEVEL VALIDATION (prevents intra-segment drift!)
+        chunks = self._validate_chunks(chunks, total_duration)
+        
+        # CRITICAL: Exact cumulative timing with CHUNK-LEVEL validation
         cumulative_time = 0.0
         
-        for i, chunk in enumerate(chunks):
+        for chunk_idx, chunk in enumerate(chunks):
             chunk_text = " ".join(w.upper() for w, _ in chunk)
+            
+            # Calculate exact chunk duration from word timings
             chunk_duration = sum(d for _, d in chunk)
             
             # EXACT start/end
             start = cumulative_time
             end = start + chunk_duration
             
-            # Don't exceed total
-            if end > total_duration:
+            # Don't exceed total (safety check)
+            if end > total_duration + 0.001:  # Allow 1ms tolerance
                 end = total_duration
                 if start >= end:
                     break
@@ -342,8 +347,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
             
-            # Update cumulative with EXACT duration
-            cumulative_time += chunk_duration
+            # Update cumulative - use ACTUAL end time to prevent drift accumulation
+            cumulative_time = end
         
         # Validation
         diff_ms = abs(cumulative_time - total_duration) * 1000
@@ -385,10 +390,67 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         return chunks
     
+    def _validate_chunks(
+        self,
+        chunks: List[List[Tuple[str, float]]],
+        total_duration: float
+    ) -> List[List[Tuple[str, float]]]:
+        """
+        CRITICAL: Validate each chunk to prevent intra-segment drift.
+        
+        This ensures exact timing within each segment by adjusting
+        chunk durations to match the total duration exactly.
+        """
+        if not chunks:
+            return chunks
+        
+        # Calculate current total
+        current_total = sum(sum(d for _, d in chunk) for chunk in chunks)
+        
+        if abs(current_total - total_duration) < 0.001:
+            return chunks  # Already perfect
+        
+        # Need to adjust
+        validated_chunks = []
+        remaining_duration = total_duration
+        
+        for i, chunk in enumerate(chunks):
+            is_last = (i == len(chunks) - 1)
+            
+            chunk_dur = sum(d for _, d in chunk)
+            
+            if is_last:
+                # Last chunk gets exactly remaining duration
+                target_dur = remaining_duration
+            else:
+                # Scale proportionally based on current chunk weight
+                weight = chunk_dur / current_total if current_total > 0 else 1.0 / len(chunks)
+                target_dur = total_duration * weight
+            
+            # Adjust chunk words to exact target duration
+            if chunk_dur > 0 and abs(chunk_dur - target_dur) > 0.001:
+                scale = target_dur / chunk_dur
+                chunk = [(w, max(self.MIN_WORD_DURATION, round(d * scale, 3))) for w, d in chunk]
+                chunk_dur = sum(d for _, d in chunk)
+                
+                logger.info(f"      📏 Chunk {i+1}/{len(chunks)}: {chunk_dur:.3f}s (target: {target_dur:.3f}s)")
+            
+            validated_chunks.append(chunk)
+            remaining_duration -= chunk_dur
+        
+        return validated_chunks
+    
     def _ass_time(self, seconds: float) -> str:
-        """Format seconds to ASS time (centisecond precision)."""
-        ms = int(round(seconds * 1000))
-        cs = ms // 10
+        """
+        Format seconds to ASS time with MAXIMUM precision.
+        
+        Uses millisecond-level calculations to minimize rounding errors.
+        """
+        # Work in milliseconds for precision
+        total_ms = int(round(seconds * 1000))
+        
+        # Convert to centiseconds (ASS format requirement)
+        cs = total_ms // 10
         
         h = cs // 360000
         cs -= h * 360000
