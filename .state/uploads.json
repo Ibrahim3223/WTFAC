@@ -1992,11 +1992,19 @@
     "ts": "2025-10-21T16:29:40.397020"
   },
   {
-    "channel": "One Day Inside",
-    "entity": "you",
-    "content_hash": "df20d2f0fa64df96cd35d507f8c92519f46f9cd5",
-    "title": "What if you think abandoned cities are dead. think again ⚡",
-    "video_path": "out/One Day Inside_Post_Apocalyptic_Survival_Stories_Future_Scenarios_20251021_164042.mp4",
-    "ts": "2025-10-21T16:40:44.597058"
+    "channel": "SkySynthLab",
+    "entity": "truly",
+    "content_hash": "6f5ca44e588e81bf19352d8f411da189cd917f6d",
+    "title": "What if AI truly designs its own next 🎯",
+    "video_path": "out/SkySynthLab_AI_Development_Theories_Future_Possibilities_20251021_164731.mp4",
+    "ts": "2025-10-21T16:47:34.160680"
+  },
+  {
+    "channel": "Pocket Tech Tricks",
+    "entity": "device",
+    "content_hash": "14fd37cfbf9786b3682e21e8f291577f548200b2",
+    "title": "3 Things About One-Minute That'll Blow Your Mind 😱",
+    "video_path": "out/Pocket Tech Tricks_One_Minute_Fixes_for_Everyday_Tech_20251021_165331.mp4",
+    "ts": "2025-10-21T16:53:34.185128"
   }
 ]
