@@ -22,7 +22,7 @@ class CaptionRenderer:
     WORDS_PER_CHUNK = 3
     MIN_WORD_DURATION = 0.08
     TIMING_PRECISION = 0.001
-    FADE_DURATION = 0.05  # 50ms - minimal for fast videos
+    FADE_DURATION = 0.0  # NO FADE - critical for sync!
     
     def __init__(self, caption_offset: Optional[float] = None):
         """Initialize caption renderer."""
@@ -338,9 +338,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if start >= end:
                     break
             
-            # Minimal fade (no scale animation!)
-            fade_ms = int(self.FADE_DURATION * 1000)
-            effect_tags = f"{{\\fad({fade_ms},{fade_ms})}}"
+            # NO FADE for perfect sync!
+            effect_tags = ""  # No effects at all!
             
             start_str = self._ass_time(start)
             end_str = self._ass_time(end)
@@ -407,10 +406,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Calculate current total
         current_total = sum(sum(d for _, d in chunk) for chunk in chunks)
         
-        if abs(current_total - total_duration) < 0.001:
-            return chunks  # Already perfect
-        
-        # Need to adjust
+        # ALWAYS validate chunks for logging, even if close
         validated_chunks = []
         remaining_duration = total_duration
         
@@ -428,15 +424,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 target_dur = total_duration * weight
             
             # Adjust chunk words to exact target duration
-            if chunk_dur > 0 and abs(chunk_dur - target_dur) > 0.001:
-                scale = target_dur / chunk_dur
+            if abs(chunk_dur - target_dur) > 0.001:
+                scale = target_dur / chunk_dur if chunk_dur > 0 else 1.0
                 chunk = [(w, max(self.MIN_WORD_DURATION, round(d * scale, 3))) for w, d in chunk]
-                chunk_dur = sum(d for _, d in chunk)
+                actual_dur = sum(d for _, d in chunk)
                 
-                logger.info(f"      📏 Chunk {i+1}/{len(chunks)}: {chunk_dur:.3f}s (target: {target_dur:.3f}s)")
+                logger.info(f"      📏 Chunk {i+1}/{len(chunks)}: {actual_dur:.3f}s (target: {target_dur:.3f}s)")
+            else:
+                logger.info(f"      📏 Chunk {i+1}/{len(chunks)}: {chunk_dur:.3f}s (perfect)")
             
             validated_chunks.append(chunk)
-            remaining_duration -= chunk_dur
+            remaining_duration -= sum(d for _, d in chunk)
         
         return validated_chunks
     
