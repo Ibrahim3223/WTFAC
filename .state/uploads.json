@@ -1984,11 +1984,19 @@
     "ts": "2025-10-21T13:29:03.847914"
   },
   {
-    "channel": "Universe Jumper",
-    "entity": "knight",
-    "content_hash": "92416eed325d8b98a7a98f7bb5a194d064ab36d4",
-    "title": "What if a knight appeared in deep space ⚡",
-    "video_path": "out/Universe Jumper_What_If_Different_Characters_Lived_in_Other_Worlds_20251021_162937.mp4",
-    "ts": "2025-10-21T16:29:40.397020"
+    "channel": "World Briefing",
+    "entity": "nobody",
+    "content_hash": "efff76e155d7985a2d40133e9ac8be115ed91d22",
+    "title": "What if nobody truly sees global news movement... until now 🤯",
+    "video_path": "out/World Briefing_Today_s_Most_Important_Global_News_20251021_162442.mp4",
+    "ts": "2025-10-21T16:24:44.115876"
+  },
+  {
+    "channel": "If They Lived Today",
+    "entity": "legendary",
+    "content_hash": "afcad7d7dfde65a3711fa7b814612edbff4285cf",
+    "title": "What if a legendary warrior saw your phone 😱",
+    "video_path": "out/If They Lived Today_Historical_Figures_in_Modern_Times_20251021_163242.mp4",
+    "ts": "2025-10-21T16:32:45.336705"
   }
 ]
