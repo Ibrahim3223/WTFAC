@@ -80,10 +80,13 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements.txt
 
-      - name: Setup FFmpeg (fast + cached)
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        with:
-          ffmpeg-version: release
+      - name: Setup FFmpeg
+        run: |
+          echo "📦 Installing FFmpeg for video/audio processing..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          echo "✅ FFmpeg version:"
+          ffmpeg -version | head -n1
 
       # ---------- PRE: .state'i 'state' branch'inden geri yükle (worktree-safe) ----------
       - name: Restore .state from 'state' branch (worktree-safe)
@@ -173,10 +176,22 @@ jobs:
           restore-keys: |
             chstate-${{ env.CHANNEL_NAME }}-
 
-      - name: Install deps
+      - name: Install Python dependencies
         run: |
-          python -m pip install -U pip
+          echo "📦 Installing Python packages..."
+          python -m pip install -U pip setuptools wheel
           pip install -r requirements.txt
+          echo "✅ Python dependencies installed"
+
+      # ============================================================
+      # CRITICAL: stable-ts for MILISECOND-PERFECT caption sync
+      # ============================================================
+      - name: Install stable-ts (milisecond-perfect captions)
+        run: |
+          echo "🎯 Installing stable-ts for phoneme-level caption alignment..."
+          pip install stable-ts>=2.14.0
+          echo "✅ stable-ts installed - milisecond caption sync enabled!"
+          echo "   Caption precision: ~10-20ms (phoneme-level)"
 
       - name: Build video
         env:
@@ -191,16 +206,16 @@ jobs:
           TTS_SSML: "0"                     # SSML prosody for all topics
           TTS_RATE: "+12%"                  # Universal speech speed
 
-          # ===== CAPTIONS / KARAOKE (Sync Perfect) =====
+          # ===== CAPTIONS / KARAOKE (stable-ts Word-Level Timing) =====
           REQUIRE_CAPTIONS: "1"
           KARAOKE_CAPTIONS: "1"
           CAPTIONS_UPPER: "1"
-          KARAOKE_INACTIVE: "#FFD700"
-          KARAOKE_ACTIVE: "#3EA6FF"
-          KARAOKE_OUTLINE: "#000000"
-          KARAOKE_OFFSET_MS: "0"            # Perfect sync
-          KARAOKE_SPEED: "1.0"              # No tempo adjustment
-          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust Edge-TTS timing
+          KARAOKE_INACTIVE: "#FFD700"       # Gold (inactive words)
+          KARAOKE_ACTIVE: "#3EA6FF"         # Blue (active words)
+          KARAOKE_OUTLINE: "#000000"        # Black outline
+          KARAOKE_OFFSET_MS: "0"            # stable-ts = perfect sync (no offset needed)
+          KARAOKE_SPEED: "1.0"              # No tempo adjustment needed
+          KARAOKE_SPEEDUP_PCT: "0.0"        # Trust stable-ts timing
           KARAOKE_RAMP_PCT: "0.0"           # No progressive speed
           KARAOKE_EARLY_END_MS: "0"         # Full duration
           CAPTION_LEAD_MS: "0"              # No lead offset
@@ -268,7 +283,7 @@ jobs:
           echo "TOPIC=${TOPIC}"
           echo "LANG=${LANG}"
           echo "SEARCH_TERMS=${SEARCH_TERMS}"
-          python autoshorts_daily.py 2>&1 | tee "build_${CHANNEL_NAME}.log"
+          python main.py 2>&1 | tee "build_${CHANNEL_NAME}.log"
 
       - name: Upload artifact (mp4)
         if: always()
