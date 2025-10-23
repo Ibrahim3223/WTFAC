@@ -2288,11 +2288,19 @@
     "ts": "2025-10-23T02:44:44.994257"
   },
   {
-    "channel": "GalacticUpdate",
-    "entity": "STOP! Alien Life Confirmed? | Cosmic News 2025",
-    "content_hash": "d10c4527e4dd0474",
-    "title": "STOP! Alien Life Confirmed? | Cosmic News 2025",
-    "video_path": "youtube:XNB_OUI3NRU",
-    "ts": "2025-10-23T16:30:13.431888"
+    "channel": "If They Lived Today",
+    "entity": "WAIT: Historical Figures Secretly Shape Your Life | History 2025",
+    "content_hash": "75a1d1981ee64e0f",
+    "title": "WAIT: Historical Figures Secretly Shape Your Life | History 2025",
+    "video_path": "youtube:UBtOOnWXmZ8",
+    "ts": "2025-10-23T16:27:24.539274"
+  },
+  {
+    "channel": "Cinematic Echo",
+    "entity": "SECRET Movie Facts revealed! | Behind-the-Scenes Secrets",
+    "content_hash": "c6e7386824683217",
+    "title": "SECRET Movie Facts revealed! | Behind-the-Scenes Secrets",
+    "video_path": "youtube:M0cYovWGoow",
+    "ts": "2025-10-23T16:32:08.207392"
   }
 ]
