@@ -2392,11 +2392,19 @@
     "ts": "2025-10-24T02:11:15.960513"
   },
   {
-    "channel": "SpaceVista 60",
-    "entity": "SHOCKING! Fast Space Facts You Missed | Cosmic Insights",
-    "content_hash": "20f2e021c5e9487d",
-    "title": "SHOCKING! Fast Space Facts You Missed | Cosmic Insights",
-    "video_path": "youtube:gsxsOK8azas",
-    "ts": "2025-10-24T02:17:55.648573"
+    "channel": "Eco Habit Hacks",
+    "entity": "WAIT! SECRET behind EASY sustainable living | 1 Minute Eco Tips",
+    "content_hash": "afe65f87b3608c93",
+    "title": "WAIT! SECRET behind EASY sustainable living | 1 Minute Eco Tips",
+    "video_path": "youtube:82WYT5eL040",
+    "ts": "2025-10-24T02:17:25.744097"
+  },
+  {
+    "channel": "Weather Window 60",
+    "entity": "Weather Secret: Get Fast, Visual Forecasts NOW!",
+    "content_hash": "8e4d318aeef3b42d",
+    "title": "Weather Secret: Get Fast, Visual Forecasts NOW!",
+    "video_path": "youtube:vSYEsH8DZu8",
+    "ts": "2025-10-24T02:21:08.774980"
   }
 ]
