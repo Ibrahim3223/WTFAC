@@ -2520,11 +2520,19 @@
     "ts": "2025-10-25T01:58:08.345735"
   },
   {
-    "channel": "CritterFact",
-    "entity": "WAIT— Sea Slug Secret Changes Everything | Wildlife Facts",
-    "content_hash": "cb08fee757285780",
-    "title": "WAIT— Sea Slug Secret Changes Everything | Wildlife Facts",
-    "video_path": "youtube:BGb8IdM_-jE",
-    "ts": "2025-10-25T02:06:21.973599"
+    "channel": "Cinematic Echo",
+    "entity": "SHOCKING! Hidden Movie Facts You Won't Believe | 2025",
+    "content_hash": "11d032fab6dc6d2f",
+    "title": "SHOCKING! Hidden Movie Facts You Won't Believe | 2025",
+    "video_path": "youtube:Dm1ob5mtsC8",
+    "ts": "2025-10-25T02:03:16.079710"
+  },
+  {
+    "channel": "BehindTheFame",
+    "entity": "The SHOCKING Truth Behind Celebrity Success | Fame Secrets",
+    "content_hash": "6952479420ec1f92",
+    "title": "The SHOCKING Truth Behind Celebrity Success | Fame Secrets",
+    "video_path": "youtube:qHCDAJZiSII",
+    "ts": "2025-10-25T02:08:26.897175"
   }
 ]
