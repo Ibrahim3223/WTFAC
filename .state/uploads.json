@@ -2800,19 +2800,27 @@
     "ts": "2025-10-26T17:15:50.348028"
   },
   {
-    "channel": "Flashback Minute",
-    "entity": "Chernobyl's Hidden Truth | This Day in History",
-    "content_hash": "c570266848b82b37",
-    "title": "Chernobyl's Hidden Truth | This Day in History",
-    "video_path": "youtube:ja0PnytwbFI",
-    "ts": "2025-10-27T02:09:05.830842"
+    "channel": "Echo of the Unknown",
+    "entity": "STOP! This Mysterious Tale Will Chill You | Unsolved",
+    "content_hash": "c23057d7333063ba",
+    "title": "STOP! This Mysterious Tale Will Chill You | Unsolved",
+    "video_path": "youtube:QansisnNAxA",
+    "ts": "2025-10-27T02:05:11.080701"
   },
   {
-    "channel": "Cinematic Echo",
-    "entity": "Hidden Movie Facts | Only 1 in 500 Know These Secrets",
-    "content_hash": "f97af7374b06e62b",
-    "title": "Hidden Movie Facts | Only 1 in 500 Know These Secrets",
-    "video_path": "youtube:UM46eWNlUfI",
-    "ts": "2025-10-27T02:13:36.759130"
+    "channel": "GalacticUpdate",
+    "entity": "Earth's SHOCKING Space Discoveries | Cosmic News 2025",
+    "content_hash": "52d85047a626a2dc",
+    "title": "Earth's SHOCKING Space Discoveries | Cosmic News 2025",
+    "video_path": "youtube:hFb1oLj6AgU",
+    "ts": "2025-10-27T02:12:12.380423"
+  },
+  {
+    "channel": "WildWonderCaps",
+    "entity": "Only 1 in 500: Incredible Wildlife Moments You'll Never Forget",
+    "content_hash": "9a9ad847fe9ba84c",
+    "title": "Only 1 in 500: Incredible Wildlife Moments You'll Never Forget",
+    "video_path": "youtube:KpVgxboZgl8",
+    "ts": "2025-10-27T02:17:22.525606"
   }
 ]
