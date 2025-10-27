@@ -2904,11 +2904,19 @@
     "ts": "2025-10-27T16:50:22.456174"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "80% Weather Forecasts Lie! | Fast Visual Weather Explanations",
-    "content_hash": "e6f7f5ac2f72ba68",
-    "title": "80% Weather Forecasts Lie! | Fast Visual Weather Explanations",
-    "video_path": "youtube:iIvKixQVMds",
-    "ts": "2025-10-27T16:57:11.600917"
+    "channel": "Kitchen Logic Lab",
+    "entity": "Vintage Food Science Secret | 60s Cooking Hack You Missed",
+    "content_hash": "adaf05cf891c5e22",
+    "title": "Vintage Food Science Secret | 60s Cooking Hack You Missed",
+    "video_path": "youtube:5LGc0qmPrfE",
+    "ts": "2025-10-27T16:55:00.535899"
+  },
+  {
+    "channel": "TrailScape 60",
+    "entity": "SECRET: 60s Landmarks You Won't Believe Still Exist!",
+    "content_hash": "a30beb60184d3dbf",
+    "title": "SECRET: 60s Landmarks You Won't Believe Still Exist!",
+    "video_path": "youtube:GiL_EBkCZiw",
+    "ts": "2025-10-27T17:00:21.050119"
   }
 ]
