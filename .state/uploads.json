@@ -2800,11 +2800,19 @@
     "ts": "2025-10-26T17:15:50.348028"
   },
   {
-    "channel": "Flashback Minute",
-    "entity": "Chernobyl's Hidden Truth | This Day in History",
-    "content_hash": "c570266848b82b37",
-    "title": "Chernobyl's Hidden Truth | This Day in History",
-    "video_path": "youtube:ja0PnytwbFI",
-    "ts": "2025-10-27T02:09:05.830842"
+    "channel": "Echo of the Unknown",
+    "entity": "STOP! This Mysterious Tale Will Chill You | Unsolved",
+    "content_hash": "c23057d7333063ba",
+    "title": "STOP! This Mysterious Tale Will Chill You | Unsolved",
+    "video_path": "youtube:QansisnNAxA",
+    "ts": "2025-10-27T02:05:11.080701"
+  },
+  {
+    "channel": "Rewind Retro Media",
+    "entity": "STOP! If Retro Culture Vanished | Nostalgia Facts 2025",
+    "content_hash": "b572e87adc2a3641",
+    "title": "STOP! If Retro Culture Vanished | Nostalgia Facts 2025",
+    "video_path": "youtube:8TuIxRKRmwU",
+    "ts": "2025-10-27T02:10:22.109825"
   }
 ]
