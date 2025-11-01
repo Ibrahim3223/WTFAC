@@ -3592,11 +3592,19 @@
     "ts": "2025-11-01T16:44:59.060995"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "95% Accurate Weather | See Future Storms Instantly",
-    "content_hash": "c6451bf7a9c13897",
-    "title": "95% Accurate Weather | See Future Storms Instantly",
-    "video_path": "youtube:8H8N1SlhmsA",
-    "ts": "2025-11-01T16:53:03.589274"
+    "channel": "Kitchen Logic Lab",
+    "entity": "SECRET 60s Food Science | Cooking Hacks You NEED!",
+    "content_hash": "4303897f9c2e89f6",
+    "title": "SECRET 60s Food Science | Cooking Hacks You NEED!",
+    "video_path": "youtube:-P0TjGL23Rk",
+    "ts": "2025-11-01T16:50:36.260984"
+  },
+  {
+    "channel": "Orderly Home 60",
+    "entity": "Hidden Organization Secret | One-Minute Home Declutter",
+    "content_hash": "946fedae07d4fdaf",
+    "title": "Hidden Organization Secret | One-Minute Home Declutter",
+    "video_path": "youtube:82K4yt31f08",
+    "ts": "2025-11-01T16:55:03.296523"
   }
 ]
