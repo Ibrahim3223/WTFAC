@@ -3848,19 +3848,27 @@
     "ts": "2025-11-03T16:28:51.535636"
   },
   {
-    "channel": "CritterFact",
-    "entity": "Sea Cucumber Secret | Unbelievable Animal Fact",
-    "content_hash": "e4df76292e75f514",
-    "title": "Sea Cucumber Secret | Unbelievable Animal Fact",
-    "video_path": "youtube:kG7ie_EZNKQ",
-    "ts": "2025-11-03T16:36:29.653980"
+    "channel": "BeyondAxis",
+    "entity": "90% Zero-Waste Cities Are HERE! | Future Tech 2025",
+    "content_hash": "231a7c89a55f7392",
+    "title": "90% Zero-Waste Cities Are HERE! | Future Tech 2025",
+    "video_path": "youtube:wfW6f9AEPYc",
+    "ts": "2025-11-03T16:35:39.327931"
   },
   {
-    "channel": "FixIt Fast",
-    "entity": "Quick DIY Fixes | The Secret Nobody Tells You",
-    "content_hash": "a2eb71aa97df6157",
-    "title": "Quick DIY Fixes | The Secret Nobody Tells You",
-    "video_path": "youtube:ML1Y7pccfUk",
-    "ts": "2025-11-03T16:43:07.816651"
+    "channel": "Bot Gone Wild",
+    "entity": "97% Don't Know This About AI Integration",
+    "content_hash": "d73342c4858e5c4b",
+    "title": "97% Don't Know This About AI Integration",
+    "video_path": "youtube:6aJ07mmR7OY",
+    "ts": "2025-11-03T16:41:38.046640"
+  },
+  {
+    "channel": "CityFrame Stories",
+    "entity": "SHOCKING: Urban Skylines Aren't What You Think! | Facts",
+    "content_hash": "f1bd0e955b8cdd57",
+    "title": "SHOCKING: Urban Skylines Aren't What You Think! | Facts",
+    "video_path": "youtube:CQaq7d85zJI",
+    "ts": "2025-11-03T16:46:13.819686"
   }
 ]
