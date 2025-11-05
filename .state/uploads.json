@@ -4048,35 +4048,43 @@
     "ts": "2025-11-05T02:04:49.160531"
   },
   {
-    "channel": "Cinematic Echo",
-    "entity": "STOP! Hidden Movie Facts Will Blow Your Mind!",
-    "content_hash": "41f67edb5325384e",
-    "title": "STOP! Hidden Movie Facts Will Blow Your Mind!",
-    "video_path": "youtube:3_8EfNqo4h4",
-    "ts": "2025-11-05T02:13:00.437856"
+    "channel": "CritterFact",
+    "entity": "Dung Beetles & The Milky Way | Shocking Wildlife Fact",
+    "content_hash": "a828217fe258c650",
+    "title": "Dung Beetles & The Milky Way | Shocking Wildlife Fact",
+    "video_path": "youtube:Pby3C35rT6U",
+    "ts": "2025-11-05T02:10:51.929085"
   },
   {
-    "channel": "BehindTheFame",
-    "entity": "SHOCKING Truth Behind Celebrity Success | Fame Secrets",
-    "content_hash": "aa78d18d09a2c6eb",
-    "title": "SHOCKING Truth Behind Celebrity Success | Fame Secrets",
-    "video_path": "youtube:Dy29y-E92Oo",
-    "ts": "2025-11-05T02:18:40.472311"
+    "channel": "Famous Quotes Explained",
+    "entity": "SECRET Wisdom: Socrates' Quote Will SHOCK You | Famous Quotes",
+    "content_hash": "18212cb5e162567c",
+    "title": "SECRET Wisdom: Socrates' Quote Will SHOCK You | Famous Quotes",
+    "video_path": "youtube:5k-MpjEZHwE",
+    "ts": "2025-11-05T02:17:09.800195"
   },
   {
-    "channel": "SkySynthLab",
-    "entity": "97% Don't Know This SECRET AI Future Theory!",
-    "content_hash": "ec5926d053ffab7e",
-    "title": "97% Don't Know This SECRET AI Future Theory!",
-    "video_path": "youtube:HSOSM3SM3rw",
-    "ts": "2025-11-05T02:23:44.509218"
+    "channel": "One Day Inside",
+    "entity": "WAIT! Post-Apocalyptic Survival Tech | Future 2042",
+    "content_hash": "3486d885057c99a1",
+    "title": "WAIT! Post-Apocalyptic Survival Tech | Future 2042",
+    "video_path": "youtube:kkb0YyrmHn8",
+    "ts": "2025-11-05T02:21:04.341652"
   },
   {
-    "channel": "Eco Habit Hacks",
-    "entity": "SAVE 2,000L Annually | 1-Minute Sustainable Living Tip",
-    "content_hash": "2d08504f7ab370f9",
-    "title": "SAVE 2,000L Annually | 1-Minute Sustainable Living Tip",
-    "video_path": "youtube:UNr4mne-xOI",
-    "ts": "2025-11-05T02:28:31.923417"
+    "channel": "FixIt Fast",
+    "entity": "WAIT! The Truth About DIY Fixes | Home Repair Secrets",
+    "content_hash": "e92b6b4dd0fee544",
+    "title": "WAIT! The Truth About DIY Fixes | Home Repair Secrets",
+    "video_path": "youtube:DpV2TucA7qw",
+    "ts": "2025-11-05T02:25:06.229974"
+  },
+  {
+    "channel": "Pocket Tech Tricks",
+    "entity": "Banned Tech Fix | One-Minute Solutions for Your Devices",
+    "content_hash": "83e9cadca95ed192",
+    "title": "Banned Tech Fix | One-Minute Solutions for Your Devices",
+    "video_path": "youtube:SYthheV7UMc",
+    "ts": "2025-11-05T02:28:57.110924"
   }
 ]
