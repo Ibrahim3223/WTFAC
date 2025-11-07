@@ -4392,11 +4392,19 @@
     "ts": "2025-11-07T02:23:15.701981"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "STOP! Science Visuals Are OLDER Than You Think",
-    "content_hash": "3a0fe26e5e3f5bd4",
-    "title": "STOP! Science Visuals Are OLDER Than You Think",
-    "video_path": "youtube:ZXo67j7uTss",
-    "ts": "2025-11-07T02:33:58.261019"
+    "channel": "Weather Window 60",
+    "entity": "Unpopular Opinion: Your Weather Forecasts Are WRONG! | Visual Weather",
+    "content_hash": "abd690d7fb71f67e",
+    "title": "Unpopular Opinion: Your Weather Forecasts Are WRONG! | Visual Weather",
+    "video_path": "youtube:GJcRFCYCRTc",
+    "ts": "2025-11-07T02:29:13.578880"
+  },
+  {
+    "channel": "RoadVista 60",
+    "entity": "WAIT: Your Ultimate Scenic Road Mini-Guide!",
+    "content_hash": "2204965cc9b7f55d",
+    "title": "WAIT: Your Ultimate Scenic Road Mini-Guide!",
+    "video_path": "youtube:uW3hVEh14Y0",
+    "ts": "2025-11-07T02:34:56.708022"
   }
 ]
