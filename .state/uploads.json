@@ -5392,11 +5392,19 @@
     "ts": "2025-11-16T02:34:48.899692"
   },
   {
-    "channel": "Mechanism Minute",
-    "entity": "Crazy Inventors Were Right | Your Seatbelt's SECRET",
-    "content_hash": "3a26eb69484899db",
-    "title": "Crazy Inventors Were Right | Your Seatbelt's SECRET",
-    "video_path": "youtube:x-2QKm8bj_U",
-    "ts": "2025-11-16T02:41:17.451194"
+    "channel": "Hidden Math IRL",
+    "entity": "SECRET Geometry | Find Hidden Ratios in 30 Seconds!",
+    "content_hash": "16ccac59fec9f6c5",
+    "title": "SECRET Geometry | Find Hidden Ratios in 30 Seconds!",
+    "video_path": "youtube:VpKGomwvYWQ",
+    "ts": "2025-11-16T02:40:39.869294"
+  },
+  {
+    "channel": "Bridge & Tunnel Atlas",
+    "entity": "97% Don't Know The Secret Behind Beautiful Crossings",
+    "content_hash": "7b272fe891491f5b",
+    "title": "97% Don't Know The Secret Behind Beautiful Crossings",
+    "video_path": "youtube:9xNxkOn_8es",
+    "ts": "2025-11-16T02:44:35.335680"
   }
 ]
