@@ -5840,11 +5840,19 @@
     "ts": "2025-11-20T01:57:10.412278"
   },
   {
-    "channel": "GalacticUpdate",
-    "entity": "SHOCKING Cosmic Breakthroughs in 30 Secs | Space News 2025",
-    "content_hash": "fc4c632b5283f7ea",
-    "title": "SHOCKING Cosmic Breakthroughs in 30 Secs | Space News 2025",
-    "video_path": "youtube:1OwgvrQta1s",
-    "ts": "2025-11-20T02:03:13.050734"
+    "channel": "Flashback Minute",
+    "entity": "You're Wrong About History's Secrets | Daily Events",
+    "content_hash": "f3593506ca089d44",
+    "title": "You're Wrong About History's Secrets | Daily Events",
+    "video_path": "youtube:sBdzsmgQtxI",
+    "ts": "2025-11-20T02:01:53.401571"
+  },
+  {
+    "channel": "CritterFact",
+    "entity": "Animal Architects Revealed | Unbelievable Pufferfish Art",
+    "content_hash": "dabab6e47efce8f6",
+    "title": "Animal Architects Revealed | Unbelievable Pufferfish Art",
+    "video_path": "youtube:etg-YdMnboE",
+    "ts": "2025-11-20T02:06:43.875375"
   }
 ]
