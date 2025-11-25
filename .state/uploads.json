@@ -6568,19 +6568,27 @@
     "ts": "2025-11-25T02:27:53.521092"
   },
   {
-    "channel": "Ocean Pulse",
-    "entity": "SHOCKING Ocean Fact | Uncharted Depths Revealed!",
-    "content_hash": "14631d12ce01bafd",
-    "title": "SHOCKING Ocean Fact | Uncharted Depths Revealed!",
-    "video_path": "youtube:9EWL1IhYr30",
-    "ts": "2025-11-25T02:34:59.258998"
+    "channel": "Kitchen Logic Lab",
+    "entity": "60s Cooking Secret | The Meat Tenderizing Hack They Never Told You",
+    "content_hash": "3b286b2ccb813cfb",
+    "title": "60s Cooking Secret | The Meat Tenderizing Hack They Never Told You",
+    "video_path": "youtube:_AAwXPiAQx4",
+    "ts": "2025-11-25T02:32:37.412598"
   },
   {
-    "channel": "Mechanism Minute",
-    "entity": "Your Toaster's Secret Revealed | Everyday Mechanisms",
-    "content_hash": "dda5ba4510217d91",
-    "title": "Your Toaster's Secret Revealed | Everyday Mechanisms",
-    "video_path": "youtube:I29IBqaYzMk",
-    "ts": "2025-11-25T02:41:33.130799"
+    "channel": "Orderly Home 60",
+    "entity": "SECRET: You're Organizing Wrong | 1-Minute Tidy Hacks",
+    "content_hash": "e56e754198e15252",
+    "title": "SECRET: You're Organizing Wrong | 1-Minute Tidy Hacks",
+    "video_path": "youtube:WwccSwenDb0",
+    "ts": "2025-11-25T02:38:28.163593"
+  },
+  {
+    "channel": "LightCraft Studio",
+    "entity": "WAIT: Why Your Room Lighting is Bizarre | 1-Minute Fix",
+    "content_hash": "78f054402e70b6f7",
+    "title": "WAIT: Why Your Room Lighting is Bizarre | 1-Minute Fix",
+    "video_path": "youtube:0Uo_HpWahz4",
+    "ts": "2025-11-25T02:43:40.135621"
   }
 ]
