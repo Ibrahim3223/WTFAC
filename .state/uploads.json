@@ -6608,43 +6608,51 @@
     "ts": "2025-11-25T16:31:21.547744"
   },
   {
-    "channel": "Cinematic Echo",
-    "entity": "SHOCKING Movie Secrets | Behind-the-Scenes Facts You Missed",
-    "content_hash": "da2940eacd3392ad",
-    "title": "SHOCKING Movie Secrets | Behind-the-Scenes Facts You Missed",
-    "video_path": "youtube:vMWkkdnq-Ko",
-    "ts": "2025-11-25T16:37:47.918711"
+    "channel": "CritterFact",
+    "entity": "SHOCKING Sea Slug Truth | Animal Facts 2025",
+    "content_hash": "e1c8363d9245eab2",
+    "title": "SHOCKING Sea Slug Truth | Animal Facts 2025",
+    "video_path": "youtube:UOVzM-t69PE",
+    "ts": "2025-11-25T16:37:20.621058"
   },
   {
-    "channel": "One Day Inside",
-    "entity": "Apocalyptic Survival is Bizarre | Future Tech 2025",
-    "content_hash": "e89b5ed0d1a70dd3",
-    "title": "Apocalyptic Survival is Bizarre | Future Tech 2025",
-    "video_path": "youtube:wUo1NwlB9Ew",
-    "ts": "2025-11-25T16:43:35.646071"
+    "channel": "BeyondAxis",
+    "entity": "WAIT! Utopian Tech Was Called Crazy... But They Were Right! | Future Innovations",
+    "content_hash": "e3a83bdb7dd2ad7a",
+    "title": "WAIT! Utopian Tech Was Called Crazy... But They Were Right! | Future Innovations",
+    "video_path": "youtube:zrQm7U7uBjU",
+    "ts": "2025-11-25T16:41:59.560822"
   },
   {
-    "channel": "SkySynthLab",
-    "entity": "WAIT! AI's Future Theories Will SHOCK You | AI Development 2025",
-    "content_hash": "be950aaa5e745d04",
-    "title": "WAIT! AI's Future Theories Will SHOCK You | AI Development 2025",
-    "video_path": "youtube:clCSyZDFY1o",
-    "ts": "2025-11-25T16:49:22.766143"
+    "channel": "Microworld Stories",
+    "entity": "STOP! Why Fun Stories Boost Kids' Brains by 70%",
+    "content_hash": "e987ba1896578d2c",
+    "title": "STOP! Why Fun Stories Boost Kids' Brains by 70%",
+    "video_path": "youtube:PeF5kroXo8s",
+    "ts": "2025-11-25T16:46:30.328835"
   },
   {
-    "channel": "SpaceVista 60",
-    "entity": "WAIT! Universe's True Scale SHOCKER | Space Explainer",
-    "content_hash": "868017dbf62cfdb3",
-    "title": "WAIT! Universe's True Scale SHOCKER | Space Explainer",
-    "video_path": "youtube:hG4kPdka2mI",
-    "ts": "2025-11-25T16:57:35.312039"
+    "channel": "Planet Snapshot",
+    "entity": "WAIT! Geography Secrets YOU Never Knew | Fast Facts",
+    "content_hash": "9b7dc8aa2097c48c",
+    "title": "WAIT! Geography Secrets YOU Never Knew | Fast Facts",
+    "video_path": "youtube:oUJcRwsf9rw",
+    "ts": "2025-11-25T16:51:06.241738"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "Visual Science's SHOCKING Impact | History's Hidden Secrets",
-    "content_hash": "c8c3a0587a07391c",
-    "title": "Visual Science's SHOCKING Impact | History's Hidden Secrets",
-    "video_path": "youtube:_ZZxRdzzM34",
-    "ts": "2025-11-25T17:03:51.125867"
+    "channel": "Kitchen Logic Lab",
+    "entity": "WAIT: 1960s Cooking Secret for Vibrant Veggies!",
+    "content_hash": "5ceaa79862ce486d",
+    "title": "WAIT: 1960s Cooking Secret for Vibrant Veggies!",
+    "video_path": "youtube:kzLa-htsFrM",
+    "ts": "2025-11-25T16:56:49.866137"
+  },
+  {
+    "channel": "Ocean Pulse",
+    "entity": "Ocean's 90% Secret | Deep Sea Discoveries 2025",
+    "content_hash": "abc860b7e6e0f522",
+    "title": "Ocean's 90% Secret | Deep Sea Discoveries 2025",
+    "video_path": "youtube:o2I0qoK5ayk",
+    "ts": "2025-11-25T17:03:58.329949"
   }
 ]
