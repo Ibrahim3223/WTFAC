@@ -6776,11 +6776,19 @@
     "ts": "2025-11-26T16:48:12.493114"
   },
   {
-    "channel": "Ocean Pulse",
-    "entity": "WAIT: Ocean Waves' Secret Travel | Ocean Science 2025",
-    "content_hash": "74a3a806f13ff21e",
-    "title": "WAIT: Ocean Waves' Secret Travel | Ocean Science 2025",
-    "video_path": "youtube:EBtPzRQ5ZCQ",
-    "ts": "2025-11-26T16:54:09.450206"
+    "channel": "Weather Window 60",
+    "entity": "STOP! Weather Forecast Myth | Fast Weather Explanations",
+    "content_hash": "aa08130aa77064ac",
+    "title": "STOP! Weather Forecast Myth | Fast Weather Explanations",
+    "video_path": "youtube:Sfu1NcN40FU",
+    "ts": "2025-11-26T16:52:12.283526"
+  },
+  {
+    "channel": "Timelapse Lab",
+    "entity": "Visual Science's REAL Secret You've NEVER Heard! | History 2025",
+    "content_hash": "d05f90c1c5ae378b",
+    "title": "Visual Science's REAL Secret You've NEVER Heard! | History 2025",
+    "video_path": "youtube:fjrcOKWEdjg",
+    "ts": "2025-11-26T16:57:39.203946"
   }
 ]
