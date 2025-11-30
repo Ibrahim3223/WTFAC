@@ -7320,19 +7320,27 @@
     "ts": "2025-11-30T16:34:05.596958"
   },
   {
-    "channel": "FixIt Fast",
-    "entity": "STOP! Quick Fix Myths Debunked | DIY Home Repair 2025",
-    "content_hash": "aaa55e939a74c778",
-    "title": "STOP! Quick Fix Myths Debunked | DIY Home Repair 2025",
-    "video_path": "youtube:ozKRu-Iv38I",
-    "ts": "2025-11-30T16:41:13.273050"
+    "channel": "Bot Gone Wild",
+    "entity": "STOP! The Secret AI Already In Your Daily Life",
+    "content_hash": "522883097c72d99e",
+    "title": "STOP! The Secret AI Already In Your Daily Life",
+    "video_path": "youtube:F6moYzSQxpw",
+    "ts": "2025-11-30T16:38:56.112759"
   },
   {
-    "channel": "SpaceVista 60",
-    "entity": "SHOCKING Space Fact | You're Moving THIS Fast?",
-    "content_hash": "20fa5e7bce0769f1",
-    "title": "SHOCKING Space Fact | You're Moving THIS Fast?",
-    "video_path": "youtube:wTYLSB7dgK0",
-    "ts": "2025-11-30T16:47:06.660470"
+    "channel": "Eco Habit Hacks",
+    "entity": "Secret Sustainable Living Tip | 1-Minute Eco Hacks",
+    "content_hash": "5eb43dfccf013670",
+    "title": "Secret Sustainable Living Tip | 1-Minute Eco Hacks",
+    "video_path": "youtube:X4TXT0iDk-E",
+    "ts": "2025-11-30T16:44:08.475736"
+  },
+  {
+    "channel": "Weather Window 60",
+    "entity": "Missing Vital Weather Data? | Visual Forecasts 2025",
+    "content_hash": "177bb3e8c82d1c04",
+    "title": "Missing Vital Weather Data? | Visual Forecasts 2025",
+    "video_path": "youtube:rsoTsngmS20",
+    "ts": "2025-11-30T16:49:37.843611"
   }
 ]
