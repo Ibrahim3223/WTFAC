@@ -297,19 +297,13 @@ class AppConfig(BaseSettings):
         alias="MAX_GENERATION_ATTEMPTS"
     )
 
-    # Sub-configs are loaded separately to avoid circular dependencies
-    # They will be initialized in __init__
-
-    def __init__(self, **kwargs):
-        """Initialize with sub-configs from environment."""
-        super().__init__(**kwargs)
-        # Load sub-configs after parent initialization
-        self.api = APIConfig()
-        self.channel = ChannelConfig()
-        self.video = VideoConfig()
-        self.tts = TTSConfig()
-        self.captions = CaptionConfig()
-        self.pexels = PexelsConfig()
-        self.quality = QualityConfig()
-        self.novelty = NoveltyConfig()
-        self.bgm = BGMConfig()
+    # Sub-configs - loaded via default_factory
+    api: APIConfig = Field(default_factory=APIConfig)
+    channel: ChannelConfig = Field(default_factory=ChannelConfig)
+    video: VideoConfig = Field(default_factory=VideoConfig)
+    tts: TTSConfig = Field(default_factory=TTSConfig)
+    captions: CaptionConfig = Field(default_factory=CaptionConfig)
+    pexels: PexelsConfig = Field(default_factory=PexelsConfig)
+    quality: QualityConfig = Field(default_factory=QualityConfig)
+    novelty: NoveltyConfig = Field(default_factory=NoveltyConfig)
+    bgm: BGMConfig = Field(default_factory=BGMConfig)
