@@ -7656,11 +7656,19 @@
     "ts": "2025-12-02T16:52:08.689085"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "Weather Explained Fast | Secret Visual Forecasts",
-    "content_hash": "49506b7db4c5a381",
-    "title": "Weather Explained Fast | Secret Visual Forecasts",
-    "video_path": "youtube:lTP_3_gLG60",
-    "ts": "2025-12-02T17:01:33.414383"
+    "channel": "Kitchen Logic Lab",
+    "entity": "60s Cooking Secrets | You've Been Doing It Wrong!",
+    "content_hash": "e44ae5de65aa550e",
+    "title": "60s Cooking Secrets | You've Been Doing It Wrong!",
+    "video_path": "youtube:2rbslZKb-4s",
+    "ts": "2025-12-02T16:57:48.260296"
+  },
+  {
+    "channel": "Focus Rituals",
+    "entity": "STOP Losing Focus! | Secret 25-5 Routine for Deep Work",
+    "content_hash": "bc1f52d5ea0d302a",
+    "title": "STOP Losing Focus! | Secret 25-5 Routine for Deep Work",
+    "video_path": "youtube:rDwwA0Ggt1g",
+    "ts": "2025-12-02T17:01:53.128854"
   }
 ]
