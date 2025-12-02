@@ -108,20 +108,24 @@ class YouTubeUploader:
             # Build service
             youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
             
-            # Prepare body
+            # Normalize language code (YouTube expects 2-letter codes like "en", "tr")
+            lang_code = settings.LANG.split('-')[0] if '-' in settings.LANG else settings.LANG
+            lang_code = lang_code[:2].lower()  # Ensure 2-letter lowercase
+
+            # Prepare body (YouTube API v3 format)
             body = {
                 "snippet": {
                     "title": optimized_title,
                     "description": optimized_description,
                     "tags": optimized_tags,
                     "categoryId": smart_category,
-                    "defaultLanguage": settings.LANG,
-                    "defaultAudioLanguage": settings.LANG
+                    "defaultLanguage": lang_code,
+                    "defaultAudioLanguage": lang_code
                 },
                 "status": {
                     "privacyStatus": privacy_status,
-                    "selfDeclaredMadeForKids": False,
-                    "madeForKids": False
+                    "selfDeclaredMadeForKids": False
+                    # Note: Don't set madeForKids AND selfDeclaredMadeForKids together
                 }
             }
             
