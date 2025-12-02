@@ -77,12 +77,17 @@ VIDEO_MOTION = config.video.video_motion
 MOTION_INTENSITY = config.video.motion_intensity
 
 # TTS
+TTS_PROVIDER = config.tts.provider  # 'kokoro', 'edge', 'auto'
 TTS_VOICE = config.tts.voice
 VOICE = TTS_VOICE  # Alias
 TTS_RATE = config.tts.rate
 TTS_PITCH = config.tts.pitch
 TTS_STYLE = config.tts.style
 TTS_SSML = config.tts.ssml
+
+# Kokoro TTS (NEW)
+KOKORO_VOICE = config.tts.kokoro_voice
+KOKORO_PRECISION = config.tts.kokoro_precision
 
 # Captions
 REQUIRE_CAPTIONS = config.captions.require_captions

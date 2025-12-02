@@ -1,5 +1,6 @@
 """
-TTS Stage - Generates audio for all sentences using Edge TTS.
+TTS Stage - Generates audio for all sentences using multi-provider TTS.
+Supports both Kokoro TTS (ultra-realistic) and Edge TTS (fast fallback).
 """
 
 import os
@@ -7,7 +8,7 @@ from typing import List, Dict, Any
 
 from ..base import PipelineStage, PipelineContext
 from ...core import Result, TTSError
-from ...tts.edge_handler import TTSHandler
+from ...tts import TTSHandler  # Now uses UnifiedTTSHandler
 
 
 class TTSStage(PipelineStage):

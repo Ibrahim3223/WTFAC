@@ -23,7 +23,7 @@ from .pipeline.stages import (
 )
 from .content.gemini_client import GeminiClient
 from .content.quality_scorer import QualityScorer
-from .tts.edge_handler import TTSHandler
+from .tts import TTSHandler  # Now uses UnifiedTTSHandler with Kokoro support
 from .video.pexels_client import PexelsClient
 from .video.downloader import VideoDownloader
 from .video.segment_maker import SegmentMaker
@@ -104,7 +104,17 @@ class ShortsOrchestrator:
         )
 
         container.register(QualityScorer, QualityScorer, ServiceLifetime.SINGLETON)
-        container.register(TTSHandler, TTSHandler, ServiceLifetime.SINGLETON)
+
+        # Register UnifiedTTSHandler with Kokoro support
+        container.register(
+            TTSHandler,
+            lambda: TTSHandler(
+                provider=settings.TTS_PROVIDER,
+                kokoro_voice=settings.KOKORO_VOICE
+            ),
+            ServiceLifetime.SINGLETON
+        )
+
         container.register(PexelsClient, PexelsClient, ServiceLifetime.SINGLETON)
         container.register(VideoDownloader, VideoDownloader, ServiceLifetime.SINGLETON)
         container.register(SegmentMaker, SegmentMaker, ServiceLifetime.SINGLETON)

@@ -71,8 +71,8 @@ class UnifiedTTSHandler:
         """Lazy load Edge TTS."""
         if self._edge is None:
             try:
-                from autoshorts.tts.handler import TTSHandler
-                self._edge = TTSHandler()
+                from autoshorts.tts.edge_handler import TTSHandler as EdgeTTSHandler
+                self._edge = EdgeTTSHandler()
                 logger.info("[UnifiedTTS] Edge TTS loaded")
             except Exception as e:
                 logger.warning(f"[UnifiedTTS] Failed to load Edge TTS: {e}")
