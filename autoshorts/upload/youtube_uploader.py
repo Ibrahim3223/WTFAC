@@ -108,31 +108,30 @@ class YouTubeUploader:
             # Build service
             youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
             
-            # Normalize language code (YouTube expects 2-letter codes like "en", "tr")
-            lang_code = settings.LANG.split('-')[0] if '-' in settings.LANG else settings.LANG
-            lang_code = lang_code[:2].lower()  # Ensure 2-letter lowercase
-
             # Prepare body (YouTube API v3 format)
+            # Note: Keep it simple for Shorts - minimal metadata to avoid validation errors
             body = {
                 "snippet": {
                     "title": optimized_title,
                     "description": optimized_description,
                     "tags": optimized_tags,
-                    "categoryId": smart_category,
-                    "defaultLanguage": lang_code,
-                    "defaultAudioLanguage": lang_code
+                    "categoryId": smart_category
                 },
                 "status": {
                     "privacyStatus": privacy_status,
                     "selfDeclaredMadeForKids": False
-                    # Note: Don't set madeForKids AND selfDeclaredMadeForKids together
                 }
             }
             
             logger.info(f"[YouTube] Title: {optimized_title}")
             logger.info(f"[YouTube] Category: {smart_category}")
             logger.info(f"[YouTube] Tags: {len(optimized_tags)}")
-            
+            logger.info(f"[YouTube] Privacy: {privacy_status}")
+
+            # Debug: Log full body structure
+            import json
+            logger.debug(f"[YouTube] Request body: {json.dumps(body, indent=2)}")
+
             # Upload
             media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
             
