@@ -17,6 +17,10 @@ edge-tts>=6.1.18  # CRITICAL: Latest version for API compatibility
 nest-asyncio>=1.5.0
 gtts>=2.5.0
 
+# Kokoro TTS (NEW) - Ultra-realistic voice synthesis
+kokoro-onnx>=0.1.0  # ONNX-based TTS, 26 voices, auto model download
+soundfile>=0.12.0   # Audio file I/O for Kokoro
+
 # --- Google APIs (YouTube upload) ---
 google-api-python-client>=2.100.0
 google-auth-oauthlib>=1.1.0

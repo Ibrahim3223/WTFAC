@@ -120,7 +120,7 @@ class VideoConfig(BaseSettings):
 
 
 class TTSConfig(BaseSettings):
-    """Text-to-speech settings."""
+    """Text-to-speech settings with multi-provider support."""
 
     model_config = SettingsConfigDict(
         env_prefix="TTS_",
@@ -129,11 +129,46 @@ class TTSConfig(BaseSettings):
         extra="ignore"
     )
 
+    # Provider selection
+    provider: str = Field(
+        default="auto",
+        alias="TTS_PROVIDER"
+    )  # 'kokoro', 'edge', 'auto'
+
+    # Edge TTS settings (backward compatible)
     voice: str = Field(default="en-US-GuyNeural", alias="TTS_VOICE")
     rate: str = Field(default="+0%", alias="TTS_RATE")
     pitch: str = Field(default="+0Hz", alias="TTS_PITCH")
     style: str = Field(default="narration-professional", alias="TTS_STYLE")
     ssml: bool = Field(default=False, alias="TTS_SSML")
+
+    # Kokoro TTS settings (NEW)
+    kokoro_voice: str = Field(
+        default="af_sarah",
+        alias="KOKORO_VOICE"
+    )  # Voice ID (af_sarah, am_michael, etc.)
+    kokoro_precision: str = Field(
+        default="fp32",
+        alias="KOKORO_PRECISION"
+    )  # Model precision (fp32, fp16, int8)
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        """Validate TTS provider."""
+        allowed = {"kokoro", "edge", "auto"}
+        if v not in allowed:
+            raise ValueError(f"TTS provider must be one of {allowed}")
+        return v
+
+    @field_validator("kokoro_precision")
+    @classmethod
+    def validate_precision(cls, v: str) -> str:
+        """Validate Kokoro precision."""
+        allowed = {"fp32", "fp16", "int8"}
+        if v not in allowed:
+            raise ValueError(f"Kokoro precision must be one of {allowed}")
+        return v
 
 
 class CaptionConfig(BaseSettings):
