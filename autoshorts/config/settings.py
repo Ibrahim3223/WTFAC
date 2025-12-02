@@ -1,254 +1,198 @@
 """
-Settings module - Centralized configuration
-Loads settings from environment variables with sensible defaults
+Settings module - NEW Pydantic-based configuration (backward compatible).
+
+This module provides backward-compatible access to all settings while using
+Pydantic models internally for validation and type safety.
 """
 
 import os
-import re
+import logging
 from typing import List
 
+from .models import AppConfig
 
-def _env_int(key: str, default: int) -> int:
-    """Get integer from environment variable."""
-    try:
-        return int(os.getenv(key, str(default)))
-    except ValueError:
-        return default
-
-
-def _env_float(key: str, default: float) -> float:
-    """Get float from environment variable."""
-    try:
-        return float(os.getenv(key, str(default)))
-    except ValueError:
-        return default
-
-
-def _env_bool(key: str, default: bool) -> bool:
-    """Get boolean from environment variable."""
-    val = os.getenv(key, "").strip().lower()
-    if val in ("1", "true", "yes", "on"):
-        return True
-    if val in ("0", "false", "no", "off"):
-        return False
-    return default
-
-
-def _parse_list(s: str) -> List[str]:
-    """Parse comma-separated list from string."""
-    s = (s or "").strip()
-    if not s:
-        return []
-    # Try JSON first
-    try:
-        import json
-        data = json.loads(s)
-        if isinstance(data, list):
-            return [str(x).strip() for x in data if str(x).strip()]
-    except Exception:
-        pass
-    # Fallback to comma-separated
-    s = re.sub(r'^[\[\(]|\s*[\]\)]$', '', s)
-    parts = re.split(r'\s*,\s*', s)
-    return [p.strip().strip('"').strip("'") for p in parts if p.strip()]
-
+logger = logging.getLogger(__name__)
 
 # ============================================================
-# CHANNEL CONFIGURATION
+# Load configuration from environment
 # ============================================================
 
-CHANNEL_NAME = os.getenv("CHANNEL_NAME", "DefaultChannel")
+try:
+    config = AppConfig()
+    logger.info("✅ Configuration loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Configuration error: {e}")
+    raise
 
-# ✅ YENİ: Load channel-specific settings from channels.yml
+# ============================================================
+# Backward-compatible exports
+# ============================================================
+
+# API Keys
+GEMINI_API_KEY = config.api.gemini_api_key
+PEXELS_API_KEY = config.api.pexels_api_key
+PIXABAY_API_KEY = config.api.pixabay_api_key
+YT_CLIENT_ID = config.api.yt_client_id
+YT_CLIENT_SECRET = config.api.yt_client_secret
+YT_REFRESH_TOKEN = config.api.yt_refresh_token
+
+# Gemini
+GEMINI_MODEL = config.api.gemini_model
+USE_GEMINI = True  # Always true for now
+ADDITIONAL_PROMPT_CONTEXT = os.getenv("ADDITIONAL_PROMPT_CONTEXT", "")
+
+# Channel
+CHANNEL_NAME = config.channel.channel_name
+CHANNEL_TOPIC = config.channel.topic
+CHANNEL_MODE = config.channel.mode
+LANG = config.channel.lang
+VISIBILITY = config.channel.visibility
+CONTENT_STYLE = config.channel.content_style
+ROTATION_SEED = config.channel.rotation_seed
+
+# Try to load channel-specific settings from channels.yml
 try:
     from .channel_loader import apply_channel_settings
     _channel_settings = apply_channel_settings(CHANNEL_NAME)
-    CHANNEL_TOPIC = _channel_settings.get("CHANNEL_TOPIC", "Interesting facts and knowledge")
-    CHANNEL_MODE = _channel_settings.get("CHANNEL_MODE", "general")
+    CHANNEL_TOPIC = _channel_settings.get("CHANNEL_TOPIC", CHANNEL_TOPIC)
+    CHANNEL_MODE = _channel_settings.get("CHANNEL_MODE", CHANNEL_MODE)
     CHANNEL_SEARCH_TERMS = _channel_settings.get("CHANNEL_SEARCH_TERMS", [])
-    CHANNEL_LANG_OVERRIDE = _channel_settings.get("CHANNEL_LANG", None)
-    CHANNEL_VISIBILITY_OVERRIDE = _channel_settings.get("CHANNEL_VISIBILITY", None)
 except Exception as e:
-    import logging
-    logging.warning(f"⚠️ Failed to load channel config: {e}")
-    CHANNEL_TOPIC = os.getenv("TOPIC", "Interesting facts and knowledge")
-    CHANNEL_MODE = "general"
+    logger.warning(f"⚠️ Failed to load channel config: {e}")
     CHANNEL_SEARCH_TERMS = []
-    CHANNEL_LANG_OVERRIDE = None
-    CHANNEL_VISIBILITY_OVERRIDE = None
 
 # Allow ENV override if specified
 if os.getenv("TOPIC"):
     CHANNEL_TOPIC = os.getenv("TOPIC")
 
-CONTENT_STYLE = os.getenv("CONTENT_STYLE", "Educational and engaging")
+# Video
+TARGET_DURATION = config.video.target_duration
+TARGET_MIN_SEC = config.video.target_min_sec
+TARGET_MAX_SEC = config.video.target_max_sec
+VIDEO_WIDTH = config.video.video_width
+VIDEO_HEIGHT = config.video.video_height
+TARGET_FPS = config.video.target_fps
+CRF_VISUAL = config.video.crf_visual
+VIDEO_MOTION = config.video.video_motion
+MOTION_INTENSITY = config.video.motion_intensity
+
+# TTS
+TTS_VOICE = config.tts.voice
+VOICE = TTS_VOICE  # Alias
+TTS_RATE = config.tts.rate
+TTS_PITCH = config.tts.pitch
+TTS_STYLE = config.tts.style
+TTS_SSML = config.tts.ssml
+
+# Captions
+REQUIRE_CAPTIONS = config.captions.require_captions
+KARAOKE_CAPTIONS = config.captions.karaoke_captions
+CAPTIONS_UPPER = config.captions.captions_upper
+KARAOKE_INACTIVE = config.captions.karaoke_inactive
+KARAOKE_ACTIVE = config.captions.karaoke_active
+KARAOKE_OUTLINE = config.captions.karaoke_outline
+KARAOKE_OFFSET_MS = config.captions.karaoke_offset_ms
+KARAOKE_SPEED = config.captions.karaoke_speed
+CAPTION_LEAD_MS = config.captions.caption_lead_ms
+KARAOKE_EFFECTS = config.captions.karaoke_effects
+EFFECT_STYLE = config.captions.effect_style
+
+# Pexels
+PEXELS_PER_PAGE = config.pexels.per_page
+PEXELS_MAX_USES_PER_CLIP = config.pexels.max_uses_per_clip
+PEXELS_ALLOW_REUSE = config.pexels.allow_reuse
+PEXELS_ALLOW_LANDSCAPE = config.pexels.allow_landscape
+PEXELS_MIN_DURATION = config.pexels.min_duration
+PEXELS_MAX_DURATION = config.pexels.max_duration
+PEXELS_MIN_HEIGHT = config.pexels.min_height
+PEXELS_STRICT_VERTICAL = config.pexels.strict_vertical
+PEXELS_MAX_PAGES = config.pexels.max_pages
+PEXELS_DEEP_SEARCH = config.pexels.deep_search
+ALLOW_PIXABAY_FALLBACK = config.pexels.allow_pixabay_fallback
+
+# Quality
+MIN_QUALITY_SCORE = config.quality.min_quality_score
+MIN_VIRAL_SCORE = config.quality.min_viral_score
+MIN_OVERALL_SCORE = config.quality.min_overall_score
+
+# Novelty
+NOVELTY_ENFORCE = config.novelty.enforce
+NOVELTY_WINDOW = config.novelty.window
+NOVELTY_JACCARD_MAX = config.novelty.jaccard_max
+NOVELTY_RETRIES = config.novelty.retries
+ENTITY_COOLDOWN_DAYS = config.novelty.entity_cooldown_days
+STATE_DIR = config.novelty.state_dir
+
+# BGM
+BGM_ENABLE = config.bgm.enable
+BGM_DIR = config.bgm.dir
+BGM_FADE = config.bgm.fade
+BGM_GAIN_DB = config.bgm.gain_db
+BGM_DUCK_THRESH = config.bgm.duck_thresh
+BGM_DUCK_RATIO = config.bgm.duck_ratio
+BGM_DUCK_ATTACK_MS = config.bgm.duck_attack_ms
+BGM_DUCK_RELEASE_MS = config.bgm.duck_release_ms
+
+# App
+UPLOAD_TO_YT = config.upload_to_yt
+MAX_GENERATION_ATTEMPTS = config.max_generation_attempts
 
 # ============================================================
-# API KEYS (from environment)
+# Legacy compatibility - values from old settings.py
 # ============================================================
 
-# ✅ DÜZELTME: Empty string yerine None - validation'ı orchestrator'a bırakıyoruz
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or ""
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY") or ""
-PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY") or ""
+# These are kept for backward compatibility with existing code
+SCENE_STRATEGY = os.getenv("SCENE_STRATEGY", "topic_only")
+ENTITY_VISUAL_MIN = float(os.getenv("ENTITY_VISUAL_MIN", "0.95"))
+ENTITY_VISUAL_STRICT = os.getenv("ENTITY_VISUAL_STRICT", "1") == "1"
+STRICT_ENTITY_FILTER = os.getenv("STRICT_ENTITY_FILTER", "1") == "1"
+HOOK_MAX_WORDS = int(os.getenv("HOOK_MAX_WORDS", "8"))
+CTA_ENABLE = os.getenv("CTA_ENABLE", "1") == "1"
+CTA_SHOW_SEC = float(os.getenv("CTA_SHOW_SEC", "2.8"))
+CTA_MAX_CHARS = int(os.getenv("CTA_MAX_CHARS", "64"))
+SEO_KEYWORD_DENSITY = os.getenv("SEO_KEYWORD_DENSITY", "1") == "1"
+TITLE_POWER_WORDS = os.getenv("TITLE_POWER_WORDS", "1") == "1"
+MAX_DESCRIPTION_LENGTH = int(os.getenv("MAX_DESCRIPTION_LENGTH", "4900"))
+MAX_TAGS = int(os.getenv("MAX_TAGS", "30"))
 
-# YouTube OAuth
-YT_CLIENT_ID = os.getenv("YT_CLIENT_ID") or ""
-YT_CLIENT_SECRET = os.getenv("YT_CLIENT_SECRET") or ""
-YT_REFRESH_TOKEN = os.getenv("YT_REFRESH_TOKEN") or ""
-
-# ============================================================
-# GEMINI SETTINGS
-# ============================================================
-
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "flash")  # Default: gemini-2.5-flash (via mapping)
-USE_GEMINI = _env_bool("USE_GEMINI", True)
-ADDITIONAL_PROMPT_CONTEXT = os.getenv("ADDITIONAL_PROMPT_CONTEXT", "")
-
-# ============================================================
-# VIDEO SETTINGS
-# ============================================================
-
-TARGET_DURATION = _env_int("TARGET_DURATION", 30)  # seconds
-TARGET_MIN_SEC = _env_float("TARGET_MIN_SEC", 25.0)
-TARGET_MAX_SEC = _env_float("TARGET_MAX_SEC", 35.0)
-
-VIDEO_WIDTH = 1080
-VIDEO_HEIGHT = 1920
-TARGET_FPS = _env_int("TARGET_FPS", 30)
-CRF_VISUAL = _env_int("CRF_VISUAL", 20)
-
-# Video motion effects
-VIDEO_MOTION = _env_bool("VIDEO_MOTION", True)  # Enable Ken Burns and motion effects
-MOTION_INTENSITY = _env_float("MOTION_INTENSITY", 1.18)  # Zoom intensity for Ken Burns (1.0 = no zoom, 1.2 = 20% zoom)
+# Caption offset (for CaptionRenderer compatibility)
+CAPTION_OFFSET = None
+try:
+    offset_str = os.getenv("KARAOKE_OFFSET_MS", "0")
+    CAPTION_OFFSET = int(offset_str) / 1000.0 if offset_str else None
+except Exception:
+    CAPTION_OFFSET = None
 
 # ============================================================
-# TTS SETTINGS
+# Validation helpers
 # ============================================================
 
-TTS_VOICE = os.getenv("TTS_VOICE", "en-US-GuyNeural")
-VOICE = TTS_VOICE  # Alias for backward compatibility
-TTS_RATE = os.getenv("TTS_RATE", "+0%")
-TTS_PITCH = os.getenv("TTS_PITCH", "+0Hz")
-TTS_STYLE = os.getenv("TTS_STYLE", "narration-professional")
+def validate_api_keys() -> List[str]:
+    """
+    Validate that required API keys are present.
 
-# ============================================================
-# PEXELS/PIXABAY SETTINGS
-# ============================================================
+    Returns:
+        List of missing API key names
+    """
+    missing = []
 
-PEXELS_PER_PAGE = _env_int("PEXELS_PER_PAGE", 40)
-PEXELS_MAX_USES_PER_CLIP = _env_int("PEXELS_MAX_USES_PER_CLIP", 1)
-PEXELS_ALLOW_REUSE = _env_bool("PEXELS_ALLOW_REUSE", False)
-PEXELS_ALLOW_LANDSCAPE = _env_bool("PEXELS_ALLOW_LANDSCAPE", False)
-PEXELS_MIN_DURATION = _env_int("PEXELS_MIN_DURATION", 4)
-PEXELS_MAX_DURATION = _env_int("PEXELS_MAX_DURATION", 12)
-PEXELS_MIN_HEIGHT = _env_int("PEXELS_MIN_HEIGHT", 1440)
-PEXELS_STRICT_VERTICAL = _env_bool("PEXELS_STRICT_VERTICAL", True)
+    if not GEMINI_API_KEY:
+        missing.append("GEMINI_API_KEY")
 
-ALLOW_PIXABAY_FALLBACK = _env_bool("ALLOW_PIXABAY_FALLBACK", True)
+    if not PEXELS_API_KEY and not PIXABAY_API_KEY:
+        missing.append("PEXELS_API_KEY or PIXABAY_API_KEY")
 
-# Entity filtering for video search
-STRICT_ENTITY_FILTER = _env_bool("STRICT_ENTITY_FILTER", False)
+    if UPLOAD_TO_YT:
+        if not YT_CLIENT_ID:
+            missing.append("YT_CLIENT_ID")
+        if not YT_CLIENT_SECRET:
+            missing.append("YT_CLIENT_SECRET")
+        if not YT_REFRESH_TOKEN:
+            missing.append("YT_REFRESH_TOKEN")
 
-# ============================================================
-# CAPTION SETTINGS
-# ============================================================
-
-KARAOKE_CAPTIONS = _env_bool("KARAOKE_CAPTIONS", True)  # Enable karaoke-style animated captions
-KARAOKE_EFFECTS = _env_bool("KARAOKE_EFFECTS", True)  # Enable shake/blur effects
-EFFECT_STYLE = os.getenv("EFFECT_STYLE", "moderate")  # dynamic, moderate, subtle
-
-CAPTION_FONT = os.getenv("CAPTION_FONT", "Arial")
-CAPTION_FONT_SIZE = _env_int("CAPTION_FONT_SIZE", 70)
-CAPTION_MAX_LINE = _env_int("CAPTION_MAX_LINE", 26)
-CAPTION_MAX_LINES = _env_int("CAPTION_MAX_LINES", 5)
-CAPTION_POSITION = os.getenv("CAPTION_POSITION", "center")  # top, center, bottom
-
-# Karaoke effect colors
-CAPTION_PRIMARY_COLOR = os.getenv("CAPTION_PRIMARY_COLOR", "&H00FFFFFF")  # White
-CAPTION_OUTLINE_COLOR = os.getenv("CAPTION_OUTLINE_COLOR", "&H00000000")  # Black
-CAPTION_HIGHLIGHT_COLOR = os.getenv("CAPTION_HIGHLIGHT_COLOR", "&H0000FFFF")  # Yellow
-
-# Karaoke ASS colors (for karaoke_ass.py)
-KARAOKE_INACTIVE = os.getenv("KARAOKE_INACTIVE", "#FFFFFF")  # White (inactive text)
-KARAOKE_ACTIVE = os.getenv("KARAOKE_ACTIVE", "#00FFFF")  # Yellow (active/highlighted text)
-KARAOKE_OUTLINE = os.getenv("KARAOKE_OUTLINE", "#000000")  # Black (outline)
-
-# ============================================================
-# BGM SETTINGS
-# ============================================================
-
-BGM_ENABLE = _env_bool("BGM_ENABLE", True)
-BGM_VOLUME_DB = _env_float("BGM_DB", -26.0)
-BGM_DUCK_DB = _env_float("BGM_DUCK_DB", -12.0)
-BGM_FADE_DURATION = _env_float("BGM_FADE", 0.8)
-BGM_DIR = os.getenv("BGM_DIR", "bgm")
-BGM_URLS = _parse_list(os.getenv("BGM_URLS", ""))
-
-# Detailed BGM mixing parameters
-BGM_GAIN_DB = _env_float("BGM_GAIN_DB", -26.0)
-BGM_DUCK_THRESH = _env_float("BGM_DUCK_THRESH", 0.09)
-BGM_DUCK_RATIO = _env_float("BGM_DUCK_RATIO", 4.0)
-BGM_DUCK_ATTACK_MS = _env_float("BGM_DUCK_ATTACK_MS", 20.0)
-BGM_DUCK_RELEASE_MS = _env_float("BGM_DUCK_RELEASE_MS", 250.0)
-BGM_FADE = _env_float("BGM_FADE", 0.8)  # Fade duration in seconds
-
-# ============================================================
-# STATE MANAGEMENT
-# ============================================================
-
-STATE_DIR = os.getenv("STATE_DIR", "state")
-ENTITY_COOLDOWN_DAYS = _env_int("ENTITY_COOLDOWN_DAYS", 30)
-
-# Novelty settings
-NOVELTY_ENFORCE = _env_bool("NOVELTY_ENFORCE", True)
-NOVELTY_WINDOW = _env_int("NOVELTY_WINDOW", 50)
-NOVELTY_JACCARD_MAX = _env_float("NOVELTY_JACCARD_MAX", 0.48)
-NOVELTY_RETRIES = _env_int("NOVELTY_RETRIES", 6)
-
-# ============================================================
-# QUALITY SETTINGS
-# ============================================================
-
-# Note: Lower threshold for more content acceptance
-# Quality scores range from 0-10, where:
-# - 5.0+ = Good quality
-# - 6.5+ = High quality  
-# - 8.0+ = Excellent quality
-MIN_QUALITY_SCORE = _env_float("MIN_QUALITY_SCORE", 5.0)
-MAX_GENERATION_ATTEMPTS = _env_int("MAX_GENERATION_ATTEMPTS", 4)
-
-# ============================================================
-# UPLOAD SETTINGS
-# ============================================================
-
-UPLOAD_TO_YT = _env_bool("UPLOAD_TO_YT", True)
-VISIBILITY = os.getenv("VISIBILITY", "public")  # public, unlisted, private
-
-# ============================================================
-# LANGUAGE SETTINGS
-# ============================================================
-
-LANG = os.getenv("LANG", "en")
-
-# ============================================================
-# OUTPUT SETTINGS
-# ============================================================
-
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "out")
-
-# Create necessary directories
-import pathlib
-pathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-pathlib.Path(STATE_DIR).mkdir(parents=True, exist_ok=True)
-if BGM_ENABLE and BGM_DIR:
-    pathlib.Path(BGM_DIR).mkdir(parents=True, exist_ok=True)
+    return missing
 
 
-# ============================================================
-# VALIDATION - REMOVED! 
-# Validation now happens in orchestrator.py where it's actually used
-# This prevents circular import issues and gives better error messages
-# ============================================================
-
-# No auto-validation on import - let orchestrator handle it
+def get_config() -> AppConfig:
+    """Get the full typed configuration object."""
+    return config
