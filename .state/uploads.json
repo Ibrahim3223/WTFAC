@@ -7512,11 +7512,19 @@
     "ts": "2025-12-01T17:14:50.458118"
   },
   {
-    "channel": "Tales of The Forgotten Realms",
-    "entity": "Forgotten History's Secret: The 2,000-Year-Old Truth",
-    "content_hash": "42b49d20457ff021",
-    "title": "Forgotten History's Secret: The 2,000-Year-Old Truth",
-    "video_path": "youtube:zcYOFmRX2Rc",
-    "ts": "2025-12-02T02:06:07.187419"
+    "channel": "Rewind Retro Media",
+    "entity": "WAIT! The Secret Behind Your Nostalgia Loop | Retro Memories",
+    "content_hash": "76219c6a56ab3f21",
+    "title": "WAIT! The Secret Behind Your Nostalgia Loop | Retro Memories",
+    "video_path": "youtube:W4571oDsWro",
+    "ts": "2025-12-02T02:09:42.046424"
+  },
+  {
+    "channel": "Cinematic Echo",
+    "entity": "WAIT! You'd NEVER Know This | Movie Secrets",
+    "content_hash": "9c904ddc363cfbdd",
+    "title": "WAIT! You'd NEVER Know This | Movie Secrets",
+    "video_path": "youtube:7fVkxhnZdbk",
+    "ts": "2025-12-02T02:14:36.487667"
   }
 ]
