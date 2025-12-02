@@ -243,18 +243,34 @@ class TTSHandler(UnifiedTTSHandler):
     but with enhanced multi-provider support.
     """
 
-    def __init__(self, provider: str = "auto"):
-        """Initialize with config-based settings."""
-        # Try to get settings from config
-        try:
-            from autoshorts.config import settings
-            kokoro_voice = getattr(settings, 'KOKORO_VOICE', 'af_sarah')
-            kokoro_precision = getattr(settings, 'KOKORO_PRECISION', 'fp32')
-            provider = getattr(settings, 'TTS_PROVIDER', 'auto')
-        except:
-            kokoro_voice = 'af_sarah'
-            kokoro_precision = 'fp32'
-            provider = 'auto'
+    def __init__(
+        self,
+        provider: Optional[str] = None,
+        kokoro_voice: Optional[str] = None,
+        kokoro_precision: Optional[str] = None
+    ):
+        """
+        Initialize with explicit or config-based settings.
+
+        Args:
+            provider: TTS provider ('kokoro', 'edge', 'auto'). If None, reads from settings.
+            kokoro_voice: Kokoro voice ID. If None, reads from settings.
+            kokoro_precision: Kokoro precision. If None, reads from settings.
+        """
+        # Use provided values or fall back to settings
+        if provider is None or kokoro_voice is None or kokoro_precision is None:
+            try:
+                from autoshorts.config import settings
+                if provider is None:
+                    provider = getattr(settings, 'TTS_PROVIDER', 'auto')
+                if kokoro_voice is None:
+                    kokoro_voice = getattr(settings, 'KOKORO_VOICE', 'af_sarah')
+                if kokoro_precision is None:
+                    kokoro_precision = getattr(settings, 'KOKORO_PRECISION', 'fp32')
+            except:
+                provider = provider or 'auto'
+                kokoro_voice = kokoro_voice or 'af_sarah'
+                kokoro_precision = kokoro_precision or 'fp32'
 
         super().__init__(
             provider=provider,
