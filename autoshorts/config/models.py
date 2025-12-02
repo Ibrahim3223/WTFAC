@@ -4,9 +4,16 @@ Pydantic configuration models for type-safe settings.
 All environment variables are validated and typed here.
 """
 
-from typing import List, Optional, Union
-from pydantic import Field, field_validator, ConfigDict
+from typing import List, Optional, Union, Annotated
+from pydantic import Field, field_validator, ConfigDict, BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def parse_int_or_empty(v) -> int:
+    """Parse integer or empty string to int (0 for empty)."""
+    if v == "" or v is None:
+        return 0
+    return int(v)
 
 
 class APIConfig(BaseSettings):
@@ -52,15 +59,10 @@ class ChannelConfig(BaseSettings):
         default="Educational and engaging",
         alias="CONTENT_STYLE"
     )
-    rotation_seed: int = Field(default=0, alias="ROTATION_SEED")
-
-    @field_validator("rotation_seed", mode="before")
-    @classmethod
-    def parse_rotation_seed(cls, v) -> int:
-        """Parse rotation_seed - handle empty strings."""
-        if v == "" or v is None:
-            return 0
-        return int(v)
+    rotation_seed: Annotated[int, BeforeValidator(parse_int_or_empty)] = Field(
+        default=0,
+        alias="ROTATION_SEED"
+    )
 
     @field_validator("visibility")
     @classmethod
