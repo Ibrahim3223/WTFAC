@@ -108,25 +108,25 @@ class YouTubeUploader:
             # Build service
             youtube = build("youtube", "v3", credentials=creds, cache_discovery=False)
             
-            # Prepare body (YouTube API v3 format)
-            # Note: Keep it simple for Shorts - minimal metadata to avoid validation errors
+            # Prepare body (YouTube API v3 format) - Ultra minimal for Shorts
+            # Only absolutely required fields to avoid INVALID_REQUEST_METADATA
             body = {
                 "snippet": {
                     "title": optimized_title,
                     "description": optimized_description,
-                    "tags": optimized_tags,
-                    "categoryId": smart_category
+                    "tags": optimized_tags
+                    # Note: Removed categoryId - it's optional and might cause validation issues
                 },
                 "status": {
-                    "privacyStatus": privacy_status,
-                    "selfDeclaredMadeForKids": False
+                    "privacyStatus": privacy_status
+                    # Note: Removed selfDeclaredMadeForKids - YouTube sets defaults based on account
                 }
             }
             
             logger.info(f"[YouTube] Title: {optimized_title}")
-            logger.info(f"[YouTube] Category: {smart_category}")
             logger.info(f"[YouTube] Tags: {len(optimized_tags)}")
             logger.info(f"[YouTube] Privacy: {privacy_status}")
+            logger.info(f"[YouTube] Using minimal metadata for Shorts compatibility")
 
             # Debug: Log full body structure
             import json
