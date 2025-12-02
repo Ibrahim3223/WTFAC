@@ -134,6 +134,18 @@ def simhash64(text: str, use_char_shingles: bool = True) -> int:
 def hamming64(a: int, b: int) -> int:
     return (a ^ b).bit_count()
 
+def to_signed64(val: int) -> int:
+    """Convert unsigned 64-bit int to signed 64-bit (for SQLite INTEGER)."""
+    if val >= (1 << 63):
+        return val - (1 << 64)
+    return val
+
+def to_unsigned64(val: int) -> int:
+    """Convert signed 64-bit back to unsigned 64-bit."""
+    if val < 0:
+        return val + (1 << 64)
+    return val
+
 def jaccard(a: Set[str], b: Set[str]) -> float:
     if not a and not b: return 0.0
     inter = len(a & b)
@@ -297,14 +309,14 @@ class NoveltyGuard:
         
         out = []
         for r in rows:
-            (ts, ch, mode, lang, title, topic, entities, category, sterm, 
+            (ts, ch, mode, lang, title, topic, entities, category, sterm,
              sh, chash, emb, pids, subtopic) = r
             out.append({
-                "ts": ts, "channel": ch, "mode": mode, "lang": lang, 
+                "ts": ts, "channel": ch, "mode": mode, "lang": lang,
                 "title": title or "", "topic": topic or "",
-                "entities": json.loads(entities or "[]"), 
+                "entities": json.loads(entities or "[]"),
                 "category": category or "", "search_term": sterm or "",
-                "simhash": sh or 0, "content_hash": chash or "", 
+                "simhash": to_unsigned64(sh) if sh is not None else 0, "content_hash": chash or "",
                 "embed": json.loads(emb or "null") if emb else None,
                 "pexels_ids": json.loads(pids or "[]"),
                 "sub_topic": subtopic or ""
@@ -527,15 +539,15 @@ class NoveltyGuard:
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("""
-            INSERT INTO items 
-            (ts, channel, mode, lang, title, topic, entities, category, 
+            INSERT INTO items
+            (ts, channel, mode, lang, title, topic, entities, category,
              search_term, simhash, content_hash, embed, pexels_ids, sub_topic)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
         """, (
-            ts, channel, mode or "", lang or "", title, topic or "", 
-            json.dumps(ents), category or "", 
-            (search_term or "").strip().lower() or None, 
-            int(sh), chash,
+            ts, channel, mode or "", lang or "", title, topic or "",
+            json.dumps(ents), category or "",
+            (search_term or "").strip().lower() or None,
+            to_signed64(sh), chash,
             json.dumps(emb) if emb is not None else None,
             json.dumps(list(pexels_ids or [])),
             (sub_topic or "").strip().lower() or None
