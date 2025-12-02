@@ -279,6 +279,74 @@ class BGMConfig(BaseSettings):
     duck_release_ms: int = Field(default=180, alias="BGM_DUCK_RELEASE_MS")
 
 
+class ScriptStyleConfig(BaseSettings):
+    """Script style configuration for viral Shorts content."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="SCRIPT_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
+
+    # Hook settings (for viral opens)
+    hook_intensity: str = Field(
+        default="extreme",
+        alias="SCRIPT_HOOK_INTENSITY"
+    )
+    cold_open: bool = Field(
+        default=True,
+        alias="SCRIPT_COLD_OPEN"
+    )
+    hook_max_words: int = Field(
+        default=10,
+        ge=5,
+        le=15,
+        alias="SCRIPT_HOOK_MAX_WORDS"
+    )
+
+    # Cliffhanger settings (for retention)
+    cliffhanger_enabled: bool = Field(
+        default=True,
+        alias="SCRIPT_CLIFFHANGER_ENABLED"
+    )
+    cliffhanger_interval: int = Field(
+        default=10,
+        ge=5,
+        le=20,
+        alias="SCRIPT_CLIFFHANGER_INTERVAL"
+    )
+    cliffhanger_max: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        alias="SCRIPT_CLIFFHANGER_MAX"
+    )
+
+    # Content settings
+    max_sentence_length: int = Field(
+        default=15,
+        ge=10,
+        le=25,
+        alias="SCRIPT_MAX_SENTENCE_LEN"
+    )
+
+    # Keyword highlighting
+    keyword_highlighting: bool = Field(
+        default=True,
+        alias="SCRIPT_KEYWORD_HIGHLIGHTING"
+    )
+
+    @field_validator("hook_intensity")
+    @classmethod
+    def validate_intensity(cls, v: str) -> str:
+        """Validate hook intensity level."""
+        allowed = {"low", "medium", "high", "extreme"}
+        if v not in allowed:
+            raise ValueError(f"hook_intensity must be one of {allowed}")
+        return v
+
+
 class AppConfig(BaseSettings):
     """Main application configuration combining all sub-configs."""
 
@@ -307,3 +375,4 @@ class AppConfig(BaseSettings):
     quality: QualityConfig = Field(default_factory=QualityConfig)
     novelty: NoveltyConfig = Field(default_factory=NoveltyConfig)
     bgm: BGMConfig = Field(default_factory=BGMConfig)
+    script_style: ScriptStyleConfig = Field(default_factory=ScriptStyleConfig)
