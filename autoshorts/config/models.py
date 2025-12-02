@@ -54,6 +54,14 @@ class ChannelConfig(BaseSettings):
     )
     rotation_seed: int = Field(default=0, alias="ROTATION_SEED")
 
+    @field_validator("rotation_seed", mode="before")
+    @classmethod
+    def parse_rotation_seed(cls, v) -> int:
+        """Parse rotation_seed - handle empty strings."""
+        if v == "" or v is None:
+            return 0
+        return int(v)
+
     @field_validator("visibility")
     @classmethod
     def validate_visibility(cls, v: str) -> str:
