@@ -4,8 +4,8 @@ Pydantic configuration models for type-safe settings.
 All environment variables are validated and typed here.
 """
 
-from typing import List, Optional
-from pydantic import Field, field_validator
+from typing import List, Optional, Union
+from pydantic import Field, field_validator, ConfigDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,12 +86,37 @@ class VideoConfig(BaseSettings):
 
     # Motion effects
     video_motion: bool = Field(default=True, alias="VIDEO_MOTION")
-    motion_intensity: float = Field(
+    motion_intensity: Union[float, str] = Field(
         default=1.18,
-        ge=1.0,
-        le=2.0,
         alias="MOTION_INTENSITY"
     )
+
+    @field_validator("motion_intensity", mode="before")
+    @classmethod
+    def parse_motion_intensity(cls, v) -> float:
+        """Parse motion intensity - accepts float or style string."""
+        if isinstance(v, (int, float)):
+            return float(v)
+
+        # Map style strings to numeric values
+        style_map = {
+            "subtle": 1.05,
+            "moderate": 1.18,
+            "dynamic": 1.35
+        }
+
+        if isinstance(v, str):
+            v_lower = v.lower().strip()
+            if v_lower in style_map:
+                return style_map[v_lower]
+            try:
+                return float(v)
+            except ValueError:
+                raise ValueError(
+                    f"motion_intensity must be a number or one of {list(style_map.keys())}"
+                )
+
+        return 1.18  # default
 
 
 class TTSConfig(BaseSettings):
@@ -272,21 +297,13 @@ class AppConfig(BaseSettings):
         alias="MAX_GENERATION_ATTEMPTS"
     )
 
-    # Sub-configs
-    api: APIConfig = Field(default_factory=APIConfig)
-    channel: ChannelConfig = Field(default_factory=ChannelConfig)
-    video: VideoConfig = Field(default_factory=VideoConfig)
-    tts: TTSConfig = Field(default_factory=TTSConfig)
-    captions: CaptionConfig = Field(default_factory=CaptionConfig)
-    pexels: PexelsConfig = Field(default_factory=PexelsConfig)
-    quality: QualityConfig = Field(default_factory=QualityConfig)
-    novelty: NoveltyConfig = Field(default_factory=NoveltyConfig)
-    bgm: BGMConfig = Field(default_factory=BGMConfig)
+    # Sub-configs are loaded separately to avoid circular dependencies
+    # They will be initialized in __init__
 
     def __init__(self, **kwargs):
         """Initialize with sub-configs from environment."""
         super().__init__(**kwargs)
-        # Reload sub-configs to pick up env vars
+        # Load sub-configs after parent initialization
         self.api = APIConfig()
         self.channel = ChannelConfig()
         self.video = VideoConfig()
