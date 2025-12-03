@@ -1,0 +1,178 @@
+{
+  "patterns": [
+    {
+      "pattern_type": "hook_structure",
+      "pattern_id": "hook_curiosity_gap",
+      "description": "Start with curiosity gap hook",
+      "characteristics": {
+        "style": "curiosity_gap",
+        "max_words": 12,
+        "power_words": [
+          "secret",
+          "hidden",
+          "truth",
+          "nobody",
+          "97%"
+        ],
+        "structure": "shocking_statement + curiosity_gap"
+      },
+      "effectiveness_score": 0.85,
+      "sample_count": 100,
+      "content_types": [
+        "education",
+        "entertainment",
+        "tech",
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144640",
+      "last_used": null
+    },
+    {
+      "pattern_type": "hook_structure",
+      "pattern_id": "hook_pattern_interrupt",
+      "description": "Pattern interrupt with power word",
+      "characteristics": {
+        "style": "pattern_interrupt",
+        "opening_words": [
+          "WAIT",
+          "STOP",
+          "HOLD",
+          "PAUSE"
+        ],
+        "max_words": 10,
+        "urgency": "high"
+      },
+      "effectiveness_score": 0.9,
+      "sample_count": 150,
+      "content_types": [
+        "entertainment",
+        "lifestyle",
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144666",
+      "last_used": null
+    },
+    {
+      "pattern_type": "pacing_rhythm",
+      "pattern_id": "pacing_fast_start",
+      "description": "Fast cuts in first 5 seconds, then moderate",
+      "characteristics": {
+        "first_5sec": "2-3 second cuts",
+        "middle": "3-5 second cuts",
+        "last_5sec": "dynamic 2-4 second cuts",
+        "total_cuts": "8-12 cuts per 30s"
+      },
+      "effectiveness_score": 0.82,
+      "sample_count": 200,
+      "content_types": [
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144668",
+      "last_used": null
+    },
+    {
+      "pattern_type": "duration",
+      "pattern_id": "duration_sweet_spot_30",
+      "description": "30-second sweet spot for viral shorts",
+      "characteristics": {
+        "duration_seconds": 30,
+        "min": 28,
+        "max": 32,
+        "reason": "Optimal for YouTube Shorts algorithm"
+      },
+      "effectiveness_score": 0.88,
+      "sample_count": 500,
+      "content_types": [
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144669",
+      "last_used": null
+    },
+    {
+      "pattern_type": "cta_placement",
+      "pattern_id": "cta_last_3_seconds",
+      "description": "Place CTA in last 3 seconds",
+      "characteristics": {
+        "placement": "last_3_seconds",
+        "max_words": 8,
+        "style": "comment_engagement",
+        "examples": [
+          "Drop a 💬 if you knew this!",
+          "What's your take?"
+        ]
+      },
+      "effectiveness_score": 0.78,
+      "sample_count": 300,
+      "content_types": [
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144671",
+      "last_used": null
+    },
+    {
+      "pattern_type": "retention_technique",
+      "pattern_id": "retention_cliffhangers_10s",
+      "description": "Cliffhangers every 10 seconds",
+      "characteristics": {
+        "interval_seconds": 10,
+        "max_cliffhangers": 2,
+        "phrases": [
+          "But wait...",
+          "Here's the twist.",
+          "Watch what happens."
+        ],
+        "placement": "mid-sentence"
+      },
+      "effectiveness_score": 0.8,
+      "sample_count": 250,
+      "content_types": [
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144672",
+      "last_used": null
+    },
+    {
+      "pattern_type": "visual_style",
+      "pattern_id": "visual_high_contrast",
+      "description": "High contrast color grading for mobile",
+      "characteristics": {
+        "saturation": "high",
+        "contrast": "increased",
+        "lut": "vibrant",
+        "reason": "Stands out in feed"
+      },
+      "effectiveness_score": 0.75,
+      "sample_count": 180,
+      "content_types": [
+        "entertainment",
+        "lifestyle",
+        "travel"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144674",
+      "last_used": null
+    },
+    {
+      "pattern_type": "caption_style",
+      "pattern_id": "caption_animated_keywords",
+      "description": "Animate power words with pop effect",
+      "characteristics": {
+        "style": "pop_effect",
+        "target": "power_words",
+        "frequency": "2-3 words per sentence",
+        "colors": [
+          "yellow",
+          "white"
+        ],
+        "outline": "heavy"
+      },
+      "effectiveness_score": 0.83,
+      "sample_count": 220,
+      "content_types": [
+        "all"
+      ],
+      "timestamp": "2025-12-03T01:25:50.144676",
+      "last_used": null
+    }
+  ],
+  "updated": "2025-12-03T01:25:50.148176"
+}

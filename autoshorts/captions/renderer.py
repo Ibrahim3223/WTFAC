@@ -36,6 +36,9 @@ class CaptionRenderer:
         # Get language from settings
         self.language = getattr(settings, 'LANG', 'en').lower()
 
+        # Caption offset for timing adjustment
+        self.caption_offset = caption_offset or 0.0
+
         # NEW: Initialize keyword highlighter for engagement boost
         self.highlighter = ShortsKeywordHighlighter()
         logger.info(f"      🎯 Caption renderer: stable-ts ({self.language.upper()}) - WORD-LEVEL precision + keyword highlighting")
@@ -112,9 +115,13 @@ class CaptionRenderer:
         duration: float,
         is_hook: bool = False,
         sentence_type: str = "buildup",
-        temp_dir: str = None
+        temp_dir: str = None,
+        caption_offset: float = 0.0
     ) -> str:
         """Render captions with EXACT timing."""
+        # Use instance offset if not explicitly provided
+        if caption_offset == 0.0:
+            caption_offset = self.caption_offset
         try:
             if duration <= 0:
                 duration = ffprobe_duration(video_path)
@@ -124,9 +131,13 @@ class CaptionRenderer:
             
             if settings.KARAOKE_CAPTIONS and has_subtitles():
                 ass_path = video_path.replace(".mp4", ".ass")
-                
+
+                # Apply caption offset if specified
+                if caption_offset > 0:
+                    logger.debug(f"      Applying caption offset: +{caption_offset:.2f}s")
+
                 try:
-                    self._write_exact_ass(words, duration, sentence_type, ass_path)
+                    self._write_exact_ass(words, duration, sentence_type, ass_path, time_offset=caption_offset)
                 except Exception as e:
                     logger.error(f"      ❌ ASS generation failed: {e}")
                     return video_path
@@ -281,12 +292,16 @@ class CaptionRenderer:
         words: List[Tuple[str, float]],
         total_duration: float,
         sentence_type: str,
-        output_path: str
+        output_path: str,
+        time_offset: float = 0.0
     ):
         """
         Write ASS with EXACT timing (no animation drift).
-        
+
         CRITICAL: No scale animations, minimal fade, exact cumulative timing.
+
+        Args:
+            time_offset: Time offset in seconds to shift all captions forward
         """
         if not words:
             logger.warning("      ⚠️ No words to write to ASS")
@@ -331,7 +346,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         # CRITICAL: Exact cumulative timing with CHUNK-LEVEL validation
         cumulative_time = 0.0
-        
+
         for chunk_idx, chunk in enumerate(chunks):
             chunk_text = " ".join(w.upper() for w, _ in chunk)
 
@@ -341,8 +356,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             # Calculate exact chunk duration from word timings
             chunk_duration = sum(d for _, d in chunk)
 
-            # EXACT start/end
-            start = cumulative_time
+            # EXACT start/end with time offset applied
+            # FIXED: NEGATIVE offset delays captions (makes them come AFTER audio)
+            # Positive offset makes captions come BEFORE audio
+            # This inverts the previous incorrect behavior
+            start = cumulative_time - time_offset
             end = start + chunk_duration
 
             # Don't exceed total (safety check)

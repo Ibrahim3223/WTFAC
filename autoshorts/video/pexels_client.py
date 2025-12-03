@@ -1,26 +1,222 @@
 # -*- coding: utf-8 -*-
 """
 Pexels API client for video search.
+Enhanced with:
+- Advanced rate limiting (200 requests per minute)
+- Intelligent caching system
+- Exponential backoff retry mechanism
 """
 import re
 import random
 import logging
-from typing import List, Tuple, Set, Optional
+import time
+import json
+import hashlib
+from typing import List, Tuple, Set, Optional, Dict
+from pathlib import Path
+from collections import deque
+from datetime import datetime, timedelta
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from autoshorts.config import settings
 
 logger = logging.getLogger(__name__)
 
 
+class RateLimiter:
+    """
+    Advanced rate limiter for Pexels API.
+    Enforces 200 requests per minute limit with intelligent throttling.
+    """
+
+    def __init__(self, max_requests: int = 200, time_window: int = 60, min_interval: float = 0.5):
+        """
+        Args:
+            max_requests: Maximum requests allowed in time window (default: 200)
+            time_window: Time window in seconds (default: 60)
+            min_interval: Minimum seconds between requests (default: 0.5)
+        """
+        self.max_requests = max_requests
+        self.time_window = time_window
+        self.min_interval = min_interval
+        self.request_times = deque(maxlen=max_requests)
+        self.last_request_time = 0
+
+    def wait(self):
+        """Wait if necessary to respect rate limits."""
+        now = time.time()
+
+        # Enforce minimum interval between requests
+        time_since_last = now - self.last_request_time
+        if time_since_last < self.min_interval:
+            wait_time = self.min_interval - time_since_last
+            logger.debug(f"⏳ Throttling: waiting {wait_time:.2f}s")
+            time.sleep(wait_time)
+            now = time.time()
+
+        # Enforce time window limit
+        if len(self.request_times) >= self.max_requests:
+            oldest_request = self.request_times[0]
+            time_elapsed = now - oldest_request
+
+            if time_elapsed < self.time_window:
+                wait_time = self.time_window - time_elapsed + 1  # +1 for safety margin
+                logger.warning(f"⏳ Rate limit reached: waiting {wait_time:.1f}s ({len(self.request_times)} requests in last {time_elapsed:.1f}s)")
+                time.sleep(wait_time)
+                now = time.time()
+
+        # Record this request
+        self.request_times.append(now)
+        self.last_request_time = now
+
+    def get_stats(self) -> Dict:
+        """Get current rate limiter statistics."""
+        now = time.time()
+        recent_requests = sum(1 for t in self.request_times if now - t < self.time_window)
+
+        return {
+            "total_requests": len(self.request_times),
+            "requests_last_minute": recent_requests,
+            "remaining_quota": self.max_requests - recent_requests,
+            "time_until_reset": max(0, self.time_window - (now - self.request_times[0])) if self.request_times else 0
+        }
+
+
+class PexelsCache:
+    """
+    Intelligent caching system for Pexels API responses.
+    Prevents duplicate requests and saves API quota.
+    """
+
+    def __init__(self, cache_dir: str = ".pexels_cache", ttl_hours: int = 168):
+        """
+        Args:
+            cache_dir: Directory to store cache files
+            ttl_hours: Time to live for cached data in hours (default: 168 = 1 week)
+        """
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True, parents=True)
+        self.ttl = timedelta(hours=ttl_hours)
+
+        # Memory cache for faster access
+        self._memory_cache: Dict[str, Tuple[Dict, datetime]] = {}
+
+        logger.info(f"💾 Cache initialized: {self.cache_dir} (TTL: {ttl_hours}h)")
+
+    def _get_cache_key(self, query: str, page: int = 1) -> str:
+        """Generate unique cache key from search parameters."""
+        data = f"{query.lower()}_{page}"
+        return hashlib.md5(data.encode()).hexdigest()
+
+    def get(self, query: str, page: int = 1) -> Optional[Dict]:
+        """Retrieve cached results if available and not expired."""
+        cache_key = self._get_cache_key(query, page)
+
+        # Check memory cache first
+        if cache_key in self._memory_cache:
+            data, timestamp = self._memory_cache[cache_key]
+            if datetime.now() - timestamp < self.ttl:
+                logger.debug(f"💾 Memory cache HIT: {query} (page {page})")
+                return data
+            else:
+                # Expired, remove from memory
+                del self._memory_cache[cache_key]
+
+        # Check disk cache
+        cache_file = self.cache_dir / f"{cache_key}.json"
+
+        if not cache_file.exists():
+            return None
+
+        try:
+            with open(cache_file, 'r') as f:
+                cache_data = json.load(f)
+
+            # Check if expired
+            timestamp = datetime.fromisoformat(cache_data['timestamp'])
+            if datetime.now() - timestamp > self.ttl:
+                logger.debug(f"💾 Cache EXPIRED: {query} (page {page})")
+                cache_file.unlink()  # Delete expired cache
+                return None
+
+            # Update memory cache
+            data = cache_data['data']
+            self._memory_cache[cache_key] = (data, timestamp)
+
+            logger.debug(f"💾 Disk cache HIT: {query} (page {page})")
+            return data
+
+        except Exception as e:
+            logger.warning(f"Cache read error: {e}")
+            return None
+
+    def set(self, query: str, data: Dict, page: int = 1):
+        """Store results in cache."""
+        cache_key = self._get_cache_key(query, page)
+        timestamp = datetime.now()
+
+        # Update memory cache
+        self._memory_cache[cache_key] = (data, timestamp)
+
+        # Update disk cache
+        cache_file = self.cache_dir / f"{cache_key}.json"
+
+        try:
+            cache_data = {
+                'query': query,
+                'page': page,
+                'timestamp': timestamp.isoformat(),
+                'data': data
+            }
+
+            with open(cache_file, 'w') as f:
+                json.dump(cache_data, f)
+
+            logger.debug(f"💾 Cached: {query} (page {page})")
+
+        except Exception as e:
+            logger.warning(f"Cache write error: {e}")
+
+    def clear_expired(self):
+        """Remove expired cache files."""
+        removed = 0
+        for cache_file in self.cache_dir.glob("*.json"):
+            try:
+                with open(cache_file, 'r') as f:
+                    cache_data = json.load(f)
+
+                timestamp = datetime.fromisoformat(cache_data['timestamp'])
+                if datetime.now() - timestamp > self.ttl:
+                    cache_file.unlink()
+                    removed += 1
+            except Exception:
+                continue
+
+        if removed > 0:
+            logger.info(f"💾 Removed {removed} expired cache files")
+
+    def get_stats(self) -> Dict:
+        """Get cache statistics."""
+        total_files = len(list(self.cache_dir.glob("*.json")))
+        memory_items = len(self._memory_cache)
+
+        return {
+            "disk_cache_files": total_files,
+            "memory_cache_items": memory_items,
+            "cache_dir": str(self.cache_dir)
+        }
+
+
 class PexelsClient:
     """Handle Pexels API interactions."""
-    
+
     def __init__(self):
         """Initialize with API key."""
         if not settings.PEXELS_API_KEY:
             raise ValueError("PEXELS_API_KEY required")
-        
+
         self.api_key = settings.PEXELS_API_KEY
         self.base_url = "https://api.pexels.com/videos"
         self.per_page = settings.PEXELS_PER_PAGE
@@ -29,9 +225,34 @@ class PexelsClient:
         self.max_duration = settings.PEXELS_MAX_DURATION
         self.strict_vertical = settings.PEXELS_STRICT_VERTICAL
         self.allow_landscape = settings.PEXELS_ALLOW_LANDSCAPE
-        
+
         # Track used clips for session
         self._page_urls = {}  # vid -> url (for scoring)
+
+        # Rate limiting and caching
+        self.rate_limiter = RateLimiter(max_requests=200, time_window=60, min_interval=0.5)
+        self.cache = PexelsCache(cache_dir=".pexels_cache", ttl_hours=168)
+        self.session = self._create_session_with_retries()
+
+        logger.info("🚀 PexelsClient initialized with rate limiting & caching")
+
+    def _create_session_with_retries(self) -> requests.Session:
+        """Create requests session with exponential backoff retry strategy."""
+        session = requests.Session()
+
+        # Retry strategy: exponential backoff
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=2,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        return session
     
     def search_simple(
         self,
@@ -270,13 +491,22 @@ class PexelsClient:
         return final
     
     def _search(
-        self, 
-        query: str, 
+        self,
+        query: str,
         page: int = 1
     ) -> List[Tuple[int, str, int, int, float]]:
-        """Search Pexels videos"""
+        """Search Pexels videos with caching and rate limiting."""
+        # Check cache first
+        cached_data = self.cache.get(query, page)
+        if cached_data is not None:
+            # Reconstruct results from cached data
+            return self._parse_cached_results(cached_data)
+
+        # Cache miss - make API request
+        self.rate_limiter.wait()
+
         url = f"{self.base_url}/search"
-        
+
         params = {
             "query": query,
             "per_page": self.per_page,
@@ -284,97 +514,137 @@ class PexelsClient:
             "size": "large",
             "locale": "en-US" if not settings.LANG.startswith("tr") else "tr-TR"
         }
-        
+
         headers = {"Authorization": self.api_key}
-        
+
         try:
-            r = requests.get(url, headers=headers, params=params, timeout=30)
+            r = self.session.get(url, headers=headers, params=params, timeout=30)
             r.raise_for_status()
         except Exception as e:
             logger.warning(f"   ⚠️ Search failed for '{query}': {e}")
             return []
-        
+
         data = r.json() or {}
+
+        # Cache the raw response
+        self.cache.set(query, data, page)
+
         results = []
-        
+
         for video in data.get("videos", []):
             vid = int(video.get("id", 0))
             dur = float(video.get("duration", 0.0))
-            
+
             if dur < self.min_duration or dur > self.max_duration:
                 continue
-            
+
             page_url = (video.get("url") or "").strip()
             if page_url:
                 self._page_urls[vid] = page_url
-            
+
             picks = []
             for vf in video.get("video_files", []):
                 w = int(vf.get("width", 0))
                 h = int(vf.get("height", 0))
-                
+
                 if self._is_vertical_ok(w, h):
                     picks.append((w, h, vf.get("link")))
-            
+
             if not picks:
                 continue
-            
+
             picks.sort(key=lambda t: (abs(t[1] - 1600), -(t[0] * t[1])))
             w, h, link = picks[0]
-            
+
             results.append((vid, link, w, h, dur))
-        
+
+        return results
+
+    def _parse_cached_results(self, data: Dict) -> List[Tuple[int, str, int, int, float]]:
+        """Parse cached API response data into results format."""
+        results = []
+
+        for video in data.get("videos", []):
+            vid = int(video.get("id", 0))
+            dur = float(video.get("duration", 0.0))
+
+            if dur < self.min_duration or dur > self.max_duration:
+                continue
+
+            page_url = (video.get("url") or "").strip()
+            if page_url:
+                self._page_urls[vid] = page_url
+
+            picks = []
+            for vf in video.get("video_files", []):
+                w = int(vf.get("width", 0))
+                h = int(vf.get("height", 0))
+
+                if self._is_vertical_ok(w, h):
+                    picks.append((w, h, vf.get("link")))
+
+            if not picks:
+                continue
+
+            picks.sort(key=lambda t: (abs(t[1] - 1600), -(t[0] * t[1])))
+            w, h, link = picks[0]
+
+            results.append((vid, link, w, h, dur))
+
         return results
     
     def _popular(self, page: int = 1) -> List[Tuple[int, str, int, int, float]]:
-        """Get popular videos"""
+        """Get popular videos with rate limiting."""
+        # Popular videos change frequently, so no caching
+        self.rate_limiter.wait()
+
         url = f"{self.base_url}/popular"
-        
+
         params = {
             "per_page": 40,
             "page": page,
             "locale": "en-US"
         }
-        
+
         headers = {"Authorization": self.api_key}
-        
+
         try:
-            r = requests.get(url, headers=headers, params=params, timeout=30)
+            r = self.session.get(url, headers=headers, params=params, timeout=30)
             r.raise_for_status()
         except Exception as e:
             logger.warning(f"   ⚠️ Popular videos fetch failed: {e}")
             return []
-        
+
         data = r.json() or {}
         results = []
-        
+
         for video in data.get("videos", []):
             vid = int(video.get("id", 0))
             dur = float(video.get("duration", 0.0))
-            
+
             if dur < self.min_duration or dur > self.max_duration:
                 continue
-            
+
             page_url = (video.get("url") or "").strip()
             if page_url:
                 self._page_urls[vid] = page_url
-            
+
             picks = []
             for vf in video.get("video_files", []):
                 w = int(vf.get("width", 0))
                 h = int(vf.get("height", 0))
-                
+
                 if self._is_vertical_ok(w, h):
                     picks.append((w, h, vf.get("link")))
-            
+
             if not picks:
                 continue
-            
+
             picks.sort(key=lambda t: (abs(t[1] - 1600), -(t[0] * t[1])))
             w, h, link = picks[0]
-            
+
             results.append((vid, link, w, h, dur))
-        
+
         return results
     
     def _is_vertical_ok(self, w: int, h: int) -> bool:

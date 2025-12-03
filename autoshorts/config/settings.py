@@ -161,6 +161,9 @@ MAX_DESCRIPTION_LENGTH = int(os.getenv("MAX_DESCRIPTION_LENGTH", "4900"))
 MAX_TAGS = int(os.getenv("MAX_TAGS", "30"))
 
 # Caption offset (for CaptionRenderer compatibility)
+# IMPORTANT: Negative offset delays captions (makes them come AFTER audio)
+#            Positive offset makes captions come BEFORE audio
+# Example: KARAOKE_OFFSET_MS=-100 delays captions by 100ms (fixes early captions)
 CAPTION_OFFSET = None
 try:
     offset_str = os.getenv("KARAOKE_OFFSET_MS", "0")
