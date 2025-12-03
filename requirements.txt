@@ -18,7 +18,7 @@ nest-asyncio>=1.5.0
 gtts>=2.5.0
 
 # Kokoro TTS (NEW) - Ultra-realistic voice synthesis
-kokoro-onnx>=0.1.0  # ONNX-based TTS, 26 voices, auto model download
+kokoro-onnx==0.4.5  # PINNED: v0.4.6 has UTF-8 encoding bug on Windows (issue #138), v0.4.5 works
 soundfile>=0.12.0   # Audio file I/O for Kokoro
 
 # --- Google APIs (YouTube upload) ---
