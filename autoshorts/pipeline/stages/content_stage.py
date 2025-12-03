@@ -70,8 +70,8 @@ class ContentGenerationStage(PipelineStage):
 
                 # Analyze emotional profile
                 full_text = " ".join([content.hook, *content.script, content.cta])
-                emotion_profile = self.emotion_analyzer.analyze_content(
-                    content=full_text,
+                emotion_profile = self.emotion_analyzer.analyze_text(
+                    text=full_text,
                     content_type=settings.CONTENT_STYLE
                 )
 
