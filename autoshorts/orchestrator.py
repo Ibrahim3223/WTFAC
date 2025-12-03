@@ -167,7 +167,7 @@ class ShortsOrchestrator:
 
         container.register(
             EmotionAnalyzer,
-            lambda: EmotionAnalyzer(gemini_api_key=settings.GEMINI_API_KEY),
+            lambda: EmotionAnalyzer(),
             ServiceLifetime.SINGLETON
         )
 
