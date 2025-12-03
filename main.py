@@ -52,22 +52,22 @@ print(f"[DEBUG] Checking autoshorts module...")
 # Verify autoshorts exists
 autoshorts_path = os.path.join(project_root, 'autoshorts')
 if not os.path.exists(autoshorts_path):
-    print(f"❌ ERROR: autoshorts directory not found at {autoshorts_path}")
+    print(f"[ERROR] autoshorts directory not found at {autoshorts_path}")
     sys.exit(1)
 
 init_file = os.path.join(autoshorts_path, '__init__.py')
 if not os.path.exists(init_file):
-    print(f"❌ ERROR: autoshorts/__init__.py not found")
+    print(f"[ERROR] autoshorts/__init__.py not found")
     sys.exit(1)
 
-print(f"✅ autoshorts module found at {autoshorts_path}")
+print(f"[OK] autoshorts module found at {autoshorts_path}")
 
 # Now safe to import
 try:
     from autoshorts.orchestrator import ShortsOrchestrator
-    print("✅ Successfully imported ShortsOrchestrator")
+    print("[OK] Successfully imported ShortsOrchestrator")
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print(f"[ERROR] Import error: {e}")
     print("\n[DEBUG] Directory structure:")
     for root, dirs, files in os.walk(autoshorts_path):
         level = root.replace(autoshorts_path, '').count(os.sep)
@@ -85,38 +85,38 @@ def main():
     print("  YouTube Shorts Generator v2.0")
     print("=" * 60)
     
-    # ✅ Set up logging properly
+    # Set up logging properly
     logging.basicConfig(
         level=logging.INFO,
         format='%(message)s'
     )
-    
+
     try:
-        print("\n🔧 Creating orchestrator...")
+        print("\n[SETUP] Creating orchestrator...")
         orchestrator = ShortsOrchestrator()
-        
-        print("\n🎬 Starting video generation...\n")
+
+        print("\n[START] Starting video generation...\n")
         video_id = orchestrator.run()
-        
+
         if video_id:
             print("\n" + "=" * 60)
-            print(f"✅ SUCCESS! Video ID: {video_id}")
+            print(f"[SUCCESS] Video ID: {video_id}")
             print(f"   Watch: https://youtube.com/watch?v={video_id}")
             print("=" * 60)
             return 0
         else:
             print("\n" + "=" * 60)
-            print("❌ Video generation failed")
+            print("[FAILED] Video generation failed")
             print("=" * 60)
             return 1
-            
+
     except KeyboardInterrupt:
-        print("\n\n⚠️ Interrupted by user")
+        print("\n\n[INTERRUPT] Interrupted by user")
         return 130
-        
+
     except Exception as e:
         print("\n" + "=" * 60)
-        print(f"❌ ERROR: {e}")
+        print(f"[ERROR] {e}")
         print("=" * 60)
         
         # Always print full traceback for debugging
