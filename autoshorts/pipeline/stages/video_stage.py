@@ -162,7 +162,7 @@ class VideoProductionStage(PipelineStage):
                 # Analyze mood
                 content_text = " ".join(context.content.get("sentences", []))
                 mood = analyze_mood_simple(
-                    content=content_text,
+                    topic=content_text,
                     content_type=settings.CONTENT_STYLE
                 )
 
