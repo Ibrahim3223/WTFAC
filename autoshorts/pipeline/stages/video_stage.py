@@ -178,7 +178,7 @@ class VideoProductionStage(PipelineStage):
                     graded_path = os.path.join(context.temp_dir, f"graded_seg_{i:02d}.mp4")
 
                     # Generate FFmpeg filter
-                    ffmpeg_filter = self.color_grader.generate_ffmpeg_filter(
+                    ffmpeg_filter = self.color_grader.get_ffmpeg_filter(
                         lut_preset=lut_preset,
                         intensity=0.8,  # Strong effect
                         mobile_optimized=True
