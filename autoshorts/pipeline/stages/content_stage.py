@@ -2,7 +2,7 @@
 Content Generation Stage - Generates viral content using Gemini AI.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..base import PipelineStage, PipelineContext
 from ...core import Result, ContentGenerationError, QualityError, NoveltyError
@@ -10,6 +10,11 @@ from ...content.gemini_client import GeminiClient
 from ...content.quality_scorer import QualityScorer
 from ...state.novelty_guard import NoveltyGuard
 from ...config import settings
+
+# TIER 1 VIRAL SYSTEM
+from ...content.hook_generator import HookGenerator, EmotionType
+from ...content.emotion_analyzer import EmotionAnalyzer
+from ...content.viral_patterns import ViralPatternAnalyzer
 
 
 class ContentGenerationStage(PipelineStage):
@@ -29,12 +34,20 @@ class ContentGenerationStage(PipelineStage):
         self,
         gemini: GeminiClient,
         quality_scorer: QualityScorer,
-        novelty_guard: NoveltyGuard
+        novelty_guard: NoveltyGuard,
+        hook_generator: Optional[HookGenerator] = None,
+        emotion_analyzer: Optional[EmotionAnalyzer] = None,
+        viral_pattern_analyzer: Optional[ViralPatternAnalyzer] = None
     ):
         super().__init__("ContentGeneration")
         self.gemini = gemini
         self.quality_scorer = quality_scorer
         self.novelty_guard = novelty_guard
+
+        # TIER 1 VIRAL SYSTEM (optional for backward compatibility)
+        self.hook_generator = hook_generator
+        self.emotion_analyzer = emotion_analyzer
+        self.viral_pattern_analyzer = viral_pattern_analyzer
 
     def execute(self, context: PipelineContext) -> Result[PipelineContext, str]:
         """Generate and validate content."""
@@ -50,6 +63,67 @@ class ContentGenerationStage(PipelineStage):
             )
 
             self.logger.info("✅ Gemini response received")
+
+            # TIER 1: Analyze emotions and optimize hook
+            if self.emotion_analyzer and self.hook_generator:
+                self.logger.info("🎭 Analyzing emotions...")
+
+                # Analyze emotional profile
+                full_text = " ".join([content.hook, *content.script, content.cta])
+                emotion_profile = self.emotion_analyzer.analyze_content(
+                    content=full_text,
+                    content_type=settings.CONTENT_STYLE
+                )
+
+                self.logger.info(
+                    f"Primary emotion: {emotion_profile.primary_emotion.value} "
+                    f"({emotion_profile.primary_intensity:.2f})"
+                )
+
+                # Generate optimized hooks with A/B testing
+                self.logger.info("🎣 Generating viral hooks...")
+                hook_result = self.hook_generator.generate_hooks(
+                    topic=context.topic or settings.CHANNEL_TOPIC,
+                    content_type=settings.CONTENT_STYLE,
+                    target_emotion=EmotionType(emotion_profile.primary_emotion.value),
+                    keywords=None,  # Auto-extract
+                    num_variants=3
+                )
+
+                # Use best hook
+                best_hook = hook_result.selected_variant
+                self.logger.info(
+                    f"🏆 Best hook: '{best_hook.hook_text[:50]}...' "
+                    f"(score: {best_hook.viral_score:.2f})"
+                )
+
+                # Replace original hook with AI-optimized one
+                content.hook = best_hook.hook_text
+
+                # Store emotion data for later stages
+                context.emotion_profile = emotion_profile
+                context.hook_variants = hook_result
+
+            # TIER 1: Select viral patterns
+            if self.viral_pattern_analyzer:
+                self.logger.info("📊 Selecting viral patterns...")
+
+                pattern_result = self.viral_pattern_analyzer.find_matching_patterns(
+                    content_type=settings.CONTENT_STYLE,
+                    emotion=context.emotion_profile.primary_emotion.value if hasattr(context, 'emotion_profile') else "curiosity",
+                    duration_ms=settings.TARGET_DURATION * 1000,
+                    script_length=len(content.script)
+                )
+
+                if pattern_result.matched_patterns:
+                    best_pattern = pattern_result.matched_patterns[0]
+                    self.logger.info(
+                        f"🎯 Pattern: {best_pattern.pattern.name} "
+                        f"(viral: {best_pattern.pattern.viral_score:.2f})"
+                    )
+
+                    # Store pattern for later stages
+                    context.viral_pattern = best_pattern
 
             # Quality check
             full_text = " ".join([content.hook, *content.script, content.cta])

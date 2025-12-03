@@ -34,6 +34,16 @@ from .state.novelty_guard import NoveltyGuard
 from .state.state_guard import StateGuard
 from .config import settings
 
+# TIER 1 VIRAL SYSTEM
+from .content.hook_generator import HookGenerator
+from .content.emotion_analyzer import EmotionAnalyzer
+from .content.viral_patterns import ViralPatternAnalyzer
+from .video.color_grader import ColorGrader
+from .video.mood_analyzer import MoodAnalyzer
+from .captions.caption_animator import CaptionAnimator
+from .audio.sfx_manager import SFXManager
+from .audio.timing_optimizer import TimingOptimizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -143,17 +153,78 @@ class ShortsOrchestrator:
             ServiceLifetime.SINGLETON
         )
 
+        # ============================================
+        # TIER 1 VIRAL SYSTEM - Register AI components
+        # ============================================
+        logger.info("🎯 Registering TIER 1 Viral System components...")
+
+        # Content optimization
+        container.register(
+            HookGenerator,
+            lambda: HookGenerator(gemini_api_key=settings.GEMINI_API_KEY),
+            ServiceLifetime.SINGLETON
+        )
+
+        container.register(
+            EmotionAnalyzer,
+            lambda: EmotionAnalyzer(gemini_api_key=settings.GEMINI_API_KEY),
+            ServiceLifetime.SINGLETON
+        )
+
+        container.register(
+            ViralPatternAnalyzer,
+            lambda: ViralPatternAnalyzer(pattern_db_path=".viral_patterns/patterns.json"),
+            ServiceLifetime.SINGLETON
+        )
+
+        # Video enhancement
+        container.register(
+            ColorGrader,
+            lambda: ColorGrader(),
+            ServiceLifetime.SINGLETON
+        )
+
+        container.register(
+            MoodAnalyzer,
+            lambda: MoodAnalyzer(gemini_api_key=settings.GEMINI_API_KEY),
+            ServiceLifetime.SINGLETON
+        )
+
+        # Captions & Audio
+        container.register(
+            CaptionAnimator,
+            lambda: CaptionAnimator(),
+            ServiceLifetime.SINGLETON
+        )
+
+        container.register(
+            SFXManager,
+            lambda: SFXManager(),
+            ServiceLifetime.SINGLETON
+        )
+
+        container.register(
+            TimingOptimizer,
+            lambda: TimingOptimizer(gemini_api_key=settings.GEMINI_API_KEY),
+            ServiceLifetime.SINGLETON
+        )
+
+        logger.info("✅ TIER 1 Viral System components registered")
         logger.info("✅ All services registered in container")
 
         return container
 
     def _build_pipeline(self) -> Pipeline:
-        """Build the video generation pipeline."""
+        """Build the video generation pipeline with TIER 1 Viral System."""
         stages = [
             ContentGenerationStage(
                 gemini=self.container.resolve(GeminiClient),
                 quality_scorer=self.container.resolve(QualityScorer),
-                novelty_guard=self.container.resolve(NoveltyGuard)
+                novelty_guard=self.container.resolve(NoveltyGuard),
+                # TIER 1 components
+                hook_generator=self.container.resolve(HookGenerator),
+                emotion_analyzer=self.container.resolve(EmotionAnalyzer),
+                viral_pattern_analyzer=self.container.resolve(ViralPatternAnalyzer)
             ),
             TTSStage(
                 tts_handler=self.container.resolve(TTSHandler)
@@ -163,7 +234,13 @@ class ShortsOrchestrator:
                 downloader=self.container.resolve(VideoDownloader),
                 segment_maker=self.container.resolve(SegmentMaker),
                 caption_renderer=self.container.resolve(CaptionRenderer),
-                bgm_manager=self.container.resolve(BGMManager)
+                bgm_manager=self.container.resolve(BGMManager),
+                # TIER 1 components
+                color_grader=self.container.resolve(ColorGrader),
+                mood_analyzer=self.container.resolve(MoodAnalyzer),
+                caption_animator=self.container.resolve(CaptionAnimator),
+                sfx_manager=self.container.resolve(SFXManager),
+                timing_optimizer=self.container.resolve(TimingOptimizer)
             ),
             UploadStage(
                 uploader=self.container.resolve(YouTubeUploader),
