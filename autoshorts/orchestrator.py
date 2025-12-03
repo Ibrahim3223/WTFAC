@@ -173,7 +173,7 @@ class ShortsOrchestrator:
 
         container.register(
             ViralPatternAnalyzer,
-            lambda: ViralPatternAnalyzer(pattern_db_path=".viral_patterns/patterns.json"),
+            lambda: ViralPatternAnalyzer(storage_dir=".viral_patterns"),
             ServiceLifetime.SINGLETON
         )
 
