@@ -223,8 +223,7 @@ class VideoProductionStage(PipelineStage):
                 # Select animation style
                 animation_style = select_animation_style(
                     content_type=settings.CONTENT_STYLE,
-                    emotion=emotion,
-                    pacing="fast"
+                    emotion=emotion
                 )
 
                 self.logger.info(f"Animation: {animation_style.value}")
@@ -300,14 +299,9 @@ class VideoProductionStage(PipelineStage):
                 self.logger.info("🔊 Adding sound effects...")
 
                 try:
-                    # Calculate total duration and cut times
+                    # Calculate total duration and number of cuts
                     total_duration_ms = sum(int(float(seg["duration"]) * 1000) for seg in context.audio_segments)
-
-                    cut_times_ms = []
-                    cumulative = 0
-                    for seg in context.audio_segments:
-                        cut_times_ms.append(cumulative)
-                        cumulative += int(float(seg["duration"]) * 1000)
+                    num_cuts = len(context.audio_segments)
 
                     # Get emotion from context
                     emotion = "curiosity"
@@ -317,10 +311,9 @@ class VideoProductionStage(PipelineStage):
                     # Create SFX plan
                     sfx_plan = create_sfx_plan_simple(
                         duration_ms=total_duration_ms,
-                        cut_times_ms=cut_times_ms,
+                        num_cuts=num_cuts,
                         content_type=settings.CONTENT_STYLE,
-                        emotion=emotion,
-                        pacing="fast"
+                        emotion=emotion
                     )
 
                     self.logger.info(f"SFX plan: {len(sfx_plan.placements)} sound effects")
