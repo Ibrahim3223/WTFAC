@@ -443,10 +443,33 @@ Return ONLY the hook text, nothing else."""
         words = topic.split()
         topic_keyword = words[0] if words else "this"
 
-        # Fill template
-        hook = template.replace("{topic}", topic_keyword)
-        hook = hook.replace("{fact}", "something amazing")
-        hook = hook.replace("{thing}", topic_keyword)
+        # Fill ALL placeholders with sensible defaults
+        replacements = {
+            "{topic}": topic_keyword,
+            "{fact}": "something amazing",
+            "{thing}": topic_keyword,
+            "{scenario}": "something unexpected",
+            "{question}": f"{topic_keyword} works",
+            "{mystery}": "this secret",
+            "{phenomenon}": topic_keyword,
+            "{action}": "this",
+            "{task}": "figure this out",
+            "{challenge}": "try this",
+            "{benefit}": "something valuable",
+            "{time}": "60 seconds",
+            "{secret}": "the truth",
+            "{activity}": "think about this",
+            "{outcome}": "what happened",
+            "{number}": "97%",
+            "{statement}": f"{topic_keyword} is overrated",
+            "{finding}": "something groundbreaking",
+            "{competitor}": "others",
+            "{hidden_fact}": "this",
+        }
+
+        hook = template
+        for placeholder, value in replacements.items():
+            hook = hook.replace(placeholder, value)
 
         return hook
 
