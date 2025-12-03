@@ -91,14 +91,14 @@ class ContentGenerationStage(PipelineStage):
                 )
 
                 # Use best hook
-                best_hook = hook_result.selected_variant
+                best_hook = hook_result.best_variant
                 self.logger.info(
-                    f"🏆 Best hook: '{best_hook.hook_text[:50]}...' "
-                    f"(score: {best_hook.viral_score:.2f})"
+                    f"🏆 Best hook: '{best_hook.text[:50]}...' "
+                    f"(score: {best_hook.score:.2f})"
                 )
 
                 # Replace original hook with AI-optimized one
-                content.hook = best_hook.hook_text
+                content.hook = best_hook.text
 
                 # Store emotion data for later stages
                 context.emotion_profile = emotion_profile
