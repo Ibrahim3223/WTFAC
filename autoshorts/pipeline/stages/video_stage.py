@@ -17,7 +17,7 @@ from ...audio.bgm_manager import BGMManager
 from ...config import settings
 
 # TIER 1 VIRAL SYSTEM
-from ...video.color_grader import ColorGrader, select_lut_simple
+from ...video.color_grader import ColorGrader, select_lut_simple, GradingPlan, GradingIntensity
 from ...video.mood_analyzer import MoodAnalyzer, analyze_mood_simple
 from ...captions.caption_animator import CaptionAnimator, select_animation_style
 from ...audio.sfx_manager import SFXManager, create_sfx_plan_simple
@@ -172,6 +172,13 @@ class VideoProductionStage(PipelineStage):
                 lut_preset = select_lut_simple(settings.CONTENT_STYLE, mood.primary_mood.value)
                 self.logger.info(f"LUT: {lut_preset.value}")
 
+                # Create grading plan
+                grading_plan = GradingPlan(
+                    lut_preset=lut_preset,
+                    intensity=GradingIntensity.STRONG,  # Strong effect for visibility
+                    reason=f"Mood-based grading for {mood.primary_mood.value}"
+                )
+
                 # Apply grading to each segment
                 graded_segments = []
                 for i, segment_path in enumerate(video_segments):
@@ -179,8 +186,7 @@ class VideoProductionStage(PipelineStage):
 
                     # Generate FFmpeg filter
                     ffmpeg_filter = self.color_grader.get_ffmpeg_filter(
-                        lut_preset=lut_preset,
-                        intensity=0.8,  # Strong effect
+                        grading=grading_plan,
                         mobile_optimized=True
                     )
 
