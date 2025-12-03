@@ -108,22 +108,22 @@ class ContentGenerationStage(PipelineStage):
             if self.viral_pattern_analyzer:
                 self.logger.info("📊 Selecting viral patterns...")
 
-                pattern_result = self.viral_pattern_analyzer.find_matching_patterns(
+                pattern_matches = self.viral_pattern_analyzer.analyze_content(
+                    topic=context.topic or settings.CHANNEL_TOPIC,
                     content_type=settings.CONTENT_STYLE,
-                    emotion=context.emotion_profile.primary_emotion.value if hasattr(context, 'emotion_profile') else "curiosity",
-                    duration_ms=settings.TARGET_DURATION * 1000,
-                    script_length=len(content.script)
+                    duration=settings.TARGET_DURATION,  # Seconds
+                    keywords=[]  # Auto-extract from content
                 )
 
-                if pattern_result.matched_patterns:
-                    best_pattern = pattern_result.matched_patterns[0]
+                if pattern_matches:
+                    best_match = pattern_matches[0]
                     self.logger.info(
-                        f"🎯 Pattern: {best_pattern.pattern.name} "
-                        f"(viral: {best_pattern.pattern.viral_score:.2f})"
+                        f"🎯 Pattern: {best_match.pattern.name} "
+                        f"(match: {best_match.match_score:.2f}, viral: {best_match.pattern.viral_score:.2f})"
                     )
 
                     # Store pattern for later stages
-                    context.viral_pattern = best_pattern
+                    context.viral_pattern = best_match
 
             # Quality check
             full_text = " ".join([content.hook, *content.script, content.cta])
