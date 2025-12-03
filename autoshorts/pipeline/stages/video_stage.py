@@ -166,10 +166,10 @@ class VideoProductionStage(PipelineStage):
                     content_type=settings.CONTENT_STYLE
                 )
 
-                self.logger.info(f"Mood: {mood.value}")
+                self.logger.info(f"Mood: {mood.primary_mood.value}")
 
                 # Select LUT based on mood
-                lut_preset = select_lut_simple(settings.CONTENT_STYLE, mood.value)
+                lut_preset = select_lut_simple(settings.CONTENT_STYLE, mood.primary_mood.value)
                 self.logger.info(f"LUT: {lut_preset.value}")
 
                 # Apply grading to each segment

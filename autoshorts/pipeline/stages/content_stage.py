@@ -12,9 +12,52 @@ from ...state.novelty_guard import NoveltyGuard
 from ...config import settings
 
 # TIER 1 VIRAL SYSTEM
-from ...content.hook_generator import HookGenerator, EmotionType
-from ...content.emotion_analyzer import EmotionAnalyzer
+from ...content.hook_generator import HookGenerator, EmotionType as HookEmotionType
+from ...content.emotion_analyzer import EmotionAnalyzer, EmotionType as AnalyzerEmotionType
 from ...content.viral_patterns import ViralPatternAnalyzer
+
+
+# ============================================================================
+# EMOTION MAPPING (EmotionAnalyzer → HookGenerator)
+# ============================================================================
+# EmotionAnalyzer has 16 emotions, HookGenerator only supports 8
+# Map unsupported emotions to closest supported ones
+
+EMOTION_MAPPING = {
+    # Supported emotions (direct mapping)
+    "joy": "joy",
+    "fear": "fear",
+    "anger": "anger",
+    "surprise": "surprise",
+    "disgust": "disgust",
+    "trust": "trust",
+    "anticipation": "anticipation",
+    "curiosity": "curiosity",
+
+    # Unsupported emotions (map to closest match)
+    "sadness": "trust",           # Comfort/empathy
+    "awe": "surprise",             # Wonder feeling
+    "fomo": "anticipation",        # Fear of missing → action
+    "validation": "trust",         # Confirmation → trust
+    "nostalgia": "joy",            # Nostalgic feelings
+    "schadenfreude": "surprise",   # Unexpected joy
+    "inspiration": "anticipation", # Motivation → action
+    "neutral": "curiosity",        # Default safe choice
+}
+
+
+def map_emotion_for_hook(emotion_value: str) -> HookEmotionType:
+    """
+    Map EmotionAnalyzer emotion to HookGenerator emotion.
+
+    Args:
+        emotion_value: Emotion string from EmotionAnalyzer
+
+    Returns:
+        HookEmotionType enum value
+    """
+    mapped = EMOTION_MAPPING.get(emotion_value.lower(), "curiosity")
+    return HookEmotionType(mapped)
 
 
 class ContentGenerationStage(PipelineStage):
@@ -82,10 +125,17 @@ class ContentGenerationStage(PipelineStage):
 
                 # Generate optimized hooks with A/B testing
                 self.logger.info("🎣 Generating viral hooks...")
+
+                # Map emotion (EmotionAnalyzer → HookGenerator)
+                target_emotion = map_emotion_for_hook(emotion_profile.primary_emotion.value)
+                self.logger.info(
+                    f"Emotion mapping: {emotion_profile.primary_emotion.value} → {target_emotion.value}"
+                )
+
                 hook_result = self.hook_generator.generate_hooks(
                     topic=context.topic or settings.CHANNEL_TOPIC,
                     content_type=settings.CONTENT_STYLE,
-                    target_emotion=EmotionType(emotion_profile.primary_emotion.value),
+                    target_emotion=target_emotion,
                     keywords=None,  # Auto-extract
                     num_variants=3
                 )
