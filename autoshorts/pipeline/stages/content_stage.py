@@ -77,7 +77,7 @@ class ContentGenerationStage(PipelineStage):
 
                 self.logger.info(
                     f"Primary emotion: {emotion_profile.primary_emotion.value} "
-                    f"({emotion_profile.primary_intensity:.2f})"
+                    f"(intensity: {emotion_profile.intensity.value})"
                 )
 
                 # Generate optimized hooks with A/B testing
