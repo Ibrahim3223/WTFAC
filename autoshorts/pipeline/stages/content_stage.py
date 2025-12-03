@@ -118,8 +118,8 @@ class ContentGenerationStage(PipelineStage):
                 if pattern_matches:
                     best_match = pattern_matches[0]
                     self.logger.info(
-                        f"🎯 Pattern: {best_match.pattern.name} "
-                        f"(match: {best_match.match_score:.2f}, viral: {best_match.pattern.viral_score:.2f})"
+                        f"🎯 Pattern: {best_match.pattern.description} "
+                        f"(match: {best_match.match_score:.2f}, effectiveness: {best_match.pattern.effectiveness_score:.2f})"
                     )
 
                     # Store pattern for later stages
