@@ -58,6 +58,14 @@ from .pacing_engine import (
     PacingRecommendation,
 )
 
+# TIER 2 PROFESSIONAL POLISH - Retention Optimization
+from .retention_optimizer import (
+    RetentionOptimizer,
+    RetentionPlan,
+    LoopPoint,
+    SurpriseElement,
+)
+
 __all__ = [
     'PexelsClient',
     'VideoDownloader',
@@ -102,4 +110,9 @@ __all__ = [
     'PacingEngine',
     'PacingPlan',
     'PacingRecommendation',
+    # TIER 2: Retention Optimization
+    'RetentionOptimizer',
+    'RetentionPlan',
+    'LoopPoint',
+    'SurpriseElement',
 ]

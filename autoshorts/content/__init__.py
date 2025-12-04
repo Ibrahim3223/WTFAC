@@ -33,6 +33,23 @@ from .emotion_analyzer import (
     get_recommended_arc,
 )
 
+# TIER 2 PROFESSIONAL POLISH - Retention Optimization
+from .curiosity_generator import (
+    CuriosityGenerator,
+    CuriosityType,
+    CuriosityGap,
+    PatternInterrupt,
+    InterruptIntensity,
+)
+from .story_arc import (
+    StoryArcOptimizer,
+    StoryArcPlan,
+    StoryAct,
+    StoryBeat,
+    EmotionalTone,
+    ProgressMarker,
+)
+
 __all__ = [
     'GeminiClient',
     'QualityScorer',
@@ -59,4 +76,16 @@ __all__ = [
     'EmotionIntensity',
     'analyze_content_emotion',
     'get_recommended_arc',
+    # TIER 2: Retention Optimization
+    'CuriosityGenerator',
+    'CuriosityType',
+    'CuriosityGap',
+    'PatternInterrupt',
+    'InterruptIntensity',
+    'StoryArcOptimizer',
+    'StoryArcPlan',
+    'StoryAct',
+    'StoryBeat',
+    'EmotionalTone',
+    'ProgressMarker',
 ]
