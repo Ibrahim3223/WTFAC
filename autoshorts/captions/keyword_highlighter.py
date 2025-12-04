@@ -79,20 +79,56 @@ class ShortsKeywordHighlighter:
         result = text
 
         # 1. Highlight numbers (YELLOW, BOLD, 1.3x size for mobile screens)
-        # Matches: 5, 100, 1,000, 1.5, (J), etc.
-        # First, highlight content in parentheses (letters, numbers, etc.)
+        # Matches: 5, 100, 1,000, 1.5, 3-MINUTE, (J), etc.
+
+        # CRITICAL FIX: Protect ASS tags after each step
+        placeholders = {}
+        counter = [0]
+
+        def save_tag(match):
+            key = f"__TAG{counter[0]}__"
+            placeholders[key] = match.group(0)
+            counter[0] += 1
+            return key
+
+        def protect_tags(text):
+            """Save all ASS tags as placeholders."""
+            return re.sub(r'\{[^}]+\}', save_tag, text)
+
+        def restore_tags(text):
+            """Restore all placeholders to original ASS tags."""
+            for key, val in placeholders.items():
+                text = text.replace(key, val)
+            return text
+
+        # Process step by step, protecting tags after each operation
+
+        # Step 1: Highlight parentheses content: (J), (1)
         result = re.sub(
-            r'\(([A-Za-z0-9]+)\)',  # Match single char/number in parentheses like (J), (1)
+            r'\(([A-Za-z0-9]+)\)',
             r'{\\c&H00FFFF&\\b1\\fs1.3}(\1){\\r}',
             result
         )
+        result = protect_tags(result)  # Protect new tags
 
-        # Then, highlight standalone numbers
+        # Step 2: Highlight number-hyphen: 3-MINUTE, 5-STAR
+        result = re.sub(
+            r'(\d+)-',
+            r'{\\c&H00FFFF&\\b1\\fs1.3}\1{\\r}-',
+            result
+        )
+        result = protect_tags(result)  # Protect new tags
+
+        # Step 3: Highlight standalone numbers: 100, 5, 3.14
         result = re.sub(
             r'\b(\d+(?:,\d+)*(?:\.\d+)?)\b',
             r'{\\c&H00FFFF&\\b1\\fs1.3}\1{\\r}',
             result
         )
+        result = protect_tags(result)  # Protect new tags
+
+        # Finally restore all tags
+        result = restore_tags(result)
 
         # 2. Highlight emphasis words (RED, BOLD)
         for word in self.emphasis_words:
