@@ -62,11 +62,25 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      max-parallel: 6
+      max-parallel: 3  # REDUCED: 6→3 to prevent disk space issues
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
     environment: ${{ matrix.env }}
 
     steps:
+      - name: Free up disk space
+        run: |
+          echo "🧹 Freeing up disk space..."
+          df -h
+          echo "Removing unnecessary packages..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune --all --force || true
+          sudo apt-get clean
+          echo "✅ Disk space after cleanup:"
+          df -h
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -284,6 +298,24 @@ jobs:
           echo "LANG=${LANG}"
           echo "SEARCH_TERMS=${SEARCH_TERMS}"
           python main.py 2>&1 | tee "build_${CHANNEL_NAME}.log"
+
+      - name: Cleanup temp files after build
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          df -h
+          # Remove temp directories
+          rm -rf /tmp/tmp* || true
+          rm -rf temp_* || true
+          rm -rf .temp_* || true
+          # Remove Pexels cache (large video files)
+          rm -rf ~/.cache/pexels_videos || true
+          # Remove Whisper model cache if too large
+          du -sh ~/.cache/whisper 2>/dev/null || true
+          # Remove pip cache
+          pip cache purge || true
+          echo "✅ Disk space after cleanup:"
+          df -h
 
       - name: Upload artifact (mp4)
         if: always()
