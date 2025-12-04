@@ -21,6 +21,25 @@ from .viral_predictor import (
     ViralFactors,
 )
 
+# TIER 3: AI-Powered Viral Engine - Competitor Analysis
+from .competitor_analyzer import (
+    CompetitorAnalyzer,
+    CompetitorChannel,
+    CompetitorInsight,
+    CompetitorReport,
+    TrendingTopic,
+    GapAnalysis,
+    PerformanceLevel,
+)
+from .trend_detector import (
+    TrendDetector,
+    Trend,
+    TrendReport,
+    TrendPhase,
+    TrendType,
+    TrendMetrics,
+)
+
 __all__ = [
     # Viral Scraping
     'ViralScraper',
@@ -37,4 +56,19 @@ __all__ = [
     'PredictionResult',
     'ViralScore',
     'ViralFactors',
+    # Competitor Analysis
+    'CompetitorAnalyzer',
+    'CompetitorChannel',
+    'CompetitorInsight',
+    'CompetitorReport',
+    'TrendingTopic',
+    'GapAnalysis',
+    'PerformanceLevel',
+    # Trend Detection
+    'TrendDetector',
+    'Trend',
+    'TrendReport',
+    'TrendPhase',
+    'TrendType',
+    'TrendMetrics',
 ]

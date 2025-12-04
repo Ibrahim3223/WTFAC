@@ -50,6 +50,15 @@ from .story_arc import (
     ProgressMarker,
 )
 
+# TIER 3 AI-POWERED VIRAL ENGINE - Idea Generation
+from .idea_generator import (
+    IdeaGenerator,
+    ContentIdea,
+    IdeaBatch,
+    IdeaSource,
+    IdeaUrgency,
+)
+
 __all__ = [
     'GeminiClient',
     'QualityScorer',
@@ -88,4 +97,10 @@ __all__ = [
     'StoryBeat',
     'EmotionalTone',
     'ProgressMarker',
+    # TIER 3: Idea Generation
+    'IdeaGenerator',
+    'ContentIdea',
+    'IdeaBatch',
+    'IdeaSource',
+    'IdeaUrgency',
 ]
