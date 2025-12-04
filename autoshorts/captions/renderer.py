@@ -27,7 +27,7 @@ class CaptionRenderer:
     
     # Caption parameters
     WORDS_PER_CHUNK = 3
-    MIN_WORD_DURATION = 0.08
+    MIN_WORD_DURATION = 0.06  # Reduced from 0.08 for better sync (60ms)
     TIMING_PRECISION = 0.001
     FADE_DURATION = 0.0  # NO FADE - critical for sync!
     

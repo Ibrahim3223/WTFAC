@@ -79,7 +79,15 @@ class ShortsKeywordHighlighter:
         result = text
 
         # 1. Highlight numbers (YELLOW, BOLD, 1.3x size for mobile screens)
-        # Matches: 5, 100, 1,000, 1.5, etc.
+        # Matches: 5, 100, 1,000, 1.5, (J), etc.
+        # First, highlight content in parentheses (letters, numbers, etc.)
+        result = re.sub(
+            r'\(([A-Za-z0-9]+)\)',  # Match single char/number in parentheses like (J), (1)
+            r'{\\c&H00FFFF&\\b1\\fs1.3}(\1){\\r}',
+            result
+        )
+
+        # Then, highlight standalone numbers
         result = re.sub(
             r'\b(\d+(?:,\d+)*(?:\.\d+)?)\b',
             r'{\\c&H00FFFF&\\b1\\fs1.3}\1{\\r}',

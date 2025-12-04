@@ -37,7 +37,7 @@ class ForcedAligner:
     This allows stable-ts to do FORCED ALIGNMENT instead of blind transcription!
     """
     
-    MIN_WORD_DURATION = 0.08  # 80ms minimum
+    MIN_WORD_DURATION = 0.06  # 60ms minimum (reduced for better sync)
     MAX_WORD_DURATION = 3.0   # 3 second maximum
     WHISPER_MODEL = "base"    # base model: optimal speed/quality
     
