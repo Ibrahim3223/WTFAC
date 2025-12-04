@@ -40,6 +40,32 @@ from .trend_detector import (
     TrendMetrics,
 )
 
+# TIER 3: AI-Powered Viral Engine - A/B Testing & Auto-Optimization
+from .ab_tester import (
+    ABTester,
+    ABTestResult,
+    VideoVariant,
+    PerformanceMetrics,
+    VariantType,
+    TestStatus,
+)
+from .performance_tracker import (
+    PerformanceTracker,
+    VideoPerformance,
+    NicheBenchmark,
+    PerformanceReport,
+    PerformanceAlert,
+    PerformanceLevel,
+    MetricType,
+)
+from .optimizer import (
+    AutoOptimizer,
+    OptimizationStrategy,
+    OptimizationRule,
+    OptimizationRecommendation,
+    OptimizationFocus,
+)
+
 __all__ = [
     # Viral Scraping
     'ViralScraper',
@@ -71,4 +97,25 @@ __all__ = [
     'TrendPhase',
     'TrendType',
     'TrendMetrics',
+    # A/B Testing
+    'ABTester',
+    'ABTestResult',
+    'VideoVariant',
+    'PerformanceMetrics',
+    'VariantType',
+    'TestStatus',
+    # Performance Tracking
+    'PerformanceTracker',
+    'VideoPerformance',
+    'NicheBenchmark',
+    'PerformanceReport',
+    'PerformanceAlert',
+    'PerformanceLevel',
+    'MetricType',
+    # Auto-Optimization
+    'AutoOptimizer',
+    'OptimizationStrategy',
+    'OptimizationRule',
+    'OptimizationRecommendation',
+    'OptimizationFocus',
 ]
