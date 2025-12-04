@@ -25,6 +25,25 @@ from .mood_analyzer import (
     get_lut_for_topic,
 )
 
+# TIER 2 PROFESSIONAL POLISH - Visual Effects
+from .vfx_engine import (
+    VFXEngine,
+    MotionEffectType,
+    MotionEffectConfig,
+    VFXPlan,
+)
+from .transitions import (
+    TransitionGenerator,
+    TransitionType,
+    TransitionConfig,
+)
+from .text_effects import (
+    TextEffectGenerator,
+    TextEffectType,
+    TextEffectConfig,
+    TextPosition,
+)
+
 __all__ = [
     'PexelsClient',
     'VideoDownloader',
@@ -48,4 +67,16 @@ __all__ = [
     'MoodAnalysis',
     'analyze_mood_simple',
     'get_lut_for_topic',
+    # TIER 2: Visual Effects
+    'VFXEngine',
+    'MotionEffectType',
+    'MotionEffectConfig',
+    'VFXPlan',
+    'TransitionGenerator',
+    'TransitionType',
+    'TransitionConfig',
+    'TextEffectGenerator',
+    'TextEffectType',
+    'TextEffectConfig',
+    'TextPosition',
 ]
