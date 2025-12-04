@@ -44,6 +44,20 @@ from .text_effects import (
     TextPosition,
 )
 
+# TIER 2 PROFESSIONAL POLISH - Dynamic Pacing
+from .cut_analyzer import (
+    CutAnalyzer,
+    PacingStyle,
+    PacingProfile,
+    ContentPhase,
+    CutTiming,
+)
+from .pacing_engine import (
+    PacingEngine,
+    PacingPlan,
+    PacingRecommendation,
+)
+
 __all__ = [
     'PexelsClient',
     'VideoDownloader',
@@ -79,4 +93,13 @@ __all__ = [
     'TextEffectType',
     'TextEffectConfig',
     'TextPosition',
+    # TIER 2: Dynamic Pacing
+    'CutAnalyzer',
+    'PacingStyle',
+    'PacingProfile',
+    'ContentPhase',
+    'CutTiming',
+    'PacingEngine',
+    'PacingPlan',
+    'PacingRecommendation',
 ]
