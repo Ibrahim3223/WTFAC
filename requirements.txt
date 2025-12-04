@@ -18,7 +18,7 @@ nest-asyncio>=1.5.0
 gtts>=2.5.0
 
 # Kokoro TTS (NEW) - Ultra-realistic voice synthesis
-kokoro-onnx==0.2.3  # PINNED: v0.2.3 for numpy 1.x compatibility (v0.4.5+ requires numpy 2.x)
+kokoro-onnx==0.4.5  # PINNED: v0.4.5 works (v0.4.6 has UTF-8 bug #138), requires numpy 2.x
 soundfile>=0.12.0   # Audio file I/O for Kokoro
 
 # --- Google APIs (YouTube upload) ---
@@ -38,11 +38,11 @@ Pillow>=10.0.0
 pydub>=0.25.0   # Requires FFmpeg runtime (system package)
 
 # --- Numeric / ML toolstack ---
-numpy>=1.26,<2
-scikit-learn>=1.3.0
+numpy>=2.0.0  # NumPy 2.x for kokoro-onnx v0.4.5+ compatibility
+scikit-learn>=1.4.2  # v1.4.2+ supports numpy 2.x
 
 # --- ML / Embeddings ---
-sentence-transformers>=2.7.0
+sentence-transformers>=3.1.1  # v3.1.1+ supports numpy 2.x
 
 # --- CLI / Logging (optional but useful) ---
 tqdm>=4.66.0
