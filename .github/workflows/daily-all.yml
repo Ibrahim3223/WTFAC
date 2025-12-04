@@ -308,12 +308,18 @@ jobs:
           rm -rf /tmp/tmp* || true
           rm -rf temp_* || true
           rm -rf .temp_* || true
+          rm -rf shorts_* || true
           # Remove Pexels cache (large video files)
+          rm -rf .pexels_cache || true
           rm -rf ~/.cache/pexels_videos || true
-          # Remove Whisper model cache if too large
-          du -sh ~/.cache/whisper 2>/dev/null || true
+          # Keep Whisper models (small, reusable) but show size
+          du -sh ~/.cache/whisper 2>/dev/null || echo "No whisper cache"
+          # Keep Kokoro models (reusable) but show size
+          du -sh ~/.cache/kokoro 2>/dev/null || echo "No kokoro cache"
           # Remove pip cache
           pip cache purge || true
+          # Remove __pycache__ directories
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
           echo "✅ Disk space after cleanup:"
           df -h
 
