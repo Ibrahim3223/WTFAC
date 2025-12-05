@@ -192,10 +192,13 @@ class KokoroTTS:
 
         logger.info(f"[Kokoro] Generated: {duration:.2f}s")
 
+        # Extract word timings using forced alignment
+        word_timings = self._extract_word_timings(text, wav_bytes, duration)
+
         return {
             'audio': wav_bytes,
             'duration': duration,
-            'word_timings': []  # Kokoro doesn't provide word timings (yet)
+            'word_timings': word_timings
         }
 
     def synthesize(self, text: str, wav_out: str) -> Tuple[float, List[Tuple[str, float]]]:
@@ -247,6 +250,72 @@ class KokoroTTS:
             # Clean up temp file
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+    def _extract_word_timings(
+        self,
+        text: str,
+        wav_bytes: bytes,
+        duration: float
+    ) -> List[Tuple[str, float]]:
+        """
+        Extract word-level timings using forced alignment.
+
+        Args:
+            text: Spoken text
+            wav_bytes: Audio WAV bytes
+            duration: Audio duration
+
+        Returns:
+            List of (word, duration) tuples
+        """
+        try:
+            # Import forced aligner
+            from autoshorts.captions.forced_aligner import align_text_to_audio
+
+            # Save audio to temp file for alignment
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+                tmp.write(wav_bytes)
+                tmp_path = tmp.name
+
+            try:
+                # Extract word timings using forced alignment
+                word_timings = align_text_to_audio(
+                    text=text,
+                    audio_path=tmp_path,
+                    tts_word_timings=None,  # Kokoro doesn't provide native timings
+                    total_duration=duration,
+                    language="en"
+                )
+
+                logger.debug(f"[Kokoro] Extracted {len(word_timings)} word timings via forced alignment")
+                return word_timings
+
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+        except Exception as e:
+            logger.warning(f"[Kokoro] Word timing extraction failed: {e}")
+            logger.warning(f"[Kokoro] Falling back to estimation")
+
+            # Fallback: simple estimation
+            words = text.split()
+            if not words:
+                return []
+
+            # Character-based estimation
+            total_chars = sum(len(w) for w in words)
+            if total_chars == 0:
+                return []
+
+            word_timings = []
+            for word in words:
+                char_ratio = len(word) / total_chars
+                word_duration = duration * char_ratio
+                word_timings.append((word, word_duration))
+
+            return word_timings
 
     @classmethod
     def list_voices(cls) -> List[str]:
