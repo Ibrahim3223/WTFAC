@@ -187,7 +187,9 @@ class ContinuousTTSHandler:
 
                 # Add word to current sentence
                 sentence_words.append(word)
-                sentence_word_timings.append((word, current_time, duration))
+                # Store word timings relative to segment start (caption renderer expects 2-tuple)
+                word_relative_time = current_time - sentence_start_time
+                sentence_word_timings.append((word, duration))
 
                 # Check if current sentence is complete
                 current_sentence_text = ' '.join([self._normalize_text(w) for w in sentence_words])

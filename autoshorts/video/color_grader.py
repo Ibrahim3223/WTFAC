@@ -492,6 +492,10 @@ class ColorGrader:
             highlight_val = 1.0 + (lut_def.highlights * strength)
             shadow_val = lut_def.shadows * strength
 
+            # CRITICAL: Clamp to valid FFmpeg range [0, 1]
+            shadow_val = max(0.0, min(1.0, shadow_val))
+            highlight_val = max(0.0, min(1.0, highlight_val))
+
             # Simplified curves (would need actual curve values for production)
             filters.append(
                 f"curves=all='{shadow_val:.2f}/0 0.5/0.5 1/{highlight_val:.2f}'"
