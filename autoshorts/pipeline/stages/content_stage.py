@@ -15,6 +15,7 @@ from ...config import settings
 from ...content.hook_generator import HookGenerator, EmotionType as HookEmotionType
 from ...content.emotion_analyzer import EmotionAnalyzer, EmotionType as AnalyzerEmotionType
 from ...content.viral_patterns import ViralPatternAnalyzer
+from ...content.retention_patterns import CliffhangerInjector
 
 
 # ============================================================================
@@ -80,7 +81,8 @@ class ContentGenerationStage(PipelineStage):
         novelty_guard: NoveltyGuard,
         hook_generator: Optional[HookGenerator] = None,
         emotion_analyzer: Optional[EmotionAnalyzer] = None,
-        viral_pattern_analyzer: Optional[ViralPatternAnalyzer] = None
+        viral_pattern_analyzer: Optional[ViralPatternAnalyzer] = None,
+        cliffhanger_injector: Optional[CliffhangerInjector] = None
     ):
         super().__init__("ContentGeneration")
         self.gemini = gemini
@@ -91,6 +93,7 @@ class ContentGenerationStage(PipelineStage):
         self.hook_generator = hook_generator
         self.emotion_analyzer = emotion_analyzer
         self.viral_pattern_analyzer = viral_pattern_analyzer
+        self.cliffhanger_injector = cliffhanger_injector
 
     def execute(self, context: PipelineContext) -> Result[PipelineContext, str]:
         """Generate and validate content."""
@@ -174,6 +177,38 @@ class ContentGenerationStage(PipelineStage):
 
                     # Store pattern for later stages
                     context.viral_pattern = best_match
+
+            # TIER 1: Inject cliffhangers for retention optimization
+            if self.cliffhanger_injector:
+                self.logger.info("🎯 Injecting retention cliffhangers...")
+
+                # Get current sentences (hook + script + cta)
+                current_sentences = [content.hook] + content.script + [content.cta]
+
+                # Determine emotion for cliffhanger selection
+                emotion = None
+                if hasattr(context, 'emotion_profile') and context.emotion_profile:
+                    emotion = context.emotion_profile.primary_emotion.value
+
+                # Inject cliffhangers
+                sentences_with_cliffhangers = self.cliffhanger_injector.inject_cliffhangers(
+                    sentences=current_sentences,
+                    target_duration=settings.TARGET_DURATION,
+                    emotion=emotion,
+                    content_type=settings.CONTENT_STYLE
+                )
+
+                # Update content with new sentences
+                # First sentence is hook, last is CTA, rest is script
+                content.hook = sentences_with_cliffhangers[0]
+                content.cta = sentences_with_cliffhangers[-1]
+                content.script = sentences_with_cliffhangers[1:-1]
+
+                cliffhanger_count = len(sentences_with_cliffhangers) - len(current_sentences)
+                self.logger.info(
+                    f"✅ Injected {cliffhanger_count} cliffhangers "
+                    f"({len(current_sentences)} → {len(sentences_with_cliffhangers)} sentences)"
+                )
 
             # Quality check
             full_text = " ".join([content.hook, *content.script, content.cta])

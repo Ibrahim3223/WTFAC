@@ -48,11 +48,12 @@ class YouTubeUploader:
         tags: Optional[List[str]] = None,
         category_id: str = "22",
         privacy_status: str = "public",
-        topic: Optional[str] = None
+        topic: Optional[str] = None,
+        thumbnail_path: Optional[str] = None
     ) -> str:
         """
-        Upload video with smart SEO optimization.
-        
+        Upload video with smart SEO optimization and custom thumbnail.
+
         Args:
             video_path: Path to video file
             title: Video title (from Gemini)
@@ -61,7 +62,8 @@ class YouTubeUploader:
             category_id: Default category (will be auto-detected if topic provided)
             privacy_status: public, unlisted, or private
             topic: Channel topic for smart category detection
-            
+            thumbnail_path: Path to custom thumbnail (TIER 1 AI-generated)
+
         Returns:
             Video ID or empty string on failure
         """
@@ -145,10 +147,33 @@ class YouTubeUploader:
             
             video_id = response.get("id", "")
             video_url = f"https://youtube.com/watch?v={video_id}"
-            
+
             logger.info(f"[YouTube] ✅ Upload successful!")
             logger.info(f"[YouTube] 🔗 {video_url}")
-            
+
+            # TIER 1: Upload custom thumbnail if provided
+            if thumbnail_path and video_id:
+                logger.info(f"[YouTube] 🎨 Uploading AI-generated thumbnail...")
+                try:
+                    from googleapiclient.http import MediaFileUpload
+
+                    thumb_media = MediaFileUpload(
+                        thumbnail_path,
+                        mimetype='image/jpeg',
+                        resumable=True
+                    )
+
+                    youtube.thumbnails().set(
+                        videoId=video_id,
+                        media_body=thumb_media
+                    ).execute()
+
+                    logger.info(f"[YouTube] ✅ Thumbnail uploaded successfully")
+
+                except Exception as thumb_error:
+                    logger.warning(f"[YouTube] ⚠️ Thumbnail upload failed: {thumb_error}")
+                    # Don't fail entire upload if thumbnail fails
+
             return video_id
             
         except Exception as e:

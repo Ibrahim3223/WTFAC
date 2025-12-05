@@ -32,18 +32,11 @@ def test_numbers():
         highlighted = highlighter.highlight(text)
 
         # Check if numbers are in the output
-        has_highlight = r'{\\c&H00FFFF&\\b1\\fs1.3}' in highlighted
+        has_highlight = '{\\c&H00FFFF&' in highlighted
 
-        print(f"Input:  {text}")
-        print(f"Status: {'✓ OK' if has_highlight else '✗ FAIL - No highlight'}")
-
-        # Show just the structure (not full ASS codes)
-        if has_highlight:
-            # Extract highlighted parts
-            import re
-            highlighted_parts = re.findall(r'\{[^}]+\}([^{]+)\{[^}]+\}', highlighted)
-            if highlighted_parts:
-                print(f"Highlighted: {', '.join(highlighted_parts)}")
+        print(f"Input:     {text}")
+        print(f"Output:    {highlighted}")
+        print(f"Status:    {'[OK]' if has_highlight else '[FAIL - No highlight]'}")
         print()
 
     print("="*60)

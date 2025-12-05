@@ -120,11 +120,20 @@ class ShortsKeywordHighlighter:
         result = re.sub(r'(\d+)-', highlight_number_hyphen, result)
         result = protect_tags(result)  # Protect new tags
 
-        # Step 3: Highlight standalone numbers: 100, 5, 3.14
+        # Step 3a: Highlight numbers with percent BEFORE (e.g., "%99")
+        # CRITICAL FIX: Captures "%99" as a single unit to prevent "% of people" bug
+        def highlight_percent_number(m):
+            return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}'
+
+        result = re.sub(r'\b(%\d+(?:,\d+)*(?:\.\d+)?)\b', highlight_percent_number, result)
+        result = protect_tags(result)  # Protect new tags
+
+        # Step 3b: Highlight standalone numbers with optional suffixes: 100, 5, 3.14, 99%, 5K, 1M
+        # FIXED: Now captures %, K, M, B, k, m, b suffixes that come immediately after numbers
         def highlight_number(m):
             return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}'
 
-        result = re.sub(r'\b(\d+(?:,\d+)*(?:\.\d+)?)\b', highlight_number, result)
+        result = re.sub(r'\b(\d+(?:,\d+)*(?:\.\d+)?[%KMBkmb]?)\b', highlight_number, result)
         result = protect_tags(result)  # Protect new tags
 
         # Finally restore all tags

@@ -32,6 +32,12 @@ from .emotion_analyzer import (
     analyze_content_emotion,
     get_recommended_arc,
 )
+from .retention_patterns import (
+    CliffhangerInjector,
+    CliffhangerType,
+    inject_cliffhangers_simple,
+    get_random_cliffhanger,
+)
 
 # TIER 2 PROFESSIONAL POLISH - Retention Optimization
 from .curiosity_generator import (
@@ -85,6 +91,11 @@ __all__ = [
     'EmotionIntensity',
     'analyze_content_emotion',
     'get_recommended_arc',
+    # Cliffhanger System
+    'CliffhangerInjector',
+    'CliffhangerType',
+    'inject_cliffhangers_simple',
+    'get_random_cliffhanger',
     # TIER 2: Retention Optimization
     'CuriosityGenerator',
     'CuriosityType',

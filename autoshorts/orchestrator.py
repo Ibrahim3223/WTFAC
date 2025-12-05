@@ -38,11 +38,13 @@ from .config import settings
 from .content.hook_generator import HookGenerator
 from .content.emotion_analyzer import EmotionAnalyzer
 from .content.viral_patterns import ViralPatternAnalyzer
+from .content.retention_patterns import CliffhangerInjector
 from .video.color_grader import ColorGrader
 from .video.mood_analyzer import MoodAnalyzer
 from .captions.caption_animator import CaptionAnimator
 from .audio.sfx_manager import SFXManager
 from .audio.timing_optimizer import TimingOptimizer
+from .thumbnail import ThumbnailGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +179,16 @@ class ShortsOrchestrator:
             ServiceLifetime.SINGLETON
         )
 
+        container.register(
+            CliffhangerInjector,
+            lambda: CliffhangerInjector(
+                interval_seconds=10.0,
+                max_cliffhangers=3,
+                avoid_repetition=True
+            ),
+            ServiceLifetime.SINGLETON
+        )
+
         # Video enhancement
         container.register(
             ColorGrader,
@@ -209,6 +221,13 @@ class ShortsOrchestrator:
             ServiceLifetime.SINGLETON
         )
 
+        # Thumbnail generation
+        container.register(
+            ThumbnailGenerator,
+            lambda: ThumbnailGenerator(gemini_api_key=settings.GEMINI_API_KEY),
+            ServiceLifetime.SINGLETON
+        )
+
         logger.info("✅ TIER 1 Viral System components registered")
         logger.info("✅ All services registered in container")
 
@@ -224,7 +243,8 @@ class ShortsOrchestrator:
                 # TIER 1 components
                 hook_generator=self.container.resolve(HookGenerator),
                 emotion_analyzer=self.container.resolve(EmotionAnalyzer),
-                viral_pattern_analyzer=self.container.resolve(ViralPatternAnalyzer)
+                viral_pattern_analyzer=self.container.resolve(ViralPatternAnalyzer),
+                cliffhanger_injector=self.container.resolve(CliffhangerInjector)
             ),
             TTSStage(
                 tts_handler=self.container.resolve(TTSHandler)
@@ -245,7 +265,8 @@ class ShortsOrchestrator:
             UploadStage(
                 uploader=self.container.resolve(YouTubeUploader),
                 state_guard=self.container.resolve(StateGuard),
-                novelty_guard=self.container.resolve(NoveltyGuard)
+                novelty_guard=self.container.resolve(NoveltyGuard),
+                thumbnail_generator=self.container.resolve(ThumbnailGenerator)
             )
         ]
 

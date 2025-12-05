@@ -33,6 +33,7 @@ feedparser>=6.0.0
 
 # --- Image/Video processing ---
 Pillow>=10.0.0
+opencv-python>=4.8.0  # For video processing and thumbnail generation (TIER 1)
 
 # --- Audio/Video utilities ---
 pydub>=0.25.0   # Requires FFmpeg runtime (system package)
