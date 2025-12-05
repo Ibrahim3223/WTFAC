@@ -186,7 +186,7 @@ Return JSON format:
             )
 
             response = self.gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-exp-1206",  # Flash-Lite for 4x quota
                 contents=prompt,
                 config=config
             )

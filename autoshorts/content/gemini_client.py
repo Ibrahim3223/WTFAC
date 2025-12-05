@@ -224,17 +224,19 @@ class GeminiClient:
     
     MODELS = {
         "flash": "gemini-2.5-flash",
+        "flash-lite": "gemini-exp-1206",  # Gemini 2.5 Flash-Lite (1000 req/day)
         "gemini-2.5-flash": "gemini-2.5-flash",
+        "gemini-exp-1206": "gemini-exp-1206",
         "flash-2.0": "gemini-2.0-flash-exp",
         "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
         "pro": "gemini-1.5-pro-latest",
         "flash-8b": "gemini-1.5-flash-8b-latest"
     }
-    
+
     def __init__(
         self,
         api_key: str,
-        model: str = "flash",
+        model: str = "flash-lite",  # Default to Flash-Lite for 4x quota (1000 vs 250)
         max_retries: int = 3,
         timeout: int = 60
     ):
