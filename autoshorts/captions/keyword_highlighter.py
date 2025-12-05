@@ -103,28 +103,28 @@ class ShortsKeywordHighlighter:
 
         # Process step by step, protecting tags after each operation
 
+        # ASS color tags for highlighting
+        # Note: Using normal strings (not raw) to avoid regex escape issues
+
         # Step 1: Highlight parentheses content: (J), (1)
-        result = re.sub(
-            r'\(([A-Za-z0-9]+)\)',
-            r'{\\c&H00FFFF&\\b1\\fs1.3}(\1){\\r}',
-            result
-        )
+        def highlight_paren(m):
+            return '{\\c&H00FFFF&\\b1\\fs1.3}(' + m.group(1) + '){\\r}'
+
+        result = re.sub(r'\(([A-Za-z0-9]+)\)', highlight_paren, result)
         result = protect_tags(result)  # Protect new tags
 
         # Step 2: Highlight number-hyphen: 3-MINUTE, 5-STAR
-        result = re.sub(
-            r'(\d+)-',
-            r'{\\c&H00FFFF&\\b1\\fs1.3}\1{\\r}-',
-            result
-        )
+        def highlight_number_hyphen(m):
+            return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}-'
+
+        result = re.sub(r'(\d+)-', highlight_number_hyphen, result)
         result = protect_tags(result)  # Protect new tags
 
         # Step 3: Highlight standalone numbers: 100, 5, 3.14
-        result = re.sub(
-            r'\b(\d+(?:,\d+)*(?:\.\d+)?)\b',
-            r'{\\c&H00FFFF&\\b1\\fs1.3}\1{\\r}',
-            result
-        )
+        def highlight_number(m):
+            return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}'
+
+        result = re.sub(r'\b(\d+(?:,\d+)*(?:\.\d+)?)\b', highlight_number, result)
         result = protect_tags(result)  # Protect new tags
 
         # Finally restore all tags
@@ -134,13 +134,11 @@ class ShortsKeywordHighlighter:
         for word in self.emphasis_words:
             # Word boundary matching for whole words only
             pattern = rf'\b({re.escape(word)})\b'
-            replacement = r'{\\c&H0000FF&\\b1}\1{\\r}'
-            result = re.sub(
-                pattern,
-                replacement,
-                result,
-                flags=re.IGNORECASE
-            )
+
+            def highlight_emphasis(m):
+                return '{\\c&H0000FF&\\b1}' + m.group(1) + '{\\r}'
+
+            result = re.sub(pattern, highlight_emphasis, result, flags=re.IGNORECASE)
 
         # 3. Highlight questions (CYAN)
         if '?' in result:
