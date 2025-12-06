@@ -223,19 +223,20 @@ class GeminiClient:
     """Topic-driven viral content generator"""
     
     MODELS = {
-        # Gemini 1.5 models (RECOMMENDED - highest free tier quota)
-        "1.5-flash": "gemini-1.5-flash",        # 1500 req/day - BEST FREE TIER!
-        "1.5-flash-8b": "gemini-1.5-flash-8b",  # 1500 req/day - smaller, faster
-        "1.5-pro": "gemini-1.5-pro",            # 50 req/day
-        # Gemini 2.5 models (lower quota)
+        # Gemini 2.5 Flash-Lite (RECOMMENDED - 1000 req/day, fastest & cheapest)
+        "flash-lite": "gemini-2.5-flash-lite-preview-05-20",  # 1000 req/day
+        "2.5-flash-lite": "gemini-2.5-flash-lite-preview-05-20",
+        # Gemini 2.5 Flash (standard)
         "flash": "gemini-2.5-flash",            # 250 req/day
         "2.5-flash": "gemini-2.5-flash",        # 250 req/day
-        # Legacy/experimental (may have 0 quota)
-        "flash-lite": "gemini-exp-1206",        # BROKEN - 0 quota on free tier
         "gemini-2.5-flash": "gemini-2.5-flash",
-        "gemini-exp-1206": "gemini-exp-1206",
+        # Gemini 2.0 models
         "flash-2.0": "gemini-2.0-flash-exp",
         "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
+        # Gemini 1.5 models (fallback)
+        "1.5-flash": "gemini-1.5-flash",        # 1500 req/day
+        "1.5-flash-8b": "gemini-1.5-flash-8b",
+        "1.5-pro": "gemini-1.5-pro",
         "pro": "gemini-1.5-pro-latest",
         "flash-8b": "gemini-1.5-flash-8b-latest"
     }
@@ -243,7 +244,7 @@ class GeminiClient:
     def __init__(
         self,
         api_key: str,
-        model: str = "1.5-flash",  # Default to Gemini 1.5 Flash - 1500 req/day (highest free tier)
+        model: str = "flash-lite",  # Default to Gemini 2.5 Flash-Lite (1000 req/day)
         max_retries: int = 3,
         timeout: int = 60
     ):

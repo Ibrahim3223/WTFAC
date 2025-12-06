@@ -28,7 +28,7 @@ class APIConfig(BaseSettings):
 
     # Gemini
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="1.5-flash", alias="GEMINI_MODEL")  # Gemini 1.5 Flash (1500 req/day - highest free tier)
+    gemini_model: str = Field(default="flash-lite", alias="GEMINI_MODEL")  # Gemini 2.5 Flash-Lite (1000 req/day)
 
     # Pexels/Pixabay
     pexels_api_key: str = Field(default="", alias="PEXELS_API_KEY")
