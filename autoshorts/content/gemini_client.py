@@ -455,7 +455,7 @@ OUTPUT FORMAT (VALID JSON ONLY - NO MARKDOWN):
     ],
     "metadata": {{
         "title": "40-60 char SEO-optimized title with hook element",
-        "description": "100 char mobile-optimized description expanding the hook",
+        "description": "300-500 char SEO description: First 157 chars = mobile preview (CRITICAL). Include: main topic summary, why viewer should care, what they'll learn, call to action. Use natural keywords. Make it engaging and informative.",
         "tags": ["viral_term", "niche_keyword", "specific_phrase", "category_tag", "2025"]
     }}
 }}
@@ -526,15 +526,31 @@ CRITICAL RULES:
         
         content.metadata["tags"] = strategic_tags
         
-        # Ensure description has hashtags
+        # Enhance description for SEO (minimum 300 chars)
         if "description" in content.metadata:
             desc = content.metadata["description"]
+
+            # If description is too short, enhance it
+            if len(desc) < 200:
+                # Build SEO-rich description
+                hook = content.hook[:100] if len(content.hook) > 100 else content.hook
+                script_preview = ' '.join(content.script[:2])[:150] if content.script else ""
+
+                enhanced_desc = f"{hook}\n\n{script_preview}"
+
+                # Add topic context
+                enhanced_desc += f"\n\nLearn about {topic} in this quick Short!"
+                enhanced_desc += f"\n\nThis video covers everything you need to know."
+
+                desc = enhanced_desc
+
+            # Add hashtags if not present
             if "#" not in desc:
-                # Add relevant hashtags
                 hashtags = [f"#{tag.replace(' ', '')}" for tag in strategic_tags[:3]]
                 desc += f"\n\n{' '.join(hashtags)}"
-                content.metadata["description"] = desc
-        
+
+            content.metadata["description"] = desc
+
         return content
     
     def _call_api_with_retry(self, prompt: str) -> str:
@@ -640,9 +656,11 @@ CRITICAL RULES:
             
             # Ensure metadata
             if "metadata" not in data:
+                hook_text = data['hook'][:100] if len(data['hook']) > 100 else data['hook']
+                script_preview = ' '.join(data.get('script', [])[:2])[:150]
                 data["metadata"] = {
                     "title": f"{data['hook'][:50]}...",
-                    "description": f"{data['hook']} Watch to learn more!",
+                    "description": f"{hook_text}\n\n{script_preview}\n\nWatch this Short to learn more! Don't forget to like and follow for daily content.",
                     "tags": ["shorts", "viral", "trending", "amazing", "2025"]
                 }
             
