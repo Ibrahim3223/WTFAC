@@ -256,7 +256,7 @@ class QualityConfig(BaseSettings):
     )
 
     min_quality_score: float = Field(
-        default=6.5,
+        default=5.0,
         ge=0.0,
         le=10.0,
         alias="MIN_QUALITY_SCORE"

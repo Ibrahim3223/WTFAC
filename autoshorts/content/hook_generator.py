@@ -239,7 +239,7 @@ class HookGenerator:
     - Viral pattern matching
     """
 
-    def __init__(self, gemini_api_key: str, model: str = "gemini-exp-1206"):  # Flash-Lite for 4x quota
+    def __init__(self, gemini_api_key: str, model: str = "gemini-2.5-flash-lite"):  # 1000 req/day - STABLE
         """
         Initialize hook generator
 

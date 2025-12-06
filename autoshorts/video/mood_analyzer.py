@@ -202,7 +202,7 @@ Return JSON:
             )
 
             response = self.gemini_client.models.generate_content(
-                model="gemini-exp-1206",  # Flash-Lite for 4x quota
+                model="gemini-2.5-flash-lite",  # 1000 req/day - STABLE
                 contents=prompt,
                 config=config
             )

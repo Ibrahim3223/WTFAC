@@ -241,7 +241,7 @@ jobs:
           MOTION_INTENSITY: "subtle"        # subtle/moderate/dynamic
 
           # ===== UNIVERSAL QUALITY THRESHOLDS =====
-          MIN_QUALITY_SCORE: "6.5"          # Content quality (0-10)
+          MIN_QUALITY_SCORE: "5.0"          # Content quality (0-10)
           MIN_VIRAL_SCORE: "6.0"            # Viral potential (0-10)
           MIN_OVERALL_SCORE: "7.0"          # Weighted average
 
