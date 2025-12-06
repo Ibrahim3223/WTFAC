@@ -224,8 +224,8 @@ class GeminiClient:
     
     MODELS = {
         # Gemini 2.5 Flash-Lite (RECOMMENDED - 1000 req/day, fastest & cheapest)
-        "flash-lite": "gemini-2.5-flash-lite-preview-05-20",  # 1000 req/day
-        "2.5-flash-lite": "gemini-2.5-flash-lite-preview-05-20",
+        "flash-lite": "gemini-2.5-flash-lite",  # 1000 req/day - STABLE VERSION
+        "2.5-flash-lite": "gemini-2.5-flash-lite",
         # Gemini 2.5 Flash (standard)
         "flash": "gemini-2.5-flash",            # 250 req/day
         "2.5-flash": "gemini-2.5-flash",        # 250 req/day
