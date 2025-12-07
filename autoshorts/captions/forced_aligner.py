@@ -204,34 +204,37 @@ class ForcedAligner:
             # Extract word timings
             word_timings = []
             transcribed_words = []
-            
+
             for segment in result.segments:
                 for word_obj in segment.words:
                     word = word_obj.word.strip()
                     start = float(word_obj.start)
                     end = float(word_obj.end)
                     duration = max(self.MIN_WORD_DURATION, end - start)
-                    
+
                     if word:
                         word_timings.append((word, duration))
                         transcribed_words.append(word.lower())
-            
+
             if not word_timings:
                 logger.warning("      ⚠️ stable-ts returned no words")
                 return None
-            
-            # Validate alignment quality
-            known_words = [w.lower() for w in known_text.split() if w.strip()]
-            match_rate = self._calculate_match_rate(known_words, transcribed_words)
-            
+
+            # CRITICAL: Keep ORIGINAL case words for captions (e.g., "Part 2" not "part two")
+            original_words = [w.strip() for w in known_text.split() if w.strip()]
+
+            # Use lowercase ONLY for match rate calculation
+            known_words_lower = [w.lower() for w in original_words]
+            match_rate = self._calculate_match_rate(known_words_lower, transcribed_words)
+
             logger.debug(f"      📊 Alignment quality: {match_rate:.1%} match rate")
-            
+
             # If alignment is good, use it
             if match_rate >= 0.70:  # 70% match is acceptable
-                # Map transcribed timings to known words
+                # Map transcribed timings to ORIGINAL CASE words (not lowercase!)
                 aligned = self._map_timings_to_known_text(
-                    known_words, 
-                    word_timings, 
+                    original_words,  # CRITICAL: Use original case for captions!
+                    word_timings,
                     total_duration
                 )
                 
