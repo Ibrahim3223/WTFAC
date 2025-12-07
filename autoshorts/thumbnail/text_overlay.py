@@ -134,7 +134,7 @@ class TextOverlay:
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.gemini_api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash-lite')  # 1000 req/day - STABLE
 
             prompt = f"""Generate 3 short, high-CTR YouTube thumbnail texts for this video:
 

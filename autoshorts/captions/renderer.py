@@ -344,7 +344,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # CRITICAL: CHUNK-LEVEL VALIDATION (prevents intra-segment drift!)
         chunks = self._validate_chunks(chunks, total_duration)
         
-        # CRITICAL: Exact cumulative timing with CHUNK-LEVEL validation
+        # CRITICAL: Exact cumulative timing - use ORIGINAL durations, not frame-aligned
+        # Frame alignment is only for display, timing must be based on actual audio
         cumulative_time = 0.0
 
         for chunk_idx, chunk in enumerate(chunks):
@@ -357,54 +358,36 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             chunk_duration = sum(d for _, d in chunk)
 
             # EXACT start/end with time offset applied
-            # FIXED: NEGATIVE offset delays captions (makes them come AFTER audio)
-            # Positive offset makes captions come BEFORE audio
-            # This inverts the previous incorrect behavior
             start = cumulative_time - time_offset
             end = start + chunk_duration
 
-            # Don't exceed total (safety check)
-            if end > total_duration + 0.001:  # Allow 1ms tolerance
-                end = total_duration
-                if start >= end:
-                    break
+            # Clamp to valid range
+            start = max(0, start)
+            end = min(end, total_duration)
 
-            # CRITICAL: Frame-align timing for PERFECT FFmpeg sync!
-            frame_duration = 1.0 / settings.TARGET_FPS
-            start_frame = round(start / frame_duration)
-            end_frame = round(end / frame_duration)
+            # Don't create zero-duration or negative chunks
+            if end <= start:
+                break
 
-            # Convert back to seconds (frame-aligned)
-            start_aligned = start_frame * frame_duration
-            end_aligned = end_frame * frame_duration
-
-            # Convert to ASS time strings
-            start_str = self._ass_time(start_aligned)
-            end_str = self._ass_time(end_aligned)
-
-            # CRITICAL: Calculate ACTUAL ASS duration after centisecond + frame rounding
-            ass_start = self._ass_to_seconds(start_str)
-            ass_end = self._ass_to_seconds(end_str)
-
-            # Log frame alignment if significant
-            frame_shift_ms = abs(start - start_aligned) * 1000
-            if frame_shift_ms > 5.0:
-                logger.info(f"      🎬 Chunk {chunk_idx+1} frame-aligned: {frame_shift_ms:.1f}ms shift")
+            # Convert to ASS time strings (ASS has centisecond precision)
+            start_str = self._ass_time(start)
+            end_str = self._ass_time(end)
 
             # NO EFFECTS for perfect sync!
             effect_tags = ""
 
             ass += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{effect_tags}{chunk_text}\n"
-            
-            # Update cumulative - use ACTUAL ASS end time (frame-aligned!)
-            cumulative_time = ass_end
-        
-        # Validation - cumulative_time now reflects ACTUAL frame-aligned ASS timing
+
+            # CRITICAL: Update cumulative using ORIGINAL chunk duration
+            # This prevents drift from ASS centisecond rounding
+            cumulative_time += chunk_duration
+
+        # Validation
         diff_ms = abs(cumulative_time - total_duration) * 1000
         if diff_ms > 10:
-            logger.warning(f"      ⚠️ Final drift: {diff_ms:.1f}ms (frame-aligned)")
+            logger.warning(f"      ⚠️ Caption timing drift: {diff_ms:.1f}ms")
         else:
-            logger.info(f"      ✅ Frame-perfect sync: {cumulative_time:.3f}s (drift: {diff_ms:.1f}ms)")
+            logger.debug(f"      ✅ Caption sync: {cumulative_time:.3f}s (drift: {diff_ms:.1f}ms)")
         
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass)
@@ -446,46 +429,58 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ) -> List[List[Tuple[str, float]]]:
         """
         CRITICAL: Validate each chunk to prevent intra-segment drift.
-        
+
         This ensures exact timing within each segment by adjusting
         chunk durations to match the total duration exactly.
+
+        FIXED: Uses precise remaining duration tracking to prevent cumulative errors.
         """
         if not chunks:
             return chunks
-        
+
         # Calculate current total
         current_total = sum(sum(d for _, d in chunk) for chunk in chunks)
-        
-        # ALWAYS validate chunks for logging, even if close
+
+        if current_total <= 0:
+            return chunks
+
+        # First pass: Scale all chunks proportionally
+        scale = total_duration / current_total
         validated_chunks = []
-        remaining_duration = total_duration
-        
+
         for i, chunk in enumerate(chunks):
-            is_last = (i == len(chunks) - 1)
-            
+            # Scale each word in the chunk
+            scaled_chunk = []
+            for word, dur in chunk:
+                scaled_dur = max(self.MIN_WORD_DURATION, round(dur * scale, 3))
+                scaled_chunk.append((word, scaled_dur))
+            validated_chunks.append(scaled_chunk)
+
+        # Second pass: Fix any remaining difference by adjusting last chunk
+        actual_total = sum(sum(d for _, d in chunk) for chunk in validated_chunks)
+        diff = total_duration - actual_total
+
+        if abs(diff) > 0.001 and validated_chunks:
+            # Adjust last word of last chunk
+            last_chunk = validated_chunks[-1]
+            if last_chunk:
+                last_word, last_dur = last_chunk[-1]
+                new_dur = max(self.MIN_WORD_DURATION, round(last_dur + diff, 3))
+                validated_chunks[-1][-1] = (last_word, new_dur)
+
+        # Log validation results
+        final_total = sum(sum(d for _, d in chunk) for chunk in validated_chunks)
+        diff_ms = abs(final_total - total_duration) * 1000
+
+        for i, chunk in enumerate(validated_chunks):
             chunk_dur = sum(d for _, d in chunk)
-            
-            if is_last:
-                # Last chunk gets exactly remaining duration
-                target_dur = remaining_duration
-            else:
-                # Scale proportionally based on current chunk weight
-                weight = chunk_dur / current_total if current_total > 0 else 1.0 / len(chunks)
-                target_dur = total_duration * weight
-            
-            # Adjust chunk words to exact target duration
-            if abs(chunk_dur - target_dur) > 0.001:
-                scale = target_dur / chunk_dur if chunk_dur > 0 else 1.0
-                chunk = [(w, max(self.MIN_WORD_DURATION, round(d * scale, 3))) for w, d in chunk]
-                actual_dur = sum(d for _, d in chunk)
-                
-                logger.info(f"      📏 Chunk {i+1}/{len(chunks)}: {actual_dur:.3f}s (target: {target_dur:.3f}s)")
-            else:
-                logger.info(f"      📏 Chunk {i+1}/{len(chunks)}: {chunk_dur:.3f}s (perfect)")
-            
-            validated_chunks.append(chunk)
-            remaining_duration -= sum(d for _, d in chunk)
-        
+            logger.debug(f"      📏 Chunk {i+1}/{len(validated_chunks)}: {chunk_dur:.3f}s")
+
+        if diff_ms > 1.0:
+            logger.warning(f"      ⚠️ Chunk validation drift: {diff_ms:.1f}ms")
+        else:
+            logger.debug(f"      ✅ Chunks validated: {final_total:.3f}s (target: {total_duration:.3f}s)")
+
         return validated_chunks
     
     def _ass_time(self, seconds: float) -> str:

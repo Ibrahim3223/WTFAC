@@ -367,7 +367,7 @@ class StoryArcOptimizer:
             import json
 
             genai.configure(api_key=self.gemini_api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash-lite')  # 1000 req/day - STABLE
 
             prompt = f"""Analyze this YouTube Short script and create a story arc for maximum completion:
 

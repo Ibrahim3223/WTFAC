@@ -275,7 +275,10 @@ class ContinuousTTSHandler:
         end_time: float
     ) -> bytes:
         """
-        Extract audio segment using FFmpeg.
+        Extract audio segment using FFmpeg with precise cutting.
+
+        CRITICAL: Uses re-encoding (not stream copy) for sample-accurate cuts.
+        Stream copy can cause clicks/pops at segment boundaries.
 
         Args:
             input_path: Input WAV file path
@@ -292,25 +295,53 @@ class ContinuousTTSHandler:
             tmp_out_path = tmp_out.name
 
         try:
-            # FFmpeg command to extract segment
+            # FFmpeg command to extract segment with RE-ENCODING for precise cuts
+            # CRITICAL: -c:a pcm_s16le ensures sample-accurate cutting (no clicks/pops)
+            # -af afade adds tiny fade in/out to prevent abrupt transitions
+            fade_ms = 0.005  # 5ms fade - imperceptible but prevents clicks
+
             cmd = [
                 'ffmpeg',
                 '-y',  # Overwrite
+                '-ss', str(start_time),  # Seek BEFORE input for accuracy
                 '-i', input_path,
-                '-ss', str(start_time),  # Start time
                 '-t', str(duration),      # Duration
-                '-c', 'copy',             # Copy codec (fast)
+                '-af', f'afade=t=in:st=0:d={fade_ms},afade=t=out:st={duration - fade_ms}:d={fade_ms}',
+                '-c:a', 'pcm_s16le',      # Re-encode for sample-accurate cuts
+                '-ar', '24000',           # Maintain sample rate
+                '-ac', '1',               # Mono
                 '-f', 'wav',
                 tmp_out_path
             ]
 
             # Run FFmpeg
-            subprocess.run(
+            result = subprocess.run(
                 cmd,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=True
+                stderr=subprocess.PIPE,
+                check=False
             )
+
+            # If fade filter fails (very short segment), try without fade
+            if result.returncode != 0 or not os.path.exists(tmp_out_path):
+                cmd_simple = [
+                    'ffmpeg',
+                    '-y',
+                    '-ss', str(start_time),
+                    '-i', input_path,
+                    '-t', str(duration),
+                    '-c:a', 'pcm_s16le',
+                    '-ar', '24000',
+                    '-ac', '1',
+                    '-f', 'wav',
+                    tmp_out_path
+                ]
+                subprocess.run(
+                    cmd_simple,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True
+                )
 
             # Read output bytes
             with open(tmp_out_path, 'rb') as f:

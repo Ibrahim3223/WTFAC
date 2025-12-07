@@ -554,25 +554,57 @@ CRITICAL RULES:
         return content
     
     def _call_api_with_retry(self, prompt: str) -> str:
-        """Call API with retry logic"""
+        """Call API with retry logic - respects API retry delays"""
         last_error = None
-        
+
         for attempt in range(1, self.max_retries + 1):
             try:
                 return self._call_api(prompt)
-                
+
             except Exception as e:
                 last_error = e
+                error_str = str(e)
                 logger.warning(f"[Gemini] Attempt {attempt}/{self.max_retries} failed: {e}")
-                
+
                 if attempt == self.max_retries:
                     raise last_error
-                
-                wait_time = 2 ** attempt
-                logger.info(f"[Gemini] Retrying in {wait_time}s...")
+
+                # Parse retry delay from API response (e.g., "Please retry in 44.431319223s")
+                wait_time = self._parse_retry_delay(error_str)
+
+                if wait_time is None:
+                    # Fallback to exponential backoff
+                    wait_time = 2 ** attempt
+
+                # Cap wait time at 60 seconds for reasonable UX
+                wait_time = min(wait_time, 60)
+
+                logger.info(f"[Gemini] Retrying in {wait_time:.1f}s...")
                 time.sleep(wait_time)
-        
+
         raise last_error
+
+    def _parse_retry_delay(self, error_str: str) -> float:
+        """Parse retry delay from API error message"""
+        import re
+
+        # Match patterns like "retry in 44.431319223s" or "retryDelay: '44s'"
+        patterns = [
+            r'retry in (\d+(?:\.\d+)?)s',
+            r'retryDelay["\s:]+["\']?(\d+(?:\.\d+)?)',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, error_str, re.IGNORECASE)
+            if match:
+                try:
+                    delay = float(match.group(1))
+                    logger.debug(f"[Gemini] Parsed retry delay: {delay}s")
+                    return delay
+                except (ValueError, IndexError):
+                    pass
+
+        return None
     
     def _call_api(self, prompt: str) -> str:
         """Make API call"""

@@ -92,24 +92,39 @@ class ForcedAligner:
     ) -> List[Tuple[str, float]]:
         """
         BULLETPROOF forced alignment with known text.
-        
+
         Args:
             text: KNOWN text that was spoken (CRITICAL for accuracy!)
             audio_path: Path to audio file
             tts_word_timings: TTS word timings (if available from Edge-TTS)
             total_duration: Total audio duration (validation)
             language: Override language (if different from init)
-        
+
         Returns:
             List of (word, duration) tuples with milisecond precision
         """
         # Use override language if provided
         lang = language or self.language
-        
-        # Strategy 1: Edge-TTS word timings (BEST if available - from TTS engine)
+
+        # Get KNOWN words from original text (CRITICAL for caption display!)
+        known_words = [w.strip() for w in text.split() if w.strip()]
+
+        # Strategy 1: TTS word timings (if available)
+        # CRITICAL FIX: Map durations to KNOWN WORDS, not transcribed words
+        # This fixes numbers being replaced (e.g., "2" -> "two")
         if tts_word_timings and len(tts_word_timings) > 0:
-            logger.debug(f"      ✅ Using Edge-TTS word timings: {len(tts_word_timings)} words")
-            return self._validate_timings(tts_word_timings, total_duration)
+            logger.debug(f"      📝 TTS provided {len(tts_word_timings)} word timings")
+
+            # Map TTS durations to known words
+            mapped_timings = self._map_tts_timings_to_known_words(
+                known_words=known_words,
+                tts_word_timings=tts_word_timings,
+                total_duration=total_duration
+            )
+
+            if mapped_timings:
+                logger.debug(f"      ✅ Mapped TTS timings to {len(mapped_timings)} known words")
+                return self._validate_timings(mapped_timings, total_duration)
         
         # Strategy 2: stable-ts FORCED ALIGNMENT (EXCELLENT - %99 accuracy with known text!)
         # This is triggered when Google TTS or Edge-TTS simple is used
@@ -252,7 +267,71 @@ class ForcedAligner:
                     break
         
         return matches / len(known_words)
-    
+
+    def _map_tts_timings_to_known_words(
+        self,
+        known_words: List[str],
+        tts_word_timings: List[Tuple[str, float]],
+        total_duration: Optional[float]
+    ) -> Optional[List[Tuple[str, float]]]:
+        """
+        Map TTS word timings to KNOWN words from original text.
+
+        CRITICAL FIX: This ensures captions show original text (e.g., "2")
+        instead of transcribed text (e.g., "two").
+
+        Strategy:
+        1. If word counts match exactly -> use known words with TTS durations
+        2. If counts differ -> distribute total duration proportionally
+
+        Args:
+            known_words: Words from original script text (e.g., ["Part", "2"])
+            tts_word_timings: Word timings from TTS/Whisper (e.g., [("part", 0.3), ("two", 0.2)])
+            total_duration: Total audio duration for validation
+
+        Returns:
+            List of (known_word, duration) tuples
+        """
+        if not known_words:
+            return None
+
+        # Calculate total duration from TTS timings
+        tts_total = sum(d for _, d in tts_word_timings) if tts_word_timings else 0
+        target_duration = total_duration or tts_total
+
+        if target_duration <= 0:
+            return None
+
+        # Case 1: Word counts match - direct duration mapping
+        if len(tts_word_timings) == len(known_words):
+            logger.debug(f"      ✅ Perfect word count match: {len(known_words)} words")
+            result = []
+            for i, known_word in enumerate(known_words):
+                _, duration = tts_word_timings[i]
+                result.append((known_word, duration))
+            return result
+
+        # Case 2: Word counts differ - proportional distribution
+        # This happens when TTS reads "2" as "two" or "1.1 million" as "one point one million"
+        logger.debug(f"      📊 Word count mismatch: known={len(known_words)}, tts={len(tts_word_timings)}")
+        logger.debug(f"      🔄 Using proportional distribution with known words")
+
+        # Calculate character-based weights for known words
+        total_chars = sum(len(w) for w in known_words)
+        if total_chars == 0:
+            # Equal distribution fallback
+            dur_per_word = target_duration / len(known_words)
+            return [(w, dur_per_word) for w in known_words]
+
+        # Distribute duration based on character count
+        result = []
+        for word in known_words:
+            char_ratio = len(word) / total_chars
+            duration = max(self.MIN_WORD_DURATION, target_duration * char_ratio)
+            result.append((word, duration))
+
+        return result
+
     def _map_timings_to_known_text(
         self,
         known_words: List[str],

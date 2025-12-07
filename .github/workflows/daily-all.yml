@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      max-parallel: 3  # REDUCED: 6→3 to prevent disk space issues
+      max-parallel: 1  # CRITICAL: Sequential to prevent Gemini API rate limits (20 req/min free tier)
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
     environment: ${{ matrix.env }}
 
@@ -227,7 +227,7 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"       # Gold (inactive words)
           KARAOKE_ACTIVE: "#3EA6FF"         # Blue (active words)
           KARAOKE_OUTLINE: "#000000"        # Black outline
-          KARAOKE_OFFSET_MS: "0"            # stable-ts = perfect sync (no offset needed)
+          KARAOKE_OFFSET_MS: "0"            # No offset - stable-ts handles timing
           KARAOKE_SPEED: "1.0"              # No tempo adjustment needed
           KARAOKE_SPEEDUP_PCT: "0.0"        # Trust stable-ts timing
           KARAOKE_RAMP_PCT: "0.0"           # No progressive speed

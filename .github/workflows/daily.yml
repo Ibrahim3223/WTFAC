@@ -168,7 +168,7 @@ jobs:
           KARAOKE_INACTIVE: "#FFD700"       # Gold (inactive words)
           KARAOKE_ACTIVE: "#3EA6FF"         # Blue (active words)
           KARAOKE_OUTLINE: "#000000"        # Black outline
-          KARAOKE_OFFSET_MS: "0"            # stable-ts = perfect sync (no offset needed)
+          KARAOKE_OFFSET_MS: "0"            # No offset - stable-ts handles timing
           KARAOKE_SPEED: "1.0"              # No tempo adjustment needed
           KARAOKE_SPEEDUP_PCT: "0.0"        # Trust stable-ts timing
           KARAOKE_RAMP_PCT: "0.0"           # No progressive speed
