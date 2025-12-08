@@ -93,24 +93,34 @@ class ShortsOrchestrator:
         """Create container with all default services."""
         container = Container()
 
-        # Validate API keys
-        if not settings.GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY not found!")
+        # Determine which LLM provider to use
+        llm_provider = settings.get_active_llm_provider()
 
-        logger.info(f"✅ Gemini API key: {settings.GEMINI_API_KEY[:10]}...")
+        # Validate API keys based on provider
+        if llm_provider == "groq":
+            if not settings.GROQ_API_KEY:
+                raise ValueError("GROQ_API_KEY not found!")
+            logger.info(f"✅ Groq API key: {settings.GROQ_API_KEY[:10]}...")
+            logger.info(f"🚀 Using Groq LLM (14.4K req/day free tier!)")
+        else:
+            if not settings.GEMINI_API_KEY:
+                raise ValueError("GEMINI_API_KEY not found!")
+            logger.info(f"✅ Gemini API key: {settings.GEMINI_API_KEY[:10]}...")
 
         if settings.PEXELS_API_KEY:
             logger.info(f"✅ Pexels API key: {settings.PEXELS_API_KEY[:10]}...")
         else:
             logger.warning("⚠️ PEXELS_API_KEY not found")
 
-        # Register all services
+        # Register LLM client (supports both Gemini and Groq)
         container.register(
             GeminiClient,
             lambda: GeminiClient(
-                api_key=settings.GEMINI_API_KEY,
-                model=settings.GEMINI_MODEL,
-                max_retries=3
+                api_key=settings.GEMINI_API_KEY or "",
+                model=settings.GROQ_MODEL if llm_provider == "groq" else settings.GEMINI_MODEL,
+                max_retries=3,
+                provider=llm_provider,
+                groq_api_key=settings.GROQ_API_KEY if llm_provider == "groq" else None
             ),
             ServiceLifetime.SINGLETON
         )

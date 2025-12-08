@@ -1,11 +1,13 @@
 """
-Gemini API Client - TOPIC-DRIVEN VIRAL OPTIMIZATION
+LLM Client - TOPIC-DRIVEN VIRAL OPTIMIZATION
+Supports multiple providers: Gemini (Google) and Groq (Llama)
 No hardcoded modes - AI analyzes topic and adapts everything dynamically
 
 ENHANCED with:
 - Hook Patterns for viral opens (CTR +20-30%)
 - Cold Open validation (no meta-talk)
 - Cliffhanger injection for retention (+15-25%)
+- Multi-provider support (Gemini/Groq) for better rate limits
 """
 
 import json
@@ -16,8 +18,20 @@ import re
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
-from google import genai
-from google.genai import types
+# Gemini imports
+try:
+    from google import genai
+    from google.genai import types
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+# Groq imports
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
 
 # NEW: Import viral patterns
 from autoshorts.content.prompts.hook_patterns import (
@@ -220,46 +234,84 @@ class TopicAnalyzer:
 
 
 class GeminiClient:
-    """Topic-driven viral content generator"""
-    
-    MODELS = {
-        # Gemini 2.5 Flash-Lite (RECOMMENDED - 1000 req/day, fastest & cheapest)
-        "flash-lite": "gemini-2.5-flash-lite",  # 1000 req/day - STABLE VERSION
+    """Topic-driven viral content generator - supports Gemini and Groq"""
+
+    # Gemini models
+    GEMINI_MODELS = {
+        # Gemini 2.5 Flash-Lite (RECOMMENDED - but limited to 20 req/day now!)
+        "flash-lite": "gemini-2.5-flash-lite",
         "2.5-flash-lite": "gemini-2.5-flash-lite",
         # Gemini 2.5 Flash (standard)
-        "flash": "gemini-2.5-flash",            # 250 req/day
-        "2.5-flash": "gemini-2.5-flash",        # 250 req/day
+        "flash": "gemini-2.5-flash",
+        "2.5-flash": "gemini-2.5-flash",
         "gemini-2.5-flash": "gemini-2.5-flash",
         # Gemini 2.0 models
         "flash-2.0": "gemini-2.0-flash-exp",
         "flash-thinking": "gemini-2.0-flash-thinking-exp-1219",
         # Gemini 1.5 models (fallback)
-        "1.5-flash": "gemini-1.5-flash",        # 1500 req/day
+        "1.5-flash": "gemini-1.5-flash",
         "1.5-flash-8b": "gemini-1.5-flash-8b",
         "1.5-pro": "gemini-1.5-pro",
         "pro": "gemini-1.5-pro-latest",
         "flash-8b": "gemini-1.5-flash-8b-latest"
     }
 
+    # Groq models (RECOMMENDED - 14.4K req/day free tier!)
+    GROQ_MODELS = {
+        "llama-3.1-8b-instant": "llama-3.1-8b-instant",  # 14.4K req/day - BEST FOR FREE
+        "llama-3.3-70b-versatile": "llama-3.3-70b-versatile",  # 1K req/day - Higher quality
+        "llama-3.1-70b-versatile": "llama-3.1-70b-versatile",  # Legacy
+        "mixtral-8x7b-32768": "mixtral-8x7b-32768",  # Good alternative
+    }
+
+    # Alias for backward compatibility
+    MODELS = GEMINI_MODELS
+
     def __init__(
         self,
         api_key: str,
-        model: str = "flash-lite",  # Default to Gemini 2.5 Flash-Lite (1000 req/day)
+        model: str = "flash-lite",
         max_retries: int = 3,
-        timeout: int = 60
+        timeout: int = 60,
+        provider: str = "gemini",  # 'gemini' or 'groq'
+        groq_api_key: Optional[str] = None
     ):
-        """Initialize Gemini client"""
-        if not api_key:
-            raise ValueError("Gemini API key is required")
-        
-        logger.info(f"[Gemini] API key: {api_key[:10]}...{api_key[-4:]}")
-        
-        self.client = genai.Client(api_key=api_key)
-        self.model = self.MODELS.get(model, model)
+        """
+        Initialize LLM client.
+
+        Args:
+            api_key: Gemini API key (for backward compatibility)
+            model: Model name/alias
+            max_retries: Number of retries on failure
+            timeout: Request timeout in seconds
+            provider: LLM provider ('gemini' or 'groq')
+            groq_api_key: Groq API key (if provider is 'groq')
+        """
+        self.provider = provider
         self.max_retries = max_retries
         self.timeout = timeout
-        
-        logger.info(f"[Gemini] Model: {self.model}")
+
+        if provider == "groq":
+            if not groq_api_key:
+                raise ValueError("Groq API key is required for Groq provider")
+            if not GROQ_AVAILABLE:
+                raise ImportError("groq package not installed. Run: pip install groq")
+
+            self.groq_client = Groq(api_key=groq_api_key)
+            self.model = self.GROQ_MODELS.get(model, model)
+            logger.info(f"[Groq] API key: {groq_api_key[:10]}...{groq_api_key[-4:]}")
+            logger.info(f"[Groq] Model: {self.model} (14.4K req/day free tier!)")
+
+        else:  # gemini
+            if not api_key:
+                raise ValueError("Gemini API key is required")
+            if not GEMINI_AVAILABLE:
+                raise ImportError("google-genai package not installed. Run: pip install google-genai")
+
+            self.client = genai.Client(api_key=api_key)
+            self.model = self.GEMINI_MODELS.get(model, model)
+            logger.info(f"[Gemini] API key: {api_key[:10]}...{api_key[-4:]}")
+            logger.info(f"[Gemini] Model: {self.model}")
     
     def generate(
         self,
@@ -607,7 +659,44 @@ CRITICAL RULES:
         return None
     
     def _call_api(self, prompt: str) -> str:
-        """Make API call"""
+        """Make API call to selected provider"""
+        if self.provider == "groq":
+            return self._call_groq_api(prompt)
+        else:
+            return self._call_gemini_api(prompt)
+
+    def _call_groq_api(self, prompt: str) -> str:
+        """Make API call to Groq"""
+        try:
+            response = self.groq_client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a viral content creator for YouTube Shorts. Always respond with valid JSON only, no markdown blocks."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.9,
+                max_tokens=4096,
+                top_p=0.95,
+            )
+
+            if response.choices and response.choices[0].message.content:
+                logger.info("[Groq] ✅ API successful")
+                return response.choices[0].message.content
+
+            raise RuntimeError("Empty response from Groq")
+
+        except Exception as e:
+            logger.error(f"[Groq] ❌ API failed: {e}")
+            raise
+
+    def _call_gemini_api(self, prompt: str) -> str:
+        """Make API call to Gemini"""
         try:
             config = types.GenerateContentConfig(
                 temperature=0.92,
@@ -633,19 +722,19 @@ CRITICAL RULES:
                     )
                 ]
             )
-            
+
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
                 config=config
             )
-            
+
             if response.text:
                 logger.info("[Gemini] ✅ API successful")
                 return response.text
-            
-            raise RuntimeError("Empty response")
-            
+
+            raise RuntimeError("Empty response from Gemini")
+
         except Exception as e:
             logger.error(f"[Gemini] ❌ API failed: {e}")
             raise
@@ -750,18 +839,29 @@ CRITICAL RULES:
         return text
     
     def test_connection(self) -> bool:
-        """Test connection"""
+        """Test connection to selected provider"""
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents='Say "OK" in JSON: {"status": "OK"}'
-            )
-            
-            if response.text:
-                logger.info("[Gemini] ✅ Connection OK")
-                return True
+            if self.provider == "groq":
+                response = self.groq_client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": 'Say "OK" in JSON: {"status": "OK"}'}],
+                    max_tokens=50
+                )
+                if response.choices and response.choices[0].message.content:
+                    logger.info("[Groq] ✅ Connection OK")
+                    return True
+            else:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents='Say "OK" in JSON: {"status": "OK"}'
+                )
+                if response.text:
+                    logger.info("[Gemini] ✅ Connection OK")
+                    return True
+
             return False
-            
+
         except Exception as e:
-            logger.error(f"[Gemini] ❌ Connection failed: {e}")
+            provider_name = "Groq" if self.provider == "groq" else "Gemini"
+            logger.error(f"[{provider_name}] ❌ Connection failed: {e}")
             return False

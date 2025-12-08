@@ -39,6 +39,11 @@ YT_REFRESH_TOKEN = config.api.yt_refresh_token
 # Gemini
 GEMINI_MODEL = config.api.gemini_model
 USE_GEMINI = True  # Always true for now
+
+# Groq (Alternative LLM - 14.4K req/day free tier!)
+GROQ_API_KEY = config.api.groq_api_key
+GROQ_MODEL = config.api.groq_model
+LLM_PROVIDER = config.api.llm_provider
 ADDITIONAL_PROMPT_CONTEXT = os.getenv("ADDITIONAL_PROMPT_CONTEXT", "")
 
 # Channel
@@ -184,8 +189,9 @@ def validate_api_keys() -> List[str]:
     """
     missing = []
 
-    if not GEMINI_API_KEY:
-        missing.append("GEMINI_API_KEY")
+    # LLM Provider - need at least one
+    if not GEMINI_API_KEY and not GROQ_API_KEY:
+        missing.append("GEMINI_API_KEY or GROQ_API_KEY")
 
     if not PEXELS_API_KEY and not PIXABAY_API_KEY:
         missing.append("PEXELS_API_KEY or PIXABAY_API_KEY")
@@ -199,6 +205,23 @@ def validate_api_keys() -> List[str]:
             missing.append("YT_REFRESH_TOKEN")
 
     return missing
+
+
+def get_active_llm_provider() -> str:
+    """
+    Determine which LLM provider to use.
+
+    Returns:
+        'groq' or 'gemini'
+    """
+    if LLM_PROVIDER == "groq":
+        return "groq"
+    elif LLM_PROVIDER == "gemini":
+        return "gemini"
+    else:  # 'auto' - prefer Groq for higher limits
+        if GROQ_API_KEY:
+            return "groq"
+        return "gemini"
 
 
 def get_config() -> AppConfig:

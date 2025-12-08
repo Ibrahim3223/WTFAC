@@ -30,6 +30,14 @@ class APIConfig(BaseSettings):
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="flash-lite", alias="GEMINI_MODEL")  # Gemini 2.5 Flash-Lite (1000 req/day)
 
+    # Groq (Alternative LLM provider - 14.4K req/day free tier!)
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
+
+    # LLM Provider selection ('auto', 'gemini', 'groq')
+    # 'auto' = use Groq if GROQ_API_KEY is set, else Gemini
+    llm_provider: str = Field(default="auto", alias="LLM_PROVIDER")
+
     # Pexels/Pixabay
     pexels_api_key: str = Field(default="", alias="PEXELS_API_KEY")
     pixabay_api_key: str = Field(default="", alias="PIXABAY_API_KEY")
