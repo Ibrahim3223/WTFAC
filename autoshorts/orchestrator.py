@@ -170,10 +170,14 @@ class ShortsOrchestrator:
         # ============================================
         logger.info("🎯 Registering TIER 1 Viral System components...")
 
-        # Content optimization
+        # Content optimization - use same provider as main LLM client
         container.register(
             HookGenerator,
-            lambda: HookGenerator(gemini_api_key=settings.GEMINI_API_KEY),
+            lambda: HookGenerator(
+                gemini_api_key=settings.GEMINI_API_KEY,
+                provider=llm_provider,
+                groq_api_key=settings.GROQ_API_KEY
+            ),
             ServiceLifetime.SINGLETON
         )
 
@@ -206,9 +210,10 @@ class ShortsOrchestrator:
             ServiceLifetime.SINGLETON
         )
 
+        # MoodAnalyzer - use rule-based fallback when using Groq (Groq doesn't need mood analysis)
         container.register(
             MoodAnalyzer,
-            lambda: MoodAnalyzer(gemini_api_key=settings.GEMINI_API_KEY),
+            lambda: MoodAnalyzer(gemini_api_key=settings.GEMINI_API_KEY if llm_provider == "gemini" else ""),
             ServiceLifetime.SINGLETON
         )
 
@@ -225,16 +230,17 @@ class ShortsOrchestrator:
             ServiceLifetime.SINGLETON
         )
 
+        # TimingOptimizer - use rule-based fallback when using Groq
         container.register(
             TimingOptimizer,
-            lambda: TimingOptimizer(gemini_api_key=settings.GEMINI_API_KEY),
+            lambda: TimingOptimizer(gemini_api_key=settings.GEMINI_API_KEY if llm_provider == "gemini" else ""),
             ServiceLifetime.SINGLETON
         )
 
-        # Thumbnail generation
+        # Thumbnail generation - use rule-based fallback when using Groq
         container.register(
             ThumbnailGenerator,
-            lambda: ThumbnailGenerator(gemini_api_key=settings.GEMINI_API_KEY),
+            lambda: ThumbnailGenerator(gemini_api_key=settings.GEMINI_API_KEY if llm_provider == "gemini" else ""),
             ServiceLifetime.SINGLETON
         )
 

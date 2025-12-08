@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 AI-Powered Hook Generator - TIER 1 VIRAL SYSTEM
-Generates UNIQUE hooks per video using Gemini AI
+Generates UNIQUE hooks per video using Gemini AI or Groq
 
 Key Features:
 - 10+ hook templates (question, challenge, promise, shock, story, etc.)
@@ -10,6 +10,7 @@ Key Features:
 - Emotional trigger injection (curiosity, surprise, fear, joy)
 - Viral pattern matching (analyze top shorts in niche)
 - NO REPETITION across 100 videos/day
+- Multi-provider support (Gemini/Groq) for better rate limits
 
 Expected Impact: +60-80% retention in first 3 seconds
 """
@@ -20,8 +21,20 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
-from google import genai
-from google.genai import types
+# Gemini imports
+try:
+    from google import genai
+    from google.genai import types
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
+# Groq imports
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +242,7 @@ POWER_WORDS = {
 
 class HookGenerator:
     """
-    AI-Powered Hook Generator using Gemini
+    AI-Powered Hook Generator using Gemini or Groq
 
     Generates unique, viral hooks for YouTube Shorts with:
     - Content-aware hook type selection
@@ -237,22 +250,48 @@ class HookGenerator:
     - Emotional trigger optimization
     - Power word injection
     - Viral pattern matching
+    - Multi-provider support (Gemini/Groq)
     """
 
-    def __init__(self, gemini_api_key: str, model: str = "gemini-2.5-flash-lite"):  # 1000 req/day - STABLE
+    def __init__(
+        self,
+        gemini_api_key: str = "",
+        model: str = "gemini-2.5-flash-lite",
+        provider: str = "auto",
+        groq_api_key: str = ""
+    ):
         """
         Initialize hook generator
 
         Args:
             gemini_api_key: Gemini API key
-            model: Gemini model to use
+            model: Model to use
+            provider: LLM provider ('auto', 'gemini', 'groq')
+            groq_api_key: Groq API key
         """
-        if not gemini_api_key:
-            raise ValueError("Gemini API key is required")
+        # Auto-detect provider
+        if provider == "auto":
+            if groq_api_key and GROQ_AVAILABLE:
+                provider = "groq"
+            elif gemini_api_key and GEMINI_AVAILABLE:
+                provider = "gemini"
+            else:
+                raise ValueError("No LLM API key provided")
 
-        self.client = genai.Client(api_key=gemini_api_key)
-        self.model = model
-        logger.info(f"[HookGenerator] Initialized with model: {model}")
+        self.provider = provider
+
+        if provider == "groq":
+            if not groq_api_key:
+                raise ValueError("Groq API key is required for Groq provider")
+            self.groq_client = Groq(api_key=groq_api_key)
+            self.model = "llama-3.1-8b-instant"
+            logger.info(f"[HookGenerator] Initialized with Groq: {self.model}")
+        else:
+            if not gemini_api_key:
+                raise ValueError("Gemini API key is required")
+            self.client = genai.Client(api_key=gemini_api_key)
+            self.model = model
+            logger.info(f"[HookGenerator] Initialized with model: {model}")
 
     def generate_hooks(
         self,
@@ -374,7 +413,7 @@ class HookGenerator:
         emotion: EmotionType,
         keywords: Optional[List[str]] = None
     ) -> str:
-        """Generate a unique hook using Gemini AI"""
+        """Generate a unique hook using LLM (Gemini or Groq)"""
 
         # Get template example
         templates = HOOK_TEMPLATES.get(hook_type, [])
@@ -403,22 +442,34 @@ Requirements:
 Return ONLY the hook text, nothing else."""
 
         try:
-            # Call Gemini API
-            config = types.GenerateContentConfig(
-                temperature=0.95,  # High creativity for unique hooks
-                top_k=60,
-                top_p=0.95,
-                max_output_tokens=100,
-            )
+            if self.provider == "groq":
+                # Call Groq API
+                response = self.groq_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are a viral content creator. Return ONLY the hook text."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.95,
+                    max_tokens=100,
+                )
+                hook = response.choices[0].message.content.strip() if response.choices else ""
+            else:
+                # Call Gemini API
+                config = types.GenerateContentConfig(
+                    temperature=0.95,
+                    top_k=60,
+                    top_p=0.95,
+                    max_output_tokens=100,
+                )
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=config
+                )
+                hook = response.text.strip() if response.text else ""
 
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=config
-            )
-
-            if response.text:
-                hook = response.text.strip()
+            if hook:
                 # Clean up
                 hook = hook.strip('"\'').strip()
                 # Ensure max length
@@ -431,7 +482,7 @@ Return ONLY the hook text, nothing else."""
                 return self._fallback_hook(topic, hook_type)
 
         except Exception as e:
-            logger.error(f"[HookGenerator] Gemini API error: {e}")
+            logger.error(f"[HookGenerator] {self.provider.upper()} API error: {e}")
             return self._fallback_hook(topic, hook_type)
 
     def _fallback_hook(self, topic: str, hook_type: HookType) -> str:
