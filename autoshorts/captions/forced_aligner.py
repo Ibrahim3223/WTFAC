@@ -11,6 +11,79 @@ from typing import List, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
+# Number word mappings for matching transcribed "two" with script "2"
+NUMBER_WORDS = {
+    "0": ["zero", "o", "oh"],
+    "1": ["one", "won"],
+    "2": ["two", "to", "too"],
+    "3": ["three"],
+    "4": ["four", "for", "fore"],
+    "5": ["five"],
+    "6": ["six"],
+    "7": ["seven"],
+    "8": ["eight", "ate"],
+    "9": ["nine"],
+    "10": ["ten"],
+    "11": ["eleven"],
+    "12": ["twelve"],
+    "13": ["thirteen"],
+    "14": ["fourteen"],
+    "15": ["fifteen"],
+    "16": ["sixteen"],
+    "17": ["seventeen"],
+    "18": ["eighteen"],
+    "19": ["nineteen"],
+    "20": ["twenty"],
+    "30": ["thirty"],
+    "40": ["forty"],
+    "50": ["fifty"],
+    "60": ["sixty"],
+    "70": ["seventy"],
+    "80": ["eighty"],
+    "90": ["ninety"],
+    "100": ["hundred"],
+    "1000": ["thousand"],
+}
+
+# Reverse mapping: word -> digit
+WORD_TO_NUMBER = {}
+for digit, words in NUMBER_WORDS.items():
+    for word in words:
+        WORD_TO_NUMBER[word] = digit
+
+
+def _numbers_match(known: str, trans: str) -> bool:
+    """
+    Check if a number digit matches a transcribed word.
+
+    Examples:
+        _numbers_match("2", "two") -> True
+        _numbers_match("4", "for") -> True
+        _numbers_match("10", "ten") -> True
+    """
+    # Direct match
+    if known == trans:
+        return True
+
+    # Check if known is a digit and trans is its word form
+    if known in NUMBER_WORDS:
+        if trans in NUMBER_WORDS[known]:
+            return True
+
+    # Check if trans is a digit and known is its word form
+    if trans in NUMBER_WORDS:
+        if known in NUMBER_WORDS[trans]:
+            return True
+
+    # Check reverse mapping
+    if known in WORD_TO_NUMBER and WORD_TO_NUMBER[known] == trans:
+        return True
+    if trans in WORD_TO_NUMBER and WORD_TO_NUMBER[trans] == known:
+        return True
+
+    return False
+
+
 # stable-ts import (lazy load)
 _STABLE_TS_AVAILABLE = False
 _stable_models = {}  # Cache models per language
@@ -253,22 +326,32 @@ class ForcedAligner:
             return None
     
     def _calculate_match_rate(
-        self, 
-        known_words: List[str], 
+        self,
+        known_words: List[str],
         transcribed_words: List[str]
     ) -> float:
-        """Calculate how well transcribed words match known words."""
+        """
+        Calculate how well transcribed words match known words.
+
+        ENHANCED: Now handles number-to-word matching!
+        "2" matches "two", "10" matches "ten", etc.
+        """
         if not known_words or not transcribed_words:
             return 0.0
-        
+
         matches = 0
         for known in known_words:
             # Check if known word appears in transcribed (fuzzy match)
             for trans in transcribed_words:
+                # Direct or substring match
                 if known in trans or trans in known or known == trans:
                     matches += 1
                     break
-        
+                # Number-to-word matching (e.g., "2" matches "two")
+                if _numbers_match(known, trans):
+                    matches += 1
+                    break
+
         return matches / len(known_words)
 
     def _map_tts_timings_to_known_words(

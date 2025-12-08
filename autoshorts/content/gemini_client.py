@@ -462,6 +462,8 @@ TOPIC ANALYSIS:
    • NO filler words: "basically", "actually", "literally"
    • USE power words naturally: never, always, only, secret
    • Include at least ONE statistic/number if relevant
+   • CRITICAL: Use DIGITS for numbers (e.g., "2" NOT "two", "100" NOT "hundred")
+   • Numbers create visual impact and are easier to read in captions
 
 6. SEO OPTIMIZATION:
    title: 
