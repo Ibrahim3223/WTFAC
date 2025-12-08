@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      max-parallel: 1  # CRITICAL: Sequential to prevent Gemini API rate limits (20 req/min free tier)
+      max-parallel: 5  # Groq: 14.4K req/day, 30 RPM - can run 5 channels in parallel!
       matrix: ${{ fromJSON(needs.make-matrix.outputs.matrix) }}
     environment: ${{ matrix.env }}
 
