@@ -338,12 +338,14 @@ class VideoProductionStage(PipelineStage):
             final_video = os.path.join(context.temp_dir, "final_video.mp4")
 
             if bgm_path and os.path.exists(bgm_path):
+                # CRITICAL FIX: Use duration=first to keep full voice track
+                # "shortest" was cutting audio when BGM was shorter than video!
                 cmd = [
                     "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
                     "-i", concat_video,
                     "-i", bgm_path,
                     "-filter_complex",
-                    "[0:a]volume=1.0[voice];[1:a]volume=0.15[bgm];[voice][bgm]amix=inputs=2:duration=shortest[audio]",
+                    "[0:a]volume=1.0[voice];[1:a]volume=0.15,apad[bgm];[voice][bgm]amix=inputs=2:duration=first[audio]",
                     "-map", "0:v",
                     "-map", "[audio]",
                     "-c:v", "copy",
