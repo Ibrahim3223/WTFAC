@@ -296,6 +296,13 @@ class ForcedAligner:
             # CRITICAL: Keep ORIGINAL case words for captions (e.g., "Part 2" not "part two")
             original_words = [w.strip() for w in known_text.split() if w.strip()]
 
+            # DEBUG: Log numbers in original vs transcribed
+            original_numbers = [w for w in original_words if any(c.isdigit() for c in w)]
+            transcribed_with_numbers = [w for w in transcribed_words if any(c.isdigit() for c in w)]
+            if original_numbers:
+                logger.info(f"      🔢 ORIGINAL NUMBERS: {original_numbers}")
+                logger.info(f"      🎤 TRANSCRIBED: {[w for w, _ in word_timings[:20]]}...")  # First 20 words
+
             # Use lowercase ONLY for match rate calculation
             known_words_lower = [w.lower() for w in original_words]
             match_rate = self._calculate_match_rate(known_words_lower, transcribed_words)
@@ -426,34 +433,51 @@ class ForcedAligner:
     ) -> Optional[List[Tuple[str, float]]]:
         """
         Map transcribed timings to known words.
-        
+
         This handles cases where transcription differs slightly from known text.
         """
+        # DEBUG: Log number mapping
+        known_numbers = [w for w in known_words if any(c.isdigit() for c in w)]
+        if known_numbers:
+            trans_words = [w for w, _ in transcribed_timings]
+            logger.info(f"      🔢 MAPPING: known_numbers={known_numbers}")
+            logger.info(f"      🔢 MAPPING: word_counts: known={len(known_words)}, trans={len(transcribed_timings)}")
+
         if len(transcribed_timings) == len(known_words):
             # Perfect match - use durations with known words
-            result = [(known_words[i], transcribed_timings[i][1]) 
+            result = [(known_words[i], transcribed_timings[i][1])
                      for i in range(len(known_words))]
+            # DEBUG: Verify numbers preserved
+            result_numbers = [w for w, _ in result if any(c.isdigit() for c in w)]
+            if result_numbers:
+                logger.info(f"      ✅ RESULT NUMBERS: {result_numbers}")
             return result
         
         # Imperfect match - distribute timings proportionally
+        logger.debug(f"      📊 Word count mismatch in _map_timings_to_known_text")
         total_transcribed_duration = sum(d for _, d in transcribed_timings)
-        
+
         if total_duration:
             target_duration = total_duration
         else:
             target_duration = total_transcribed_duration
-        
+
         # Use character count as weight
         total_chars = sum(len(w) for w in known_words)
         if total_chars == 0:
             return None
-        
+
         result = []
         for word in known_words:
             char_ratio = len(word) / total_chars
             duration = max(self.MIN_WORD_DURATION, target_duration * char_ratio)
             result.append((word, duration))
-        
+
+        # DEBUG: Verify numbers preserved in imperfect match
+        result_numbers = [w for w, _ in result if any(c.isdigit() for c in w)]
+        if result_numbers:
+            logger.info(f"      ✅ RESULT NUMBERS (proportional): {result_numbers}")
+
         return result
     
     def _validate_timings(

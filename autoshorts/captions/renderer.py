@@ -351,6 +351,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         for chunk_idx, chunk in enumerate(chunks):
             chunk_text = " ".join(w.upper() for w, _ in chunk)
 
+            # DEBUG: Log words being written to caption
+            chunk_words = [w for w, _ in chunk]
+            has_numbers = any(any(c.isdigit() for c in w) for w in chunk_words)
+            if has_numbers:
+                logger.info(f"      🔢 CAPTION NUMBERS: {chunk_words}")
+
             # NEW: Apply keyword highlighting for engagement boost
             chunk_text = self.highlighter.highlight(chunk_text)
 
