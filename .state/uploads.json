@@ -8608,27 +8608,35 @@
     "ts": "2025-12-09T02:42:51.187985"
   },
   {
-    "channel": "Pocket Tech Tricks",
-    "entity": "5 Minute Tech Fixes to Boost Productivity by 25% | Efficiency Hacks",
-    "content_hash": "65de58929b20ce6f",
-    "title": "5 Minute Tech Fixes to Boost Productivity by 25% | Efficiency Hacks",
-    "video_path": "youtube:s5IEYshAP2w",
-    "ts": "2025-12-09T02:51:49.339798"
+    "channel": "CityFrame Stories",
+    "entity": "Urban Facts & Skyline Insights | Top 3 Secrets Revealed",
+    "content_hash": "81d851ca6300f588",
+    "title": "Urban Facts & Skyline Insights | Top 3 Secrets Revealed",
+    "video_path": "youtube:GLJ027qx99U",
+    "ts": "2025-12-09T02:49:13.653663"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "WAIT! Secret 60s Cooking Method Revealed | 60s Recipes",
-    "content_hash": "3ef80a8b2fdae7b3",
-    "title": "WAIT! Secret 60s Cooking Method Revealed | 60s Recipes",
-    "video_path": "youtube:sc8gclNoK6o",
-    "ts": "2025-12-09T02:57:13.428889"
+    "channel": "SpaceVista 60",
+    "entity": "Space Myths Debunked | Fast & Clear Space Explainers | Top 5 Facts 2025",
+    "content_hash": "b6070ea5f74c57d6",
+    "title": "Space Myths Debunked | Fast & Clear Space Explainers | Top 5 Facts 2025",
+    "video_path": "youtube:hplj3VlXpGc",
+    "ts": "2025-12-09T02:54:13.846778"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "Science Through Time | Visual Journey of Human Knowledge",
-    "content_hash": "22cbd312acc94e3a",
-    "title": "Science Through Time | Visual Journey of Human Knowledge",
-    "video_path": "youtube:ZIvSJF6rjKo",
-    "ts": "2025-12-09T03:05:12.401425"
+    "channel": "Weather Window 60",
+    "entity": "Weather Discovery Got Banned | Fast Visual Explanations",
+    "content_hash": "510252e61be4bda1",
+    "title": "Weather Discovery Got Banned | Fast Visual Explanations",
+    "video_path": "youtube:AJxjEtRJyH8",
+    "ts": "2025-12-09T02:59:44.938879"
+  },
+  {
+    "channel": "Ocean Pulse",
+    "entity": "Ocean Conservation | Learn the Shocking Truth | 2025",
+    "content_hash": "0f7efdd40e2ff508",
+    "title": "Ocean Conservation | Learn the Shocking Truth | 2025",
+    "video_path": "youtube:aJHHUsVtbdA",
+    "ts": "2025-12-09T03:06:41.857431"
   }
 ]
