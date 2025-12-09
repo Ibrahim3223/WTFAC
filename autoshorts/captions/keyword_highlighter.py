@@ -107,15 +107,16 @@ class ShortsKeywordHighlighter:
         # Note: Using normal strings (not raw) to avoid regex escape issues
 
         # Step 1: Highlight parentheses content: (J), (1)
+        # NOTE: Use \fscx\fscy for scaling, NOT \fs (which sets absolute point size!)
         def highlight_paren(m):
-            return '{\\c&H00FFFF&\\b1\\fs1.3}(' + m.group(1) + '){\\r}'
+            return '{\\c&H00FFFF&\\b1\\fscx130\\fscy130}(' + m.group(1) + '){\\r}'
 
         result = re.sub(r'\(([A-Za-z0-9]+)\)', highlight_paren, result)
         result = protect_tags(result)  # Protect new tags
 
         # Step 2: Highlight number-hyphen: 3-MINUTE, 5-STAR
         def highlight_number_hyphen(m):
-            return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}-'
+            return '{\\c&H00FFFF&\\b1\\fscx130\\fscy130}' + m.group(1) + '{\\r}-'
 
         result = re.sub(r'(\d+)-', highlight_number_hyphen, result)
         result = protect_tags(result)  # Protect new tags
@@ -123,7 +124,7 @@ class ShortsKeywordHighlighter:
         # Step 3a: Highlight numbers with percent BEFORE (e.g., "%99")
         # CRITICAL FIX: Captures "%99" as a single unit to prevent "% of people" bug
         def highlight_percent_number(m):
-            return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}'
+            return '{\\c&H00FFFF&\\b1\\fscx130\\fscy130}' + m.group(1) + '{\\r}'
 
         result = re.sub(r'\b(%\d+(?:,\d+)*(?:\.\d+)?)\b', highlight_percent_number, result)
         result = protect_tags(result)  # Protect new tags
@@ -131,7 +132,7 @@ class ShortsKeywordHighlighter:
         # Step 3b: Highlight standalone numbers with optional suffixes: 100, 5, 3.14, 99%, 5K, 1M
         # FIXED: Now captures %, K, M, B, k, m, b suffixes that come immediately after numbers
         def highlight_number(m):
-            return '{\\c&H00FFFF&\\b1\\fs1.3}' + m.group(1) + '{\\r}'
+            return '{\\c&H00FFFF&\\b1\\fscx130\\fscy130}' + m.group(1) + '{\\r}'
 
         result = re.sub(r'\b(\d+(?:,\d+)*(?:\.\d+)?[%KMBkmb]?)\b', highlight_number, result)
         result = protect_tags(result)  # Protect new tags
@@ -154,8 +155,9 @@ class ShortsKeywordHighlighter:
             result = result.replace('?', '{\\c&HFFFF00&\\b1}?{\\r}')
 
         # 4. Highlight exclamations (BOLD, slightly larger)
+        # Use \fscx\fscy for scaling, NOT \fs (which sets absolute point size!)
         if '!' in result:
-            result = result.replace('!', '{\\b1\\fs1.1}!{\\r}')
+            result = result.replace('!', '{\\b1\\fscx110\\fscy110}!{\\r}')
 
         logger.debug(f"Highlighted: {result}")
         return result
