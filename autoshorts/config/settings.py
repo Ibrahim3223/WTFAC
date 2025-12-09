@@ -56,12 +56,14 @@ CONTENT_STYLE = config.channel.content_style
 ROTATION_SEED = config.channel.rotation_seed
 
 # Try to load channel-specific settings from channels.yml
+_CHANNEL_VOICE = None  # Will be set from channel config
 try:
     from .channel_loader import apply_channel_settings
     _channel_settings = apply_channel_settings(CHANNEL_NAME)
     CHANNEL_TOPIC = _channel_settings.get("CHANNEL_TOPIC", CHANNEL_TOPIC)
     CHANNEL_MODE = _channel_settings.get("CHANNEL_MODE", CHANNEL_MODE)
     CHANNEL_SEARCH_TERMS = _channel_settings.get("CHANNEL_SEARCH_TERMS", [])
+    _CHANNEL_VOICE = _channel_settings.get("CHANNEL_VOICE")  # Voice based on channel mode
 except Exception as e:
     logger.warning(f"⚠️ Failed to load channel config: {e}")
     CHANNEL_SEARCH_TERMS = []
@@ -91,8 +93,13 @@ TTS_STYLE = config.tts.style
 TTS_SSML = config.tts.ssml
 
 # Kokoro TTS (NEW)
-KOKORO_VOICE = config.tts.kokoro_voice
+# Use channel-specific voice if available, otherwise fall back to config
+KOKORO_VOICE = _CHANNEL_VOICE if _CHANNEL_VOICE else config.tts.kokoro_voice
 KOKORO_PRECISION = config.tts.kokoro_precision
+
+# Log which voice we're using
+if _CHANNEL_VOICE:
+    logger.info(f"🎤 Using channel-specific voice: {KOKORO_VOICE}")
 
 # Captions
 REQUIRE_CAPTIONS = config.captions.require_captions
