@@ -220,7 +220,14 @@ jobs:
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
 
-          # ===== UNIVERSAL TTS (Natural Speech) =====
+          # ===== UNIVERSAL TTS (Kokoro - Channel-Based Voice) =====
+          TTS_PROVIDER: "kokoro"            # Use Kokoro TTS (best quality)
+          # KOKORO_VOICE is auto-selected based on channel mode in channels.yml:
+          # - horror_story → am_echo (mysterious)
+          # - history_story → bm_fable (British storyteller)
+          # - kids_story → af_heart (warm, friendly)
+          # - daily_news → am_onyx (documentary)
+          # - etc. (see channel_loader.py for full mapping)
           TTS_SSML: "0"                     # SSML prosody for all topics
           TTS_RATE: "+12%"                  # Universal speech speed
 
