@@ -112,7 +112,7 @@ class ShortsOrchestrator:
         else:
             logger.warning("⚠️ PEXELS_API_KEY not found")
 
-        # Register LLM client (supports both Gemini and Groq)
+        # Register LLM client (supports both Gemini and Groq with fallback)
         container.register(
             GeminiClient,
             lambda: GeminiClient(
@@ -120,7 +120,8 @@ class ShortsOrchestrator:
                 model=settings.GROQ_MODEL if llm_provider == "groq" else settings.GEMINI_MODEL,
                 max_retries=3,
                 provider=llm_provider,
-                groq_api_key=settings.GROQ_API_KEY if llm_provider == "groq" else None
+                groq_api_key=settings.GROQ_API_KEY if llm_provider == "groq" else None,
+                groq_api_key_2=settings.GROQ_API_KEY_2 if llm_provider == "groq" else None  # Fallback for rate limits
             ),
             ServiceLifetime.SINGLETON
         )

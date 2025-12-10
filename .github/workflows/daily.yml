@@ -152,6 +152,7 @@ jobs:
         env:
           # LLM Providers (Groq preferred - 14.4K req/day free tier!)
           GROQ_API_KEY:     ${{ secrets.GROQ_API_KEY }}
+          GROQ_API_KEY_2:   ${{ secrets.GROQ_API_KEY_2 }}  # Fallback for rate limits
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
           # LLM_PROVIDER: 'auto' means use Groq if GROQ_API_KEY is set, else Gemini
 

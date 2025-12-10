@@ -274,7 +274,8 @@ class GeminiClient:
         max_retries: int = 3,
         timeout: int = 60,
         provider: str = "gemini",  # 'gemini' or 'groq'
-        groq_api_key: Optional[str] = None
+        groq_api_key: Optional[str] = None,
+        groq_api_key_2: Optional[str] = None  # Fallback key for rate limits
     ):
         """
         Initialize LLM client.
@@ -286,6 +287,7 @@ class GeminiClient:
             timeout: Request timeout in seconds
             provider: LLM provider ('gemini' or 'groq')
             groq_api_key: Groq API key (if provider is 'groq')
+            groq_api_key_2: Fallback Groq API key for rate limit handling
         """
         self.provider = provider
         self.max_retries = max_retries
@@ -297,9 +299,18 @@ class GeminiClient:
             if not GROQ_AVAILABLE:
                 raise ImportError("groq package not installed. Run: pip install groq")
 
+            # Primary Groq client
             self.groq_client = Groq(api_key=groq_api_key)
+            self.groq_api_key = groq_api_key
+
+            # Fallback Groq client (for rate limit handling)
+            self.groq_api_key_2 = groq_api_key_2
+            self.groq_client_2 = Groq(api_key=groq_api_key_2) if groq_api_key_2 else None
+
             self.model = self.GROQ_MODELS.get(model, model)
-            logger.info(f"[Groq] API key: {groq_api_key[:10]}...{groq_api_key[-4:]}")
+            logger.info(f"[Groq] Primary API key: {groq_api_key[:10]}...{groq_api_key[-4:]}")
+            if groq_api_key_2:
+                logger.info(f"[Groq] Fallback API key: {groq_api_key_2[:10]}...{groq_api_key_2[-4:]}")
             logger.info(f"[Groq] Model: {self.model} (14.4K req/day free tier!)")
 
         else:  # gemini
@@ -668,9 +679,11 @@ CRITICAL RULES:
             return self._call_gemini_api(prompt)
 
     def _call_groq_api(self, prompt: str) -> str:
-        """Make API call to Groq"""
-        try:
-            response = self.groq_client.chat.completions.create(
+        """Make API call to Groq with fallback support for rate limits"""
+
+        def make_request(client, key_name: str) -> str:
+            """Helper to make request with a specific client"""
+            response = client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -688,14 +701,29 @@ CRITICAL RULES:
             )
 
             if response.choices and response.choices[0].message.content:
-                logger.info("[Groq] ✅ API successful")
+                logger.info(f"[Groq] ✅ API successful ({key_name})")
                 return response.choices[0].message.content
 
             raise RuntimeError("Empty response from Groq")
 
+        # Try primary key first
+        try:
+            return make_request(self.groq_client, "primary")
+
         except Exception as e:
-            logger.error(f"[Groq] ❌ API failed: {e}")
-            raise
+            error_str = str(e)
+            is_rate_limit = "429" in error_str or "rate_limit" in error_str.lower()
+
+            if is_rate_limit and self.groq_client_2:
+                logger.warning(f"[Groq] ⚠️ Primary key rate limited, trying fallback...")
+                try:
+                    return make_request(self.groq_client_2, "fallback")
+                except Exception as e2:
+                    logger.error(f"[Groq] ❌ Fallback also failed: {e2}")
+                    raise e2
+            else:
+                logger.error(f"[Groq] ❌ API failed: {e}")
+                raise
 
     def _call_gemini_api(self, prompt: str) -> str:
         """Make API call to Gemini"""

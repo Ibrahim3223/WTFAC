@@ -42,6 +42,7 @@ USE_GEMINI = True  # Always true for now
 
 # Groq (Alternative LLM - 14.4K req/day free tier!)
 GROQ_API_KEY = config.api.groq_api_key
+GROQ_API_KEY_2 = config.api.groq_api_key_2  # Fallback for rate limits
 GROQ_MODEL = config.api.groq_model
 LLM_PROVIDER = config.api.llm_provider
 ADDITIONAL_PROMPT_CONTEXT = os.getenv("ADDITIONAL_PROMPT_CONTEXT", "")

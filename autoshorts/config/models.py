@@ -32,6 +32,7 @@ class APIConfig(BaseSettings):
 
     # Groq (Alternative LLM provider - 14.4K req/day free tier!)
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_api_key_2: str = Field(default="", alias="GROQ_API_KEY_2")  # Fallback for rate limits
     groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
 
     # LLM Provider selection ('auto', 'gemini', 'groq')
