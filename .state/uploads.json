@@ -9168,27 +9168,35 @@
     "ts": "2025-12-12T17:16:03.934584"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Pacific Coast Highway | Scenic Road Trip Secrets 2025",
-    "content_hash": "1a18f1930de7bea2",
-    "title": "Pacific Coast Highway | Scenic Road Trip Secrets 2025",
-    "video_path": "youtube:6MklfUC3Q-M",
-    "ts": "2025-12-12T17:24:55.839063"
+    "channel": "Ocean Pulse",
+    "entity": "71% of the Planet | Ocean Facts | Mind-Blowing Truth",
+    "content_hash": "10e8017384e335be",
+    "title": "71% of the Planet | Ocean Facts | Mind-Blowing Truth",
+    "video_path": "youtube:RnTDO13KCmA",
+    "ts": "2025-12-12T17:22:02.888201"
   },
   {
-    "channel": "Bridge & Tunnel Atlas",
-    "entity": "Beautiful Crossings Explained in 60s | Top 10 Must-Know Facts",
-    "content_hash": "85a99d81f2853602",
-    "title": "Beautiful Crossings Explained in 60s | Top 10 Must-Know Facts",
-    "video_path": "youtube:sQ1BoxP0u2s",
-    "ts": "2025-12-12T17:32:43.729194"
+    "channel": "Hidden Math IRL",
+    "entity": "Geometry | Ratios Found in Real Scenes | Unlock the Secrets of Our Built Environment",
+    "content_hash": "dcb845c70043c913",
+    "title": "Geometry | Ratios Found in Real Scenes | Unlock the Secrets of Our Built Environment",
+    "video_path": "youtube:5RfPsDI2RAY",
+    "ts": "2025-12-12T17:29:51.993894"
   },
   {
-    "channel": "Tiny Drama Dept.",
-    "entity": "Soap Operas | Life's Tiny Problems on a Grand Scale",
-    "content_hash": "d78d2dafd8ceca16",
-    "title": "Soap Operas | Life's Tiny Problems on a Grand Scale",
-    "video_path": "youtube:ryKlnJm4V1Y",
-    "ts": "2025-12-12T17:40:54.657088"
+    "channel": "Pet Inner Monologue",
+    "entity": "10 Secrets Your Cat & Dog Don't Want You to Know | 2025",
+    "content_hash": "c77c062f5fa1ea97",
+    "title": "10 Secrets Your Cat & Dog Don't Want You to Know | 2025",
+    "video_path": "youtube:KYjlgbrqkPc",
+    "ts": "2025-12-12T17:37:50.541744"
+  },
+  {
+    "channel": "Wrong Way First",
+    "entity": "HOW-TO Comedy Myth Busted | Quick Fixes Don't Exist",
+    "content_hash": "2a1c5d1ef5d0e25a",
+    "title": "HOW-TO Comedy Myth Busted | Quick Fixes Don't Exist",
+    "video_path": "youtube:ghlPf_pVC4I",
+    "ts": "2025-12-12T17:44:37.101883"
   }
 ]
