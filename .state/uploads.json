@@ -9072,11 +9072,19 @@
     "ts": "2025-12-12T02:51:24.396227"
   },
   {
-    "channel": "Focus Rituals",
-    "entity": "30 Minutes Daily | Boost Productivity by 30%",
-    "content_hash": "a5c25a4f9c2fabef",
-    "title": "30 Minutes Daily | Boost Productivity by 30%",
-    "video_path": "youtube:n8MZLZlaCvE",
-    "ts": "2025-12-12T03:00:32.718511"
+    "channel": "Weather Window 60",
+    "entity": "Weather Exposed | Uncovering the Secrets of Global Weather Patterns",
+    "content_hash": "d55e080a32160b7d",
+    "title": "Weather Exposed | Uncovering the Secrets of Global Weather Patterns",
+    "video_path": "youtube:fa8MbLO4ukQ",
+    "ts": "2025-12-12T02:58:46.253881"
+  },
+  {
+    "channel": "TrailScape 60",
+    "entity": "60s Discovery | Iconic Landmarks You Never Knew Existed",
+    "content_hash": "e5057ef5455b4265",
+    "title": "60s Discovery | Iconic Landmarks You Never Knew Existed",
+    "video_path": "youtube:yAucVrbXQYE",
+    "ts": "2025-12-12T03:04:36.682930"
   }
 ]
