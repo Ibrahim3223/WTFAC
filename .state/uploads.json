@@ -9064,11 +9064,19 @@
     "ts": "2025-12-12T02:43:47.731671"
   },
   {
-    "channel": "Pocket Tech Tricks",
-    "entity": "60-Second Tech Fixes | Everyday Tech Solutions",
-    "content_hash": "a8421bce95691528",
-    "title": "60-Second Tech Fixes | Everyday Tech Solutions",
-    "video_path": "youtube:qaao_tl53V8",
-    "ts": "2025-12-12T02:51:24.396227"
+    "channel": "Planet Snapshot",
+    "entity": "Australia | The World's Largest Island Continent | Geography Facts",
+    "content_hash": "d1c2d822b805dc82",
+    "title": "Australia | The World's Largest Island Continent | Geography Facts",
+    "video_path": "youtube:TCj6_8ZkcXw",
+    "ts": "2025-12-12T02:50:37.093764"
+  },
+  {
+    "channel": "MicroNature Minute",
+    "entity": "1,500 Species in 1 Square Meter | Tiny Ecosystems",
+    "content_hash": "1f96a4f81fe48f1d",
+    "title": "1,500 Species in 1 Square Meter | Tiny Ecosystems",
+    "video_path": "youtube:m8dRu3EK4Rw",
+    "ts": "2025-12-12T02:56:37.886178"
   }
 ]
