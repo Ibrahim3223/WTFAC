@@ -9256,11 +9256,19 @@
     "ts": "2025-12-13T02:53:09.824699"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Defy Logic: Top 5 Scenic Roads in the World | 2025",
-    "content_hash": "a9bb0c71d9008e0f",
-    "title": "Defy Logic: Top 5 Scenic Roads in the World | 2025",
-    "video_path": "youtube:Ayfj1xczyxU",
-    "ts": "2025-12-13T03:01:57.417913"
+    "channel": "Timelapse Lab",
+    "entity": "Visual Science Through Time | 4,000 Years of Hidden Connections",
+    "content_hash": "a6af0fbd64e1539b",
+    "title": "Visual Science Through Time | 4,000 Years of Hidden Connections",
+    "video_path": "youtube:bmujR6WTqmk",
+    "ts": "2025-12-13T02:59:10.530977"
+  },
+  {
+    "channel": "Wild Pattern Atlas",
+    "entity": "WAIT, have you ever noticed the secrets behind natural textures? | Textures of Nature",
+    "content_hash": "1245914eb0927285",
+    "title": "WAIT, have you ever noticed the secrets behind natural textures? | Textures of Nature",
+    "video_path": "youtube:vbVCi_BRkJA",
+    "ts": "2025-12-13T03:05:18.896568"
   }
 ]
