@@ -9424,11 +9424,19 @@
     "ts": "2025-12-14T03:14:18.307228"
   },
   {
-    "channel": "Bridge & Tunnel Atlas",
-    "entity": "Crossings Explained in 60s | Beautiful Bridges Uncovered",
-    "content_hash": "02250847d58764b6",
-    "title": "Crossings Explained in 60s | Beautiful Bridges Uncovered",
-    "video_path": "youtube:_eBzn7VxEr0",
-    "ts": "2025-12-14T03:22:37.009923"
+    "channel": "LightCraft Studio",
+    "entity": "1 Minute Lighting Hack | Real Room Ambiance Secrets",
+    "content_hash": "dd0923cb5c356f9a",
+    "title": "1 Minute Lighting Hack | Real Room Ambiance Secrets",
+    "video_path": "youtube:9FSwymlve4E",
+    "ts": "2025-12-14T03:22:01.115937"
+  },
+  {
+    "channel": "Object Origins",
+    "entity": "Design Defies Logic | Everyday Object Histories",
+    "content_hash": "1e9581226bb44c82",
+    "title": "Design Defies Logic | Everyday Object Histories",
+    "video_path": "youtube:VujRKSyGRMw",
+    "ts": "2025-12-14T03:27:18.814749"
   }
 ]
