@@ -9768,11 +9768,19 @@
     "ts": "2025-12-16T02:37:26.970193"
   },
   {
-    "channel": "GameDay 60",
-    "entity": "2025 Sports Updates: Daily Rush of Adrenaline | Olympics",
-    "content_hash": "d04fa75f52b0a6a2",
-    "title": "2025 Sports Updates: Daily Rush of Adrenaline | Olympics",
-    "video_path": "youtube:ybIocoV9A18",
-    "ts": "2025-12-16T02:46:06.161377"
+    "channel": "FixIt Fast",
+    "entity": "10-Minute Household Fixers | DIY Repair Secrets",
+    "content_hash": "c8f5eb95a6eb6bae",
+    "title": "10-Minute Household Fixers | DIY Repair Secrets",
+    "video_path": "youtube:3LjymONOZCA",
+    "ts": "2025-12-16T02:44:02.887157"
+  },
+  {
+    "channel": "Eco Habit Hacks",
+    "entity": "Sustainable Living | 1 Minute Changes for a BIG Impact",
+    "content_hash": "bbb2afe5f49fe5c7",
+    "title": "Sustainable Living | 1 Minute Changes for a BIG Impact",
+    "video_path": "youtube:81i8LJxWYw0",
+    "ts": "2025-12-16T02:48:48.783654"
   }
 ]
