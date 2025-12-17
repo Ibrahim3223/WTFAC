@@ -9968,19 +9968,27 @@
     "ts": "2025-12-17T17:01:52.293343"
   },
   {
-    "channel": "CityFrame Stories",
-    "entity": "8 People Per Minute | The Shocking Urban Truth | 2025",
-    "content_hash": "ce42787d1ed634e8",
-    "title": "8 People Per Minute | The Shocking Urban Truth | 2025",
-    "video_path": "youtube:KyRC5s37gOc",
-    "ts": "2025-12-17T17:10:23.219214"
+    "channel": "Planet Snapshot",
+    "entity": "7 Country Secrets You Never Knew | Fast Geography & Country Curiosities",
+    "content_hash": "29a71e24c83a257c",
+    "title": "7 Country Secrets You Never Knew | Fast Geography & Country Curiosities",
+    "video_path": "youtube:DffH74e0XDI",
+    "ts": "2025-12-17T17:07:41.284305"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "60s Cooking Secrets Exposed | Boost Flavor by 30%",
-    "content_hash": "c24217bb73c41709",
-    "title": "60s Cooking Secrets Exposed | Boost Flavor by 30%",
-    "video_path": "youtube:6iJoaU3_dfQ",
-    "ts": "2025-12-17T17:16:29.266053"
+    "channel": "SpaceVista 60",
+    "entity": "Space Exploration Secrets: Fast Travel to the Stars | Space",
+    "content_hash": "524e4fd16e93d9ec",
+    "title": "Space Exploration Secrets: Fast Travel to the Stars | Space",
+    "video_path": "youtube:i4eCepMdbtA",
+    "ts": "2025-12-17T17:12:54.028827"
+  },
+  {
+    "channel": "Weather Window 60",
+    "entity": "10,000 Lightning Strikes per Hour | Weather Facts",
+    "content_hash": "dfeba595501e82c5",
+    "title": "10,000 Lightning Strikes per Hour | Weather Facts",
+    "video_path": "youtube:8G1WCq9iBAs",
+    "ts": "2025-12-17T17:17:49.718857"
   }
 ]
