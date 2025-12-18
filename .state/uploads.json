@@ -10128,27 +10128,35 @@
     "ts": "2025-12-18T17:02:51.718352"
   },
   {
-    "channel": "Eco Habit Hacks",
-    "entity": "1% of the Planet | Sustainable Living on a Budget",
-    "content_hash": "94362290c628c98f",
-    "title": "1% of the Planet | Sustainable Living on a Budget",
-    "video_path": "youtube:N-uIE0qQt-0",
-    "ts": "2025-12-18T17:11:22.748156"
+    "channel": "Planet Snapshot",
+    "entity": "Fast Geography Secrets Revealed in 30 Seconds. Watch. | Geography Facts",
+    "content_hash": "4dc31a14ac51075c",
+    "title": "Fast Geography Secrets Revealed in 30 Seconds. Watch. | Geography Facts",
+    "video_path": "youtube:4UHvyrukNZk",
+    "ts": "2025-12-18T17:08:50.780969"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "Unlock Weather Secrets | Fast Weather Explanations",
-    "content_hash": "1e31f535cb963c40",
-    "title": "Unlock Weather Secrets | Fast Weather Explanations",
-    "video_path": "youtube:rAq3jsRMlAI",
-    "ts": "2025-12-18T17:19:24.502462"
+    "channel": "SpaceVista 60",
+    "entity": "Fast | Clear Space Explainers | Top Secrets Revealed",
+    "content_hash": "a6ca2553093c338f",
+    "title": "Fast | Clear Space Explainers | Top Secrets Revealed",
+    "video_path": "youtube:HKEpnfblaOU",
+    "ts": "2025-12-18T17:14:45.354138"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "Visual Science Through Time | The Shocking Truth",
-    "content_hash": "32482cab857c7f65",
-    "title": "Visual Science Through Time | The Shocking Truth",
-    "video_path": "youtube:S66dEKOrpcs",
-    "ts": "2025-12-18T17:27:19.807838"
+    "channel": "TrailScape 60",
+    "entity": "Stop Waiting | 60s Trails and Landmarks You Need to See",
+    "content_hash": "9667e06b880fb9f1",
+    "title": "Stop Waiting | 60s Trails and Landmarks You Need to See",
+    "video_path": "youtube:ySgOJuAnw-o",
+    "ts": "2025-12-18T17:23:41.254810"
+  },
+  {
+    "channel": "RoadVista 60",
+    "entity": "Scenic Road Mini-Guides | Top 5 Hidden Routes (2025)",
+    "content_hash": "ec69f610dde764cd",
+    "title": "Scenic Road Mini-Guides | Top 5 Hidden Routes (2025)",
+    "video_path": "youtube:DVMMAwhaT1w",
+    "ts": "2025-12-18T17:31:12.950527"
   }
 ]
