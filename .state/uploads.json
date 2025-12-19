@@ -10304,19 +10304,27 @@
     "ts": "2025-12-19T17:07:08.796761"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "WAIT, Have You Ever Wondered | Fast Weather Explanations | Extreme Weather Rise 2022",
-    "content_hash": "9fa69e7e4d5ec196",
-    "title": "WAIT, Have You Ever Wondered | Fast Weather Explanations | Extreme Weather Rise 2022",
-    "video_path": "youtube:beIXtqqGYys",
-    "ts": "2025-12-19T17:16:56.492079"
+    "channel": "MicroNature Minute",
+    "entity": "The Secret World of Tiny Ecosystems | Macro Nature Facts",
+    "content_hash": "2dfe638ea20b7cd0",
+    "title": "The Secret World of Tiny Ecosystems | Macro Nature Facts",
+    "video_path": "youtube:fhLmUP6rq20",
+    "ts": "2025-12-19T17:14:05.910889"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "Secrets of Visual Science Through Time | 500 Years of Discovery",
-    "content_hash": "5394196eb55508de",
-    "title": "Secrets of Visual Science Through Time | 500 Years of Discovery",
-    "video_path": "youtube:4bqpyX-Gn9A",
-    "ts": "2025-12-19T17:23:56.873799"
+    "channel": "TrailScape 60",
+    "entity": "Top 10 Beautiful Trails in the 1960s | Retro Hiking",
+    "content_hash": "756c2de92e41cb8b",
+    "title": "Top 10 Beautiful Trails in the 1960s | Retro Hiking",
+    "video_path": "youtube:uKEMoewCy1k",
+    "ts": "2025-12-19T17:19:45.367642"
+  },
+  {
+    "channel": "RoadVista 60",
+    "entity": "5 Secret Scenic Routes on Pacific Coast Highway | Scenic Road Mini-Guides",
+    "content_hash": "1c6bd475d2bbde24",
+    "title": "5 Secret Scenic Routes on Pacific Coast Highway | Scenic Road Mini-Guides",
+    "video_path": "youtube:aUp4DOgQFVc",
+    "ts": "2025-12-19T17:25:08.731660"
   }
 ]
