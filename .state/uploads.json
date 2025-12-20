@@ -10472,11 +10472,19 @@
     "ts": "2025-12-20T16:52:22.092807"
   },
   {
-    "channel": "GameDay 60",
-    "entity": "Sports Updates | Daily News Revealed | Get Ahead of the Curve!",
-    "content_hash": "7343d0a3e9d21f8b",
-    "title": "Sports Updates | Daily News Revealed | Get Ahead of the Curve!",
-    "video_path": "youtube:oNuWRn3HoyQ",
-    "ts": "2025-12-20T17:01:03.385692"
+    "channel": "FixIt Fast",
+    "entity": "Quick DIY Repair Secrets | Save Money & Time",
+    "content_hash": "47370f23d22baa7c",
+    "title": "Quick DIY Repair Secrets | Save Money & Time",
+    "video_path": "youtube:T5ZClZXM3Yg",
+    "ts": "2025-12-20T16:58:29.436158"
+  },
+  {
+    "channel": "Planet Snapshot",
+    "entity": "75% of population lives on 2% of land | Geography Secrets",
+    "content_hash": "8a89862a2d4f9626",
+    "title": "75% of population lives on 2% of land | Geography Secrets",
+    "video_path": "youtube:nQATcGEt5zY",
+    "ts": "2025-12-20T17:05:46.766472"
   }
 ]
