@@ -10912,11 +10912,19 @@
     "ts": "2025-12-23T02:39:49.340085"
   },
   {
-    "channel": "GameDay 60",
-    "entity": "Daily Sports Updates & Highlights | 2025",
-    "content_hash": "48e8de279965f166",
-    "title": "Daily Sports Updates & Highlights | 2025",
-    "video_path": "youtube:lAdpmcC9lrs",
-    "ts": "2025-12-23T02:47:52.627530"
+    "channel": "SkySynthLab",
+    "entity": "AI Revolution | Quantum Computing Breakthrough (2025)",
+    "content_hash": "b057fb071e4ffc05",
+    "title": "AI Revolution | Quantum Computing Breakthrough (2025)",
+    "video_path": "youtube:UGU2eYfjYUE",
+    "ts": "2025-12-23T02:45:59.657287"
+  },
+  {
+    "channel": "Planet Snapshot",
+    "entity": "Countries Disappeared | 7 in 10 Left Homeless | Fast Geography & Country Curiosities",
+    "content_hash": "98137f4a60558247",
+    "title": "Countries Disappeared | 7 in 10 Left Homeless | Fast Geography & Country Curiosities",
+    "video_path": "youtube:8LHMSxSkBiY",
+    "ts": "2025-12-23T02:51:52.538318"
   }
 ]
