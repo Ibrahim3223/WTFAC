@@ -11552,11 +11552,19 @@
     "ts": "2025-12-26T17:02:57.227648"
   },
   {
-    "channel": "SpaceVista 60",
-    "entity": "Fast Space Facts Change Everything | Space Expansion Secrets",
-    "content_hash": "22988168a2f049a0",
-    "title": "Fast Space Facts Change Everything | Space Expansion Secrets",
-    "video_path": "youtube:e6qylEWzSag",
-    "ts": "2025-12-26T17:11:11.096249"
+    "channel": "Eco Habit Hacks",
+    "entity": "1 in 500 | Sustainable Living Tips in 60 Seconds",
+    "content_hash": "cf32a70c809f4a59",
+    "title": "1 in 500 | Sustainable Living Tips in 60 Seconds",
+    "video_path": "youtube:4SU03rEvVoA",
+    "ts": "2025-12-26T17:09:51.558276"
+  },
+  {
+    "channel": "Kitchen Logic Lab",
+    "entity": "Hidden 60s Cooking Secret | Cooking Pasta Like a Pro",
+    "content_hash": "8a25f52371c7100e",
+    "title": "Hidden 60s Cooking Secret | Cooking Pasta Like a Pro",
+    "video_path": "youtube:CqZQ-rfE40c",
+    "ts": "2025-12-26T17:16:09.570881"
   }
 ]
