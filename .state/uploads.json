@@ -11712,11 +11712,19 @@
     "ts": "2025-12-27T16:52:32.290582"
   },
   {
-    "channel": "FixIt Fast",
-    "entity": "Someone Tried to Explain DIY Repairs | Quick Fixes",
-    "content_hash": "bb48d34a70a8f57f",
-    "title": "Someone Tried to Explain DIY Repairs | Quick Fixes",
-    "video_path": "youtube:ogoAfkI14wE",
-    "ts": "2025-12-27T17:01:20.588561"
+    "channel": "SkySynthLab",
+    "entity": "Alan Turing's Secret Plan | AI Development Theories",
+    "content_hash": "10322642b08da045",
+    "title": "Alan Turing's Secret Plan | AI Development Theories",
+    "video_path": "youtube:-lypAmh8zMk",
+    "ts": "2025-12-27T16:59:25.698913"
+  },
+  {
+    "channel": "GameDay 60",
+    "entity": "100 New Records Broken in 2025 | Daily Sports Updates",
+    "content_hash": "3208246fffb7a88a",
+    "title": "100 New Records Broken in 2025 | Daily Sports Updates",
+    "video_path": "youtube:ihmViriRMk8",
+    "ts": "2025-12-27T17:06:51.268952"
   }
 ]
