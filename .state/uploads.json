@@ -11696,11 +11696,19 @@
     "ts": "2025-12-27T16:33:47.327513"
   },
   {
-    "channel": "CritterFact",
-    "entity": "STOP scrolling. Wildlife secrets revealed | Bowerbird facts",
-    "content_hash": "9e8a63149dae5974",
-    "title": "STOP scrolling. Wildlife secrets revealed | Bowerbird facts",
-    "video_path": "youtube:W-3Rpuk9H1U",
-    "ts": "2025-12-27T16:42:13.935867"
+    "channel": "GalacticUpdate",
+    "entity": "Latest Space Discoveries Reveal Shocking New Evidence | Space Exploration",
+    "content_hash": "4f3a47eea30a6ac3",
+    "title": "Latest Space Discoveries Reveal Shocking New Evidence | Space Exploration",
+    "video_path": "youtube:z92WntMBVzc",
+    "ts": "2025-12-27T16:41:50.076990"
+  },
+  {
+    "channel": "WildWonderCaps",
+    "entity": "Incredible Wildlife Moments | 10 Million Hours of Shocking Behavior",
+    "content_hash": "2d80aa1eabc39741",
+    "title": "Incredible Wildlife Moments | 10 Million Hours of Shocking Behavior",
+    "video_path": "youtube:O27lw0VxFis",
+    "ts": "2025-12-27T16:48:41.660141"
   }
 ]
