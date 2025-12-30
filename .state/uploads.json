@@ -12256,27 +12256,35 @@
     "ts": "2025-12-30T17:09:57.101648"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "The Secret Ingredient That Changed Cooking Forever | Food Science",
-    "content_hash": "ac9c67f8c1f277ff",
-    "title": "The Secret Ingredient That Changed Cooking Forever | Food Science",
-    "video_path": "youtube:NVuoEPAbHz4",
-    "ts": "2025-12-30T17:19:32.913873"
+    "channel": "SpaceVista 60",
+    "entity": "Black Hole Event Horizon | Space Explained in 30 Seconds",
+    "content_hash": "305119cbcae0354e",
+    "title": "Black Hole Event Horizon | Space Explained in 30 Seconds",
+    "video_path": "youtube:TF3Ek2gbqtM",
+    "ts": "2025-12-30T17:16:45.391440"
   },
   {
-    "channel": "Ocean Pulse",
-    "entity": "Ocean Loss in 1 Minute | Shocking Truth Revealed!",
-    "content_hash": "3ef7015eca86c36d",
-    "title": "Ocean Loss in 1 Minute | Shocking Truth Revealed!",
-    "video_path": "youtube:ten2gy3BhYM",
-    "ts": "2025-12-30T17:29:44.933814"
+    "channel": "Focus Rituals",
+    "entity": "Boost Your Productivity in Just One Week | Pomodoro Technique",
+    "content_hash": "f3d9682dd6b0c301",
+    "title": "Boost Your Productivity in Just One Week | Pomodoro Technique",
+    "video_path": "youtube:LwL9tyXdVKY",
+    "ts": "2025-12-30T17:22:21.343906"
   },
   {
-    "channel": "Hidden Math IRL",
-    "entity": "Geometry Hacks | Uncover Hidden Patterns in Your City | Math Secrets",
-    "content_hash": "72a1e1906e0f8acf",
-    "title": "Geometry Hacks | Uncover Hidden Patterns in Your City | Math Secrets",
-    "video_path": "youtube:DA1G5GqlikM",
-    "ts": "2025-12-30T17:36:53.286975"
+    "channel": "RoadVista 60",
+    "entity": "Scenic Roads | Discover the Hidden Gems of the Pacific Coast Highway | 2025",
+    "content_hash": "d79d636a531ee35b",
+    "title": "Scenic Roads | Discover the Hidden Gems of the Pacific Coast Highway | 2025",
+    "video_path": "youtube:EhkVBn-jXkI",
+    "ts": "2025-12-30T17:32:08.973996"
+  },
+  {
+    "channel": "Mechanism Minute",
+    "entity": "Mechanisms | How Everyday Machines Work | Secret to Perfect Design",
+    "content_hash": "6f4202da7e3f8a4b",
+    "title": "Mechanisms | How Everyday Machines Work | Secret to Perfect Design",
+    "video_path": "youtube:BsRwA0Z-ctg",
+    "ts": "2025-12-30T17:37:32.131917"
   }
 ]
