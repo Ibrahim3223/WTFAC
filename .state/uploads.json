@@ -12344,19 +12344,27 @@
     "ts": "2025-12-31T02:45:56.149262"
   },
   {
-    "channel": "Planet Snapshot",
-    "entity": "Wait, Countries Aren't Just Random Shapes on a Map? | Geography Curiosities",
-    "content_hash": "f8df49c83faf1b0d",
-    "title": "Wait, Countries Aren't Just Random Shapes on a Map? | Geography Curiosities",
-    "video_path": "youtube:SP3LKRy00sA",
-    "ts": "2025-12-31T02:55:03.962780"
+    "channel": "GameDay 60",
+    "entity": "SPORTS | Daily Updates & Highlights 2025",
+    "content_hash": "e66c8c5eff8cff9b",
+    "title": "SPORTS | Daily Updates & Highlights 2025",
+    "video_path": "youtube:s0u6agD6qys",
+    "ts": "2025-12-31T02:51:14.425780"
   },
   {
-    "channel": "MicroNature Minute",
-    "entity": "Tiny Truths: The Secret World of Micro Ecosystems | 10 Billion Organisms in a Teaspoon!",
-    "content_hash": "a2c0847fe2257c15",
-    "title": "Tiny Truths: The Secret World of Micro Ecosystems | 10 Billion Organisms in a Teaspoon!",
-    "video_path": "youtube:4r1Fa4fh34c",
-    "ts": "2025-12-31T03:03:34.606229"
+    "channel": "Pocket Tech Tricks",
+    "entity": "1-Minute Fix for Everyday Tech Headaches | Tech Hacks",
+    "content_hash": "90bbda8742645eca",
+    "title": "1-Minute Fix for Everyday Tech Headaches | Tech Hacks",
+    "video_path": "youtube:qhNvF6j90Ag",
+    "ts": "2025-12-31T02:58:35.813165"
+  },
+  {
+    "channel": "Weather Window 60",
+    "entity": "You Think You Know Weather Forecasting | 10% Accuracy",
+    "content_hash": "be897ab47a14cf0a",
+    "title": "You Think You Know Weather Forecasting | 10% Accuracy",
+    "video_path": "youtube:a57VJpkqZeI",
+    "ts": "2025-12-31T03:03:47.354863"
   }
 ]
