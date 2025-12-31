@@ -12368,11 +12368,19 @@
     "ts": "2025-12-31T03:03:47.354863"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "The Scenic Route | Top 5 Stops on the Pacific Coast Highway",
-    "content_hash": "35ff9b8c1da9b16d",
-    "title": "The Scenic Route | Top 5 Stops on the Pacific Coast Highway",
-    "video_path": "youtube:X12_jCnF0p8",
-    "ts": "2025-12-31T03:18:06.460192"
+    "channel": "Timelapse Lab",
+    "entity": "Visual Science Through Time | 5000 Years of Breakthroughs",
+    "content_hash": "9a7a68fcb02798e8",
+    "title": "Visual Science Through Time | 5000 Years of Breakthroughs",
+    "video_path": "youtube:_2Ngqk6mkI0",
+    "ts": "2025-12-31T03:12:38.809350"
+  },
+  {
+    "channel": "LightCraft Studio",
+    "entity": "You're wasting 20% of your time with subpar lighting | Minute Lighting Hacks",
+    "content_hash": "4cebe905b4cdf2dc",
+    "title": "You're wasting 20% of your time with subpar lighting | Minute Lighting Hacks",
+    "video_path": "youtube:lPrGRrOdWdE",
+    "ts": "2025-12-31T03:21:22.253728"
   }
 ]
