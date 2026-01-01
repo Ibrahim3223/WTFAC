@@ -12584,11 +12584,19 @@
     "ts": "2026-01-01T16:27:14.667747"
   },
   {
-    "channel": "WildWonderCaps",
-    "entity": "Never Forget the Secret Lives of Animals | Wildlife Wonders",
-    "content_hash": "0ca56470d68b9d43",
-    "title": "Never Forget the Secret Lives of Animals | Wildlife Wonders",
-    "video_path": "youtube:ivx2YB4ovsY",
-    "ts": "2026-01-01T16:46:53.837842"
+    "channel": "CritterFact",
+    "entity": "Wait, some animals are more intelligent than humans! | Wildlife Secrets",
+    "content_hash": "10df759155ee02d7",
+    "title": "Wait, some animals are more intelligent than humans! | Wildlife Secrets",
+    "video_path": "youtube:XV5Ho3TVyfg",
+    "ts": "2026-01-01T16:44:44.296593"
+  },
+  {
+    "channel": "NextGen Update",
+    "entity": "AI Breakthroughs in 2025: What You Need to Know | Tech Revolution",
+    "content_hash": "710afba8e19c2f9c",
+    "title": "AI Breakthroughs in 2025: What You Need to Know | Tech Revolution",
+    "video_path": "youtube:WWwn4SkQzy0",
+    "ts": "2026-01-01T16:52:00.226341"
   }
 ]
