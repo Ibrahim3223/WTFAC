@@ -12688,11 +12688,19 @@
     "ts": "2026-01-02T02:52:14.202099"
   },
   {
-    "channel": "Pocket Tech Tricks",
-    "entity": "5 One-Minute Fixes for Everyday Tech | Save Time and Frustration!",
-    "content_hash": "6c61df4621b261cc",
-    "title": "5 One-Minute Fixes for Everyday Tech | Save Time and Frustration!",
-    "video_path": "youtube:ZI_WFZBlXQA",
-    "ts": "2026-01-02T03:02:08.747802"
+    "channel": "Eco Habit Hacks",
+    "entity": "Banned 1-Minute Sustainable Living Hack for Water Efficiency | Eco-Friendly Tips",
+    "content_hash": "41f1244e7ada43cf",
+    "title": "Banned 1-Minute Sustainable Living Hack for Water Efficiency | Eco-Friendly Tips",
+    "video_path": "youtube:_rQX5BO-Zqo",
+    "ts": "2026-01-02T02:59:04.713811"
+  },
+  {
+    "channel": "SpaceVista 60",
+    "entity": "Galaxy Collision | Space Explained in 10% of the Truth",
+    "content_hash": "5b0f20f2beff8206",
+    "title": "Galaxy Collision | Space Explained in 10% of the Truth",
+    "video_path": "youtube:paX6_btQVVg",
+    "ts": "2026-01-02T03:04:46.248963"
   }
 ]
