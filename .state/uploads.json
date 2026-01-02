@@ -12800,11 +12800,19 @@
     "ts": "2026-01-02T17:21:56.891029"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Top 5 Scenic Road Myths Debunked | Scenic Road Trips",
-    "content_hash": "2ca3aa06064229e9",
-    "title": "Top 5 Scenic Road Myths Debunked | Scenic Road Trips",
-    "video_path": "youtube:W2Pbn1GtBhE",
-    "ts": "2026-01-02T17:31:17.656434"
+    "channel": "Orderly Home 60",
+    "entity": "STOP scrolling: Organize Your Home in 60 Seconds | One-Minute Home Organization",
+    "content_hash": "1d5297cb27e00d73",
+    "title": "STOP scrolling: Organize Your Home in 60 Seconds | One-Minute Home Organization",
+    "video_path": "youtube:qJzKZuQvo9w",
+    "ts": "2026-01-02T17:29:10.845324"
+  },
+  {
+    "channel": "Wild Pattern Atlas",
+    "entity": "The Secret Textures of Nature | Unlocking Materials Science",
+    "content_hash": "ca25c75f3f7d7fd2",
+    "title": "The Secret Textures of Nature | Unlocking Materials Science",
+    "video_path": "youtube:j20ZBDpH4VA",
+    "ts": "2026-01-02T17:37:09.946734"
   }
 ]
