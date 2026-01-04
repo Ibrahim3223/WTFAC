@@ -13120,11 +13120,19 @@
     "ts": "2026-01-04T16:26:02.014798"
   },
   {
-    "channel": "WildWonderCaps",
-    "entity": "Incredible Wildlife Moments | Banned in 5 Countries",
-    "content_hash": "7cdb4b016cb41803",
-    "title": "Incredible Wildlife Moments | Banned in 5 Countries",
-    "video_path": "youtube:5-a5utVHWLY",
-    "ts": "2026-01-04T16:47:22.134537"
+    "channel": "CritterFact",
+    "entity": "WAIT, Pandas Can Swim 20 Miles Non-Stop | Wildlife Facts",
+    "content_hash": "9e2791d7d88c2683",
+    "title": "WAIT, Pandas Can Swim 20 Miles Non-Stop | Wildlife Facts",
+    "video_path": "youtube:VJ7XJ-4sjJ0",
+    "ts": "2026-01-04T16:44:22.115143"
+  },
+  {
+    "channel": "NextGen Update",
+    "entity": "AI Model Banned in 3 Countries | Latest Tech Breakthroughs",
+    "content_hash": "cae5b507a3e1828b",
+    "title": "AI Model Banned in 3 Countries | Latest Tech Breakthroughs",
+    "video_path": "youtube:k-HLda4K-As",
+    "ts": "2026-01-04T16:51:53.462264"
   }
 ]
