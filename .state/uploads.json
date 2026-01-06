@@ -13376,11 +13376,19 @@
     "ts": "2026-01-06T02:22:57.225634"
   },
   {
-    "channel": "CritterFact",
-    "entity": "10 Secret Animal Behaviors You Never Knew | Wildlife Secrets Revealed",
-    "content_hash": "21e0dc75ab4bb376",
-    "title": "10 Secret Animal Behaviors You Never Knew | Wildlife Secrets Revealed",
-    "video_path": "youtube:AnbdSxrZa3Q",
-    "ts": "2026-01-06T02:32:17.123808"
+    "channel": "Cinematic Echo",
+    "entity": "Hidden Movie Secrets | Mind-Blowing Film Facts",
+    "content_hash": "b22e13a263212cf8",
+    "title": "Hidden Movie Secrets | Mind-Blowing Film Facts",
+    "video_path": "youtube:i73ydSaRRuQ",
+    "ts": "2026-01-06T02:30:50.987356"
+  },
+  {
+    "channel": "WildWonderCaps",
+    "entity": "WILD Animals | Jaw-Dropping Survival Secrets",
+    "content_hash": "807678122cb55811",
+    "title": "WILD Animals | Jaw-Dropping Survival Secrets",
+    "video_path": "youtube:C_rzUjDLF7k",
+    "ts": "2026-01-06T02:37:19.983199"
   }
 ]
