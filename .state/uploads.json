@@ -13480,11 +13480,19 @@
     "ts": "2026-01-06T17:09:08.092435"
   },
   {
-    "channel": "SpaceVista 60",
-    "entity": "FAST, CLEAR Space Explainers: Mind-Blowing NASA Discoveries! | Space Facts",
-    "content_hash": "99d63133723ece2f",
-    "title": "FAST, CLEAR Space Explainers: Mind-Blowing NASA Discoveries! | Space Facts",
-    "video_path": "youtube:phZdgFQPfNw",
-    "ts": "2026-01-06T17:17:03.386290"
+    "channel": "Eco Habit Hacks",
+    "entity": "Sustainable Living Tips to Save You Money | Reduce Water Waste | 2025",
+    "content_hash": "303d0c189e1f89ec",
+    "title": "Sustainable Living Tips to Save You Money | Reduce Water Waste | 2025",
+    "video_path": "youtube:ko4ilfgcPCc",
+    "ts": "2026-01-06T17:15:20.213923"
+  },
+  {
+    "channel": "MicroNature Minute",
+    "entity": "99.9% Empty Space | Tiny Ecosystems Defy Logic",
+    "content_hash": "5f5b20e69500f62b",
+    "title": "99.9% Empty Space | Tiny Ecosystems Defy Logic",
+    "video_path": "youtube:LLaOESGqlyc",
+    "ts": "2026-01-06T17:22:39.777166"
   }
 ]
