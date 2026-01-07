@@ -13648,11 +13648,19 @@
     "ts": "2026-01-07T16:40:22.184488"
   },
   {
-    "channel": "CritterFact",
-    "entity": "Wild Beasts | Shocking Animal Behaviors You Never Knew Existed",
-    "content_hash": "e825fe50a7ca1a8e",
-    "title": "Wild Beasts | Shocking Animal Behaviors You Never Knew Existed",
-    "video_path": "youtube:28q9AvXpCIs",
-    "ts": "2026-01-07T16:50:42.836298"
+    "channel": "GalacticUpdate",
+    "entity": "50 New Exoplanets Discovered | Cosmic News 2025",
+    "content_hash": "e1d29ffbca9c9b5f",
+    "title": "50 New Exoplanets Discovered | Cosmic News 2025",
+    "video_path": "youtube:i6vzQ1qgORA",
+    "ts": "2026-01-07T16:47:34.975074"
+  },
+  {
+    "channel": "WildWonderCaps",
+    "entity": "Incredible Animal Secrets Revealed | Wildlife Wonders",
+    "content_hash": "2f9cc8acf1d34a24",
+    "title": "Incredible Animal Secrets Revealed | Wildlife Wonders",
+    "video_path": "youtube:sPxFUiYptD8",
+    "ts": "2026-01-07T16:53:01.408343"
   }
 ]
