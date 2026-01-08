@@ -13896,11 +13896,19 @@
     "ts": "2026-01-08T17:27:19.074572"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Top 5 Scenic Drives in the Swiss Alps | Explore Hidden Gems",
-    "content_hash": "f9ef74cc12d1f7f6",
-    "title": "Top 5 Scenic Drives in the Swiss Alps | Explore Hidden Gems",
-    "video_path": "youtube:-bxzU8qKz8M",
-    "ts": "2026-01-08T17:36:52.624101"
+    "channel": "Ocean Pulse",
+    "entity": "Ocean's Secret Life | Facts You Need to Know",
+    "content_hash": "822a5fc6f496de4a",
+    "title": "Ocean's Secret Life | Facts You Need to Know",
+    "video_path": "youtube:gjF6_aCNR9g",
+    "ts": "2026-01-08T17:33:30.987024"
+  },
+  {
+    "channel": "Wild Pattern Atlas",
+    "entity": "The Secret behind Natural Textures | Understanding the Science | 2025",
+    "content_hash": "71982fd3a6301585",
+    "title": "The Secret behind Natural Textures | Understanding the Science | 2025",
+    "video_path": "youtube:I5gSbKnThUk",
+    "ts": "2026-01-08T17:42:01.824718"
   }
 ]
