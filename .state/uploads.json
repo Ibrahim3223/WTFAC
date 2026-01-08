@@ -13840,19 +13840,27 @@
     "ts": "2026-01-08T16:39:11.915377"
   },
   {
-    "channel": "CritterFact",
-    "entity": "SECRET Bird Behaviors | Wildlife Facts 2025",
-    "content_hash": "e3e27c2a5f27f015",
-    "title": "SECRET Bird Behaviors | Wildlife Facts 2025",
-    "video_path": "youtube:hUkpEhe0Z6o",
-    "ts": "2026-01-08T16:48:34.311574"
+    "channel": "GalacticUpdate",
+    "entity": "LATEST Space Discovery: A Cosmic Treasure Hidden in Plain Sight | Space News",
+    "content_hash": "a33793d1ddd0d4ec",
+    "title": "LATEST Space Discovery: A Cosmic Treasure Hidden in Plain Sight | Space News",
+    "video_path": "youtube:E_ZsAMKj-wk",
+    "ts": "2026-01-08T16:46:24.232514"
   },
   {
-    "channel": "BehindTheFame",
-    "entity": "WAIT, STOP | Hollywood's Billion-Dollar Movie Secrets | 2025",
-    "content_hash": "d3f9c6bf0ae6a1c3",
-    "title": "WAIT, STOP | Hollywood's Billion-Dollar Movie Secrets | 2025",
-    "video_path": "youtube:45_Izz4eDsg",
-    "ts": "2026-01-08T16:58:01.395817"
+    "channel": "WildWonderCaps",
+    "entity": "Wildlife Secrets Revealed | Incredible Animal Moments",
+    "content_hash": "11a5d782869bab8a",
+    "title": "Wildlife Secrets Revealed | Incredible Animal Moments",
+    "video_path": "youtube:54dYLfHRYGA",
+    "ts": "2026-01-08T16:51:51.781553"
+  },
+  {
+    "channel": "One Day Inside",
+    "entity": "Unpopular Opinion: Post-Apocalyptic Survival Secrets Revealed | 2025 Stats",
+    "content_hash": "59566bd701b061a3",
+    "title": "Unpopular Opinion: Post-Apocalyptic Survival Secrets Revealed | 2025 Stats",
+    "video_path": "youtube:KvXsAR3-NYg",
+    "ts": "2026-01-08T16:58:41.920631"
   }
 ]
