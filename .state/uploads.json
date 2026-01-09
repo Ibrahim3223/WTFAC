@@ -14080,11 +14080,19 @@
     "ts": "2026-01-09T17:24:17.142902"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Scenic Road Discovery | Top 5 USA Drives | WATCH NOW!",
-    "content_hash": "9c9b977f2af0b96b",
-    "title": "Scenic Road Discovery | Top 5 USA Drives | WATCH NOW!",
-    "video_path": "youtube:hJbwXDWQ3iA",
-    "ts": "2026-01-09T17:33:46.418423"
+    "channel": "Timelapse Lab",
+    "entity": "TIME | Revolutionizing Our Understanding of the Universe",
+    "content_hash": "375151671ed5e497",
+    "title": "TIME | Revolutionizing Our Understanding of the Universe",
+    "video_path": "youtube:m8iET9mNGvU",
+    "ts": "2026-01-09T17:31:39.456322"
+  },
+  {
+    "channel": "Wild Pattern Atlas",
+    "entity": "WAIT— NATURAL TEXTURE Secrets Revealed | Science Explained",
+    "content_hash": "408c7a0785504a3a",
+    "title": "WAIT— NATURAL TEXTURE Secrets Revealed | Science Explained",
+    "video_path": "youtube:ttcnpQ5nR_8",
+    "ts": "2026-01-09T17:37:24.687727"
   }
 ]
