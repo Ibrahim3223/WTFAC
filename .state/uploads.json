@@ -14160,11 +14160,19 @@
     "ts": "2026-01-10T03:10:04.408554"
   },
   {
-    "channel": "Wild Pattern Atlas",
-    "entity": "The Secret Science of Natural Textures | 5% Smooth | Mind-Blowing Facts",
-    "content_hash": "c5d5d7c50028e06e",
-    "title": "The Secret Science of Natural Textures | 5% Smooth | Mind-Blowing Facts",
-    "video_path": "youtube:CBqwwNlsW84",
-    "ts": "2026-01-10T03:20:16.974266"
+    "channel": "RoadVista 60",
+    "entity": "Scenic Road Secrets Revealed | 10 Hidden Routes in the US",
+    "content_hash": "63966e9fa2c951fd",
+    "title": "Scenic Road Secrets Revealed | 10 Hidden Routes in the US",
+    "video_path": "youtube:Lu4OziRT_IY",
+    "ts": "2026-01-10T03:17:30.722371"
+  },
+  {
+    "channel": "Hidden Math IRL",
+    "entity": "Parthenon Secret | Unlocking Geometry Ratios",
+    "content_hash": "3fd522dabb5448ea",
+    "title": "Parthenon Secret | Unlocking Geometry Ratios",
+    "video_path": "youtube:Z0JMdVtxyLk",
+    "ts": "2026-01-10T03:25:20.135151"
   }
 ]
