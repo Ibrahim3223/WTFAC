@@ -14328,19 +14328,27 @@
     "ts": "2026-01-11T03:21:18.758408"
   },
   {
-    "channel": "Orderly Home 60",
-    "entity": "1-Minute Home Organization Hack | Save 365 Hours a Year!",
-    "content_hash": "21600c6fae27f7e8",
-    "title": "1-Minute Home Organization Hack | Save 365 Hours a Year!",
-    "video_path": "youtube:J6yd21lzf1Q",
-    "ts": "2026-01-11T03:30:15.390901"
+    "channel": "TrailScape 60",
+    "entity": "60s Landmarks Uncovered | Hidden Gems You Must See",
+    "content_hash": "a854b59030c01dcc",
+    "title": "60s Landmarks Uncovered | Hidden Gems You Must See",
+    "video_path": "youtube:00QQztaLUH8",
+    "ts": "2026-01-11T03:27:38.643257"
   },
   {
-    "channel": "LightCraft Studio",
-    "entity": "Unlock the 1-Minute Lighting Secret | Minute Lighting Tips",
-    "content_hash": "3a605df75ad5832c",
-    "title": "Unlock the 1-Minute Lighting Secret | Minute Lighting Tips",
-    "video_path": "youtube:9AX8XRv94JQ",
-    "ts": "2026-01-11T03:39:42.842500"
+    "channel": "RoadVista 60",
+    "entity": "Scenic Road Secrets | Top 5 Must-See Stops",
+    "content_hash": "ad0f643074bb764d",
+    "title": "Scenic Road Secrets | Top 5 Must-See Stops",
+    "video_path": "youtube:I4wDR8iRHwM",
+    "ts": "2026-01-11T03:34:47.827670"
+  },
+  {
+    "channel": "Bridge & Tunnel Atlas",
+    "entity": "Beautiful Crossings | Reducing Stress & Improving Safety | 2025",
+    "content_hash": "7b1dcff06bd0edf7",
+    "title": "Beautiful Crossings | Reducing Stress & Improving Safety | 2025",
+    "video_path": "youtube:TuATsMXJ5UY",
+    "ts": "2026-01-11T03:43:19.830472"
   }
 ]
