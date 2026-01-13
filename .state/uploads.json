@@ -14680,19 +14680,27 @@
     "ts": "2026-01-13T03:09:17.837853"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "The Secret to Scenic Roads | Hidden Gems of the Open Road",
-    "content_hash": "21dd7a099f76db91",
-    "title": "The Secret to Scenic Roads | Hidden Gems of the Open Road",
-    "video_path": "youtube:qT8erfWGazU",
-    "ts": "2026-01-13T03:19:49.998832"
+    "channel": "Ocean Pulse",
+    "entity": "One-Minute Ocean Tides | Ocean Science Secrets Revealed",
+    "content_hash": "2f0c60a5db8f1b62",
+    "title": "One-Minute Ocean Tides | Ocean Science Secrets Revealed",
+    "video_path": "youtube:W3VH1ogT13k",
+    "ts": "2026-01-13T03:16:47.309260"
   },
   {
-    "channel": "LightCraft Studio",
-    "entity": "1-Minute Lighting Secret | Home Energy Savings",
-    "content_hash": "f03d1c4d8f1d0c65",
-    "title": "1-Minute Lighting Secret | Home Energy Savings",
-    "video_path": "youtube:mwC2dfwYK_o",
-    "ts": "2026-01-13T03:28:26.343984"
+    "channel": "Wild Pattern Atlas",
+    "entity": "The Secret Power of Natural Textures | Unlocking Advanced Technologies",
+    "content_hash": "7a3b620584ca0109",
+    "title": "The Secret Power of Natural Textures | Unlocking Advanced Technologies",
+    "video_path": "youtube:0EbprINqDzE",
+    "ts": "2026-01-13T03:23:29.139834"
+  },
+  {
+    "channel": "Bridge & Tunnel Atlas",
+    "entity": "The Crossings Explained in 60s | Beautiful Architecture",
+    "content_hash": "2ae73ead1da60a20",
+    "title": "The Crossings Explained in 60s | Beautiful Architecture",
+    "video_path": "youtube:mrj-XMr1SKU",
+    "ts": "2026-01-13T03:29:17.120424"
   }
 ]
