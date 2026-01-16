@@ -15272,11 +15272,19 @@
     "ts": "2026-01-16T03:28:57.657027"
   },
   {
-    "channel": "Bridge & Tunnel Atlas",
-    "entity": "Beautiful Crossings Explained in 60s | The Art of Engineering",
-    "content_hash": "faa73c299ef06b77",
-    "title": "Beautiful Crossings Explained in 60s | The Art of Engineering",
-    "video_path": "youtube:opAQrDW5YXw",
-    "ts": "2026-01-16T03:38:10.438877"
+    "channel": "Wild Pattern Atlas",
+    "entity": "The Science of Natural Textures | Unlocking Hidden Patterns in 30 Seconds",
+    "content_hash": "0622fa97c6f4c16c",
+    "title": "The Science of Natural Textures | Unlocking Hidden Patterns in 30 Seconds",
+    "video_path": "youtube:hnZqlKR2Q5I",
+    "ts": "2026-01-16T03:36:36.974272"
+  },
+  {
+    "channel": "Epic Mundane",
+    "entity": "Overdramatic Narration Myths Exposed | Truth About Voiceovers",
+    "content_hash": "de132a38217134cd",
+    "title": "Overdramatic Narration Myths Exposed | Truth About Voiceovers",
+    "video_path": "youtube:mvWx1WKkGN0",
+    "ts": "2026-01-16T03:43:19.003229"
   }
 ]
