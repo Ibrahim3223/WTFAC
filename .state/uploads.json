@@ -15536,11 +15536,19 @@
     "ts": "2026-01-17T17:25:54.828165"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Pacific Coast Highway | Scenic Road Mini-Guides | Explore Like a Local",
-    "content_hash": "51ce897056bcda85",
-    "title": "Pacific Coast Highway | Scenic Road Mini-Guides | Explore Like a Local",
-    "video_path": "youtube:xN-X7aEJMXE",
-    "ts": "2026-01-17T17:34:50.358156"
+    "channel": "Timelapse Lab",
+    "entity": "Shocking Science Truth | Visual Perception Through Time",
+    "content_hash": "ecc9939cab998812",
+    "title": "Shocking Science Truth | Visual Perception Through Time",
+    "video_path": "youtube:r7cf-r40XqM",
+    "ts": "2026-01-17T17:34:06.546721"
+  },
+  {
+    "channel": "Hidden Math IRL",
+    "entity": "Geometric Secrets in the City | Unlocking the Universe's Code",
+    "content_hash": "c98f660b0b3162d1",
+    "title": "Geometric Secrets in the City | Unlocking the Universe's Code",
+    "video_path": "youtube:sD3_01q6UNE",
+    "ts": "2026-01-17T17:40:29.919006"
   }
 ]
