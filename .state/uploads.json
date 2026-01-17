@@ -15528,11 +15528,19 @@
     "ts": "2026-01-17T17:15:53.862898"
   },
   {
-    "channel": "TrailScape 60",
-    "entity": "WAIT, SECRET trails & landmarks from the 60s | Explore Now!",
-    "content_hash": "9208d2433343be90",
-    "title": "WAIT, SECRET trails & landmarks from the 60s | Explore Now!",
-    "video_path": "youtube:tXkUP5zG29w",
-    "ts": "2026-01-17T17:25:54.828165"
+    "channel": "Kitchen Logic Lab",
+    "entity": "60s Cooking Secrets | Master Retro Recipes",
+    "content_hash": "bf72b52c4bdde8d1",
+    "title": "60s Cooking Secrets | Master Retro Recipes",
+    "video_path": "youtube:InJgP-Sa83I",
+    "ts": "2026-01-17T17:23:54.726204"
+  },
+  {
+    "channel": "Ocean Pulse",
+    "entity": "ONE-MINUTE Ocean Tides Secret | 2025 Coastal Erosion Explained",
+    "content_hash": "73cc71cd7f2b5740",
+    "title": "ONE-MINUTE Ocean Tides Secret | 2025 Coastal Erosion Explained",
+    "video_path": "youtube:FHMGstjr2E8",
+    "ts": "2026-01-17T17:30:17.195170"
   }
 ]
