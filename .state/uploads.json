@@ -16248,11 +16248,19 @@
     "ts": "2026-01-21T17:43:23.633529"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Scenic Road Mini-Guides | Top 3 Secret Spots in the US",
-    "content_hash": "7528d5a2152bf95a",
-    "title": "Scenic Road Mini-Guides | Top 3 Secret Spots in the US",
-    "video_path": "youtube:YuKiuLEXvhM",
-    "ts": "2026-01-21T17:54:35.326823"
+    "channel": "Timelapse Lab",
+    "entity": "Visual Evolution of Science | The Secret Story Behind the Images",
+    "content_hash": "5c70c12606940997",
+    "title": "Visual Evolution of Science | The Secret Story Behind the Images",
+    "video_path": "youtube:shFQGejCaoE",
+    "ts": "2026-01-21T17:54:16.007742"
+  },
+  {
+    "channel": "Hidden Math IRL",
+    "entity": "Geometry Secrets in City Skylines | Uncover Hidden Patterns",
+    "content_hash": "4e5a9ff8c52ac68e",
+    "title": "Geometry Secrets in City Skylines | Uncover Hidden Patterns",
+    "video_path": "youtube:Ic2E4X0IblU",
+    "ts": "2026-01-21T18:01:08.279211"
   }
 ]
