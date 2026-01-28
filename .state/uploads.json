@@ -17416,27 +17416,11 @@
     "ts": "2026-01-28T16:40:27.886216"
   },
   {
-    "channel": "Rewind Retro Media",
-    "entity": "Uncover the Secret to Unlocking Retro Memories | Retro Culture",
-    "content_hash": "84bdc03100a8e3d0",
-    "title": "Uncover the Secret to Unlocking Retro Memories | Retro Culture",
-    "video_path": "youtube:YqS_b4uzIa8",
-    "ts": "2026-01-28T16:50:45.938186"
-  },
-  {
-    "channel": "GalacticUpdate",
-    "entity": "Cosmic Discovery Disappearance: A 97% Unknown Universe | Space Discoveries",
-    "content_hash": "4213c681f58f620b",
-    "title": "Cosmic Discovery Disappearance: A 97% Unknown Universe | Space Discoveries",
-    "video_path": "youtube:GeEy2Uc-IHM",
-    "ts": "2026-01-28T16:59:43.373562"
-  },
-  {
-    "channel": "WildWonderCaps",
-    "entity": "Incredible Wildlife Moments Increasing by 25% Every Decade | Animal Wonders",
-    "content_hash": "b9e1f98f19c0a045",
-    "title": "Incredible Wildlife Moments Increasing by 25% Every Decade | Animal Wonders",
-    "video_path": "youtube:3Exj3iGQbBA",
-    "ts": "2026-01-28T17:06:50.674641"
+    "channel": "CritterFact",
+    "entity": "Wildlife Secrets: 1-in-a-Million Sea Hares Can Photosynthesize | Wildlife",
+    "content_hash": "05fc2cb7beb38c54",
+    "title": "Wildlife Secrets: 1-in-a-Million Sea Hares Can Photosynthesize | Wildlife",
+    "video_path": "youtube:ypEZBWtFCsA",
+    "ts": "2026-01-28T17:01:31.921281"
   }
 ]
