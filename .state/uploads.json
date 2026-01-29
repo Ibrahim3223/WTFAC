@@ -17616,11 +17616,19 @@
     "ts": "2026-01-29T17:23:02.101983"
   },
   {
-    "channel": "GameDay 60",
-    "entity": "Wait, sports updates never told the full story | Sports Highlights 2025",
-    "content_hash": "64b4abf1d3833e6f",
-    "title": "Wait, sports updates never told the full story | Sports Highlights 2025",
-    "video_path": "youtube:x1KYl7n0bSw",
-    "ts": "2026-01-29T17:34:29.652819"
+    "channel": "FixIt Fast",
+    "entity": "3 Quick DIY Repair Tips You Need to Know | Home Repair Solutions",
+    "content_hash": "7f46fc55377d0968",
+    "title": "3 Quick DIY Repair Tips You Need to Know | Home Repair Solutions",
+    "video_path": "youtube:EkFd06UBCa0",
+    "ts": "2026-01-29T17:32:55.714770"
+  },
+  {
+    "channel": "CityFrame Stories",
+    "entity": "City Skyline Secrets | Urban Growth and Its Hidden Costs",
+    "content_hash": "6ac261224541e30e",
+    "title": "City Skyline Secrets | Urban Growth and Its Hidden Costs",
+    "video_path": "youtube:fsbmtww8_68",
+    "ts": "2026-01-29T17:40:14.300268"
   }
 ]
