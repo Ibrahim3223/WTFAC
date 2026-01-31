@@ -17968,11 +17968,19 @@
     "ts": "2026-01-31T03:43:44.822944"
   },
   {
-    "channel": "RoadVista 60",
-    "entity": "Discover Secret Scenic Roads in the US | Top Road Trip Destinations",
-    "content_hash": "2e5bae0a9929e433",
-    "title": "Discover Secret Scenic Roads in the US | Top Road Trip Destinations",
-    "video_path": "youtube:Ml-sURxX0vo",
-    "ts": "2026-01-31T03:54:15.897042"
+    "channel": "Timelapse Lab",
+    "entity": "The SECRET History of Science | Visual Science Through Time",
+    "content_hash": "fc1513328e42ba27",
+    "title": "The SECRET History of Science | Visual Science Through Time",
+    "video_path": "youtube:MuzHM5GZhNw",
+    "ts": "2026-01-31T03:51:08.846502"
+  },
+  {
+    "channel": "Wild Pattern Atlas",
+    "entity": "Natural Textures Defy Logic | Unveiling Earth's Hidden Wonders",
+    "content_hash": "430c79fcaa3df15e",
+    "title": "Natural Textures Defy Logic | Unveiling Earth's Hidden Wonders",
+    "video_path": "youtube:PYuJyyKB9Rs",
+    "ts": "2026-01-31T03:58:35.854882"
   }
 ]
