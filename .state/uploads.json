@@ -17936,11 +17936,19 @@
     "ts": "2026-01-31T03:15:16.286519"
   },
   {
-    "channel": "GameDay 60",
-    "entity": "Daily Sports Updates | Sports News 2025",
-    "content_hash": "fde9673b126658dc",
-    "title": "Daily Sports Updates | Sports News 2025",
-    "video_path": "youtube:pa0jNrJH9cI",
-    "ts": "2026-01-31T03:25:57.878057"
+    "channel": "FixIt Fast",
+    "entity": "Quick DIY Repairs | Top 5 Household Fixes",
+    "content_hash": "6f83c07be3fcdb9a",
+    "title": "Quick DIY Repairs | Top 5 Household Fixes",
+    "video_path": "youtube:0lzICpH1jdc",
+    "ts": "2026-01-31T03:22:24.020404"
+  },
+  {
+    "channel": "Planet Snapshot",
+    "entity": "This Geography Secret Got Banned in 3 Countries | Fast Facts",
+    "content_hash": "cec3b6c540df3c04",
+    "title": "This Geography Secret Got Banned in 3 Countries | Fast Facts",
+    "video_path": "youtube:Px5Tjke-Acg",
+    "ts": "2026-01-31T03:29:53.087915"
   }
 ]
