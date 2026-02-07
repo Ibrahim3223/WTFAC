@@ -19296,19 +19296,27 @@
     "ts": "2026-02-07T17:29:37.721267"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "POV: You finally understand why weather forecasts are so hard to predict | Weather Secrets",
-    "content_hash": "a59ec6379db2f370",
-    "title": "POV: You finally understand why weather forecasts are so hard to predict | Weather Secrets",
-    "video_path": "youtube:ENWvc6V2cAQ",
-    "ts": "2026-02-07T17:41:41.426019"
+    "channel": "Kitchen Logic Lab",
+    "entity": "3 Retro Cooking Secrets | 60s Food Science Tips You Need to Know",
+    "content_hash": "03d92351a42dc942",
+    "title": "3 Retro Cooking Secrets | 60s Food Science Tips You Need to Know",
+    "video_path": "youtube:eVWYAWOJC40",
+    "ts": "2026-02-07T17:40:06.326707"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "The Secret History of Ancient Astronomy | Visual Science Through Time",
-    "content_hash": "5a70bf8c731eaced",
-    "title": "The Secret History of Ancient Astronomy | Visual Science Through Time",
-    "video_path": "youtube:W6wcpwfZSLU",
-    "ts": "2026-02-07T17:51:32.735118"
+    "channel": "TrailScape 60",
+    "entity": "10 Most Beautiful Trails & Landmarks of the 1960s | Hidden Gems",
+    "content_hash": "3810bd5026d72ff2",
+    "title": "10 Most Beautiful Trails & Landmarks of the 1960s | Hidden Gems",
+    "video_path": "youtube:u8pe1E6RmyM",
+    "ts": "2026-02-07T17:46:14.739015"
+  },
+  {
+    "channel": "RoadVista 60",
+    "entity": "Scenic Road Mini-Guides: Top 3 Hidden Gems in the US | 2025",
+    "content_hash": "b819dfcd56a0b719",
+    "title": "Scenic Road Mini-Guides: Top 3 Hidden Gems in the US | 2025",
+    "video_path": "youtube:nS_84hkOJaE",
+    "ts": "2026-02-07T17:52:16.849117"
   }
 ]
