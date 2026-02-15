@@ -20616,11 +20616,19 @@
     "ts": "2026-02-15T03:52:53.249224"
   },
   {
-    "channel": "Weather Window 60",
-    "entity": "The Secret to Accurate Weather Forecasting | Top Tips for YOU!",
-    "content_hash": "3140860129d4c4cf",
-    "title": "The Secret to Accurate Weather Forecasting | Top Tips for YOU!",
-    "video_path": "youtube:Ss_F6GACOUI",
-    "ts": "2026-02-15T04:06:14.144231"
+    "channel": "Kitchen Logic Lab",
+    "entity": "Never Guess 60s Cooking Secrets | 2 Surprising Truths",
+    "content_hash": "4d949c5d8035602f",
+    "title": "Never Guess 60s Cooking Secrets | 2 Surprising Truths",
+    "video_path": "youtube:Lqokn190r3c",
+    "ts": "2026-02-15T04:03:38.180608"
+  },
+  {
+    "channel": "TrailScape 60",
+    "entity": "Stunning 60s Landmarks | Beautiful Time Travel",
+    "content_hash": "08bb98192ff0aa38",
+    "title": "Stunning 60s Landmarks | Beautiful Time Travel",
+    "video_path": "youtube:3m3MR6Gpyqc",
+    "ts": "2026-02-15T04:11:03.058505"
   }
 ]
