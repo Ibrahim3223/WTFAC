@@ -20624,19 +20624,27 @@
     "ts": "2026-02-15T04:06:14.144231"
   },
   {
-    "channel": "Timelapse Lab",
-    "entity": "Visual Science Through Time | Unlocking Hidden Secrets",
-    "content_hash": "d5ff52e47dbcbf66",
-    "title": "Visual Science Through Time | Unlocking Hidden Secrets",
-    "video_path": "youtube:6YlIzte1EQk",
-    "ts": "2026-02-15T04:17:48.684169"
+    "channel": "Ocean Pulse",
+    "entity": "71% of Earth is Ocean | Top Ocean Facts 2025",
+    "content_hash": "f6d1ee2def1d7f10",
+    "title": "71% of Earth is Ocean | Top Ocean Facts 2025",
+    "video_path": "youtube:yZdFOdt0mI8",
+    "ts": "2026-02-15T04:13:51.389622"
   },
   {
-    "channel": "Hidden Math IRL",
-    "entity": "Golden Ratio Found in NYC Skyscrapers | Geometry in Real Life",
-    "content_hash": "c1a5db6f95350d87",
-    "title": "Golden Ratio Found in NYC Skyscrapers | Geometry in Real Life",
-    "video_path": "youtube:HIukM96jsKo",
-    "ts": "2026-02-15T04:26:22.803864"
+    "channel": "Wild Pattern Atlas",
+    "entity": "The Secret to Nature's Resilience | The Science of Natural Textures",
+    "content_hash": "f04ef2473ec5dad6",
+    "title": "The Secret to Nature's Resilience | The Science of Natural Textures",
+    "video_path": "youtube:9drQnbwkCRc",
+    "ts": "2026-02-15T04:23:15.132967"
+  },
+  {
+    "channel": "Mechanism Minute",
+    "entity": "STOP scrolling. | Everyday Mechanisms Secrets Revealed!",
+    "content_hash": "3d1cc22314cec592",
+    "title": "STOP scrolling. | Everyday Mechanisms Secrets Revealed!",
+    "video_path": "youtube:U4fgYGg5SCA",
+    "ts": "2026-02-15T04:28:29.006024"
   }
 ]
