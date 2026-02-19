@@ -21432,27 +21432,35 @@
     "ts": "2026-02-19T18:01:16.220661"
   },
   {
-    "channel": "MicroNature Minute",
-    "entity": "WAIT! Tiny Ecosystems | Shocking Macro Nature Facts | 30 seconds",
-    "content_hash": "76b786909724602b",
-    "title": "WAIT! Tiny Ecosystems | Shocking Macro Nature Facts | 30 seconds",
-    "video_path": "youtube:S48ikCpiGHo",
-    "ts": "2026-02-19T18:15:44.652378"
+    "channel": "SpaceVista 60",
+    "entity": "Venus | Fastest Planet in Our Solar System | Unbelievable Fact",
+    "content_hash": "3be594ee4909110e",
+    "title": "Venus | Fastest Planet in Our Solar System | Unbelievable Fact",
+    "video_path": "youtube:8fp-Y5sHCkM",
+    "ts": "2026-02-19T18:12:46.072985"
   },
   {
-    "channel": "Focus Rituals",
-    "entity": "30% FOCUSED | Boost Productivity with Morning Routine",
-    "content_hash": "a6342eff82708698",
-    "title": "30% FOCUSED | Boost Productivity with Morning Routine",
-    "video_path": "youtube:5JgtpJe8Qf8",
-    "ts": "2026-02-19T18:22:27.408522"
+    "channel": "Weather Window 60",
+    "entity": "Storms Can Move Up to 50mph | Weather Patterns Explained",
+    "content_hash": "e4ca69ab507da1e4",
+    "title": "Storms Can Move Up to 50mph | Weather Patterns Explained",
+    "video_path": "youtube:Bw87XlOdB60",
+    "ts": "2026-02-19T18:18:27.346563"
   },
   {
-    "channel": "Orderly Home 60",
-    "entity": "5-Minute Home Organization Hack | Boost Productivity by 25%",
-    "content_hash": "0e715b04045da6e5",
-    "title": "5-Minute Home Organization Hack | Boost Productivity by 25%",
-    "video_path": "youtube:eaXv5JhSIo8",
-    "ts": "2026-02-19T18:30:51.493073"
+    "channel": "Timelapse Lab",
+    "entity": "Science Through Time | Visual Representations That Amaze",
+    "content_hash": "adec7e24cc36218c",
+    "title": "Science Through Time | Visual Representations That Amaze",
+    "video_path": "youtube:NZtmCVirfxA",
+    "ts": "2026-02-19T18:27:58.918562"
+  },
+  {
+    "channel": "RoadVista 60",
+    "entity": "Someone tried to explain scenic roads. They were called crazy. But they were right. | Scenic Road Mini-Guides",
+    "content_hash": "f6c02bacb232e2d0",
+    "title": "Someone tried to explain scenic roads. They were called crazy. But they were right. | Scenic Road Mini-Guides",
+    "video_path": "youtube:njjmNPl0Cdc",
+    "ts": "2026-02-19T18:35:26.742376"
   }
 ]
