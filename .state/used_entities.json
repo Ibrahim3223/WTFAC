@@ -268,8 +268,7 @@
     "200,000 Miles of Secret Trails | Discover the Most Beautiful Landmarks of the 1960s": "2026-02-17T04:03:11.232495",
     "Revisit America's Hidden 60s Trails & Landmarks | Natural Wonders": "2026-02-19T04:06:21.955523",
     "BEAUTIFUL Trails & Landmarks in the 1960s | 10 Hidden Gems": "2026-02-20T04:08:42.984168",
-    "WAIT, STOP! 60s Most Beautiful Trails & Landmarks | Discover the Secrets": "2026-02-20T18:10:03.131771",
-    "Beautiful Trails & Landmarks of the 1960s | Inspiring Wonders": "2026-02-22T17:50:45.014559"
+    "WAIT, STOP! 60s Most Beautiful Trails & Landmarks | Discover the Secrets": "2026-02-20T18:10:03.131771"
   },
   "Object Origins": {
     "wondered": "2025-10-10T02:24:54.297684",
@@ -888,7 +887,8 @@
     "WAIT— This Cooking Fact Changes Everything | 60s Food Science": "2026-02-01T17:37:03.993508",
     "3 Retro Cooking Secrets | 60s Food Science Tips You Need to Know": "2026-02-07T17:40:05.278380",
     "Unbelievable Cooking Hacks from the 60s | Energy-Saving Tips": "2026-02-13T04:04:21.165452",
-    "60s Cooking Secret | Food Science Hack for Perfect Crusts": "2026-02-15T17:43:17.750999"
+    "60s Cooking Secret | Food Science Hack for Perfect Crusts": "2026-02-15T17:43:17.750999",
+    "60s Cooking Myth Debunked | Temperature Control Secrets": "2026-02-22T17:46:12.328661"
   },
   "RoadVista 60": {
     "think": "2025-10-10T17:07:12.743009",
@@ -979,7 +979,8 @@
     "Top 3 Scenic Road Trip Destinations in the US | Pacific Coast Highway": "2026-02-19T04:14:48.360692",
     "Scenic Road Trips | 10M+ Km of Breathtaking Drives": "2026-02-20T04:20:30.597681",
     "Pause Everything | Top 10 Scenic Roads in the US": "2026-02-20T18:19:52.186536",
-    "The SECRET to Planning the Ultimate Scenic Road Trip | 2025 Guide": "2026-02-22T04:21:01.822476"
+    "The SECRET to Planning the Ultimate Scenic Road Trip | 2025 Guide": "2026-02-22T04:21:01.822476",
+    "Hidden Scenic Routes in California | Explore Pacific Coast Highway": "2026-02-22T18:03:00.129189"
   },
   "Epic Mundane": {
     "know": "2025-10-10T17:14:08.944408",
@@ -1289,7 +1290,8 @@
     "Someone tried to explain oceans in just a minute | Ocean Science Facts": "2026-02-05T18:04:35.125098",
     "Minute Ocean Truth | Shocking Stats for Our Coastlines": "2026-02-14T04:05:23.177224",
     "71% of Earth is Ocean | Top Ocean Facts 2025": "2026-02-15T04:13:50.282567",
-    "20 Minute Ocean Secret | One Minute Ocean and Coast Science": "2026-02-21T17:57:39.408074"
+    "20 Minute Ocean Secret | One Minute Ocean and Coast Science": "2026-02-21T17:57:39.408074",
+    "71% of Earth is Ocean | Ocean Science": "2026-02-22T17:53:43.500653"
   },
   "Bridge & Tunnel Atlas": {
     "think": "2025-10-11T02:36:27.555667",
@@ -1903,8 +1905,7 @@
     "The SECRET History of Science | Visual Science Through Time": "2026-01-31T03:51:07.881807",
     "Time Relativity | Mind-Blowing Science Facts You Need to Know": "2026-02-11T04:17:05.507640",
     "You've been wrong about visual science your entire life | Secrets of Perspective": "2026-02-16T04:15:14.956664",
-    "Scientists Just Discovered a 100-Year-Old Visual Experiment Secret | Visual Science Through Time": "2026-02-18T18:44:08.713764",
-    "14 Billion Years of Cosmic Secrets | Visual Science Explained": "2026-02-22T17:57:22.332370"
+    "Scientists Just Discovered a 100-Year-Old Visual Experiment Secret | Visual Science Through Time": "2026-02-18T18:44:08.713764"
   },
   "Flashback Minute": {
     "told": "2025-10-13T16:26:15.561952",
@@ -2091,8 +2092,7 @@
     "Geometry Secrets | Unlock Your Creative Potential": "2026-02-02T18:03:53.844788",
     "WAIT, STOP and look around you: Geometry & Ratios are EVERYWHERE! | 2025 Geometry Tutorial": "2026-02-13T04:26:58.441211",
     "RATIOS REVEALED | Geometry's Secret Code in Real Scenes": "2026-02-17T04:17:35.513981",
-    "5 Hidden Geometry Patterns Found in City Skylines | Education": "2026-02-19T04:23:49.263043",
-    "Geometry Secrets Hidden in Everyday Scenes | Geometry Explained": "2026-02-22T18:07:00.720284"
+    "5 Hidden Geometry Patterns Found in City Skylines | Education": "2026-02-19T04:23:49.263043"
   },
   "NextGen Update": {
     "told": "2025-10-14T16:38:19.542731",
@@ -2858,6 +2858,7 @@
     "Breaking: Mechanisms aren't as ordinary as you think anymore | Everyday Optimization": "2026-02-14T04:17:13.025196",
     "STOP scrolling. | Everyday Mechanisms Secrets Revealed!": "2026-02-15T04:28:27.854477",
     "10 Mechanisms You Use Every Day | Secret to How They Work": "2026-02-21T04:17:21.977679",
-    "99.9% | Everyday Mechanisms | Hidden Science": "2026-02-21T18:09:06.142452"
+    "99.9% | Everyday Mechanisms | Hidden Science": "2026-02-21T18:09:06.142452",
+    "WAIT— Everyday Mechanisms | 5 Mind-Blowing Facts": "2026-02-22T18:07:55.921744"
   }
 }
