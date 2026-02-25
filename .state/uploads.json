@@ -22664,11 +22664,19 @@
     "ts": "2026-02-25T04:41:57.320497"
   },
   {
-    "channel": "Tiny Drama Dept.",
-    "entity": "Soap Opera Secrets | Soap History Reveal",
-    "content_hash": "fb496ca012aa2f7b",
-    "title": "Soap Opera Secrets | Soap History Reveal",
-    "video_path": "youtube:bowUV_-NWxc",
-    "ts": "2026-02-25T04:52:30.973215"
+    "channel": "Corporate Jargon Translator",
+    "entity": "Buzzwords Exposed | Decoding the Tech World",
+    "content_hash": "a42553e7283b5912",
+    "title": "Buzzwords Exposed | Decoding the Tech World",
+    "video_path": "youtube:g2Y5T1y4seE",
+    "ts": "2026-02-25T04:47:59.582924"
+  },
+  {
+    "channel": "Wrong Way First",
+    "entity": "Comedy SECRET | The 5 Essential Mistakes to Avoid in 30 Seconds",
+    "content_hash": "b23c3291f1e85954",
+    "title": "Comedy SECRET | The 5 Essential Mistakes to Avoid in 30 Seconds",
+    "video_path": "youtube:N67-8i0CTNM",
+    "ts": "2026-02-25T04:54:18.027129"
   }
 ]
