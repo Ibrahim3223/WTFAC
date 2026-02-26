@@ -22904,19 +22904,27 @@
     "ts": "2026-02-26T17:57:44.407235"
   },
   {
-    "channel": "Eco Habit Hacks",
-    "entity": "The 1-Minute Sustainable Living Hack | Reduce Your Carbon Footprint by 50%",
-    "content_hash": "fb150350b3adc3da",
-    "title": "The 1-Minute Sustainable Living Hack | Reduce Your Carbon Footprint by 50%",
-    "video_path": "youtube:4H3irEw8Nx4",
-    "ts": "2026-02-26T18:06:36.372247"
+    "channel": "CityFrame Stories",
+    "entity": "City Secrets Exposed: Underground Tunnels Revealed | Urban Facts",
+    "content_hash": "a72514f2db20a275",
+    "title": "City Secrets Exposed: Underground Tunnels Revealed | Urban Facts",
+    "video_path": "youtube:uYPM81FxhvI",
+    "ts": "2026-02-26T18:04:32.301786"
   },
   {
-    "channel": "Kitchen Logic Lab",
-    "entity": "SECRET 60s Cooking Tricks | 5 Essential Techniques",
-    "content_hash": "f8e3b4c4a3e68fa1",
-    "title": "SECRET 60s Cooking Tricks | 5 Essential Techniques",
-    "video_path": "youtube:3r_Kv9919Rg",
-    "ts": "2026-02-26T18:17:06.411445"
+    "channel": "Pocket Tech Tricks",
+    "entity": "5 One-Minute Tech Fixes That Will Change Your Life | Everyday Tech Hacks",
+    "content_hash": "4e8e6031d5671bc3",
+    "title": "5 One-Minute Tech Fixes That Will Change Your Life | Everyday Tech Hacks",
+    "video_path": "youtube:7BK2OotCb6M",
+    "ts": "2026-02-26T18:11:27.214730"
+  },
+  {
+    "channel": "Weather Window 60",
+    "entity": "Weather Forecasts are WRONG | AI-Powered Secrets to Accurate Predictions",
+    "content_hash": "a8c79130e5444513",
+    "title": "Weather Forecasts are WRONG | AI-Powered Secrets to Accurate Predictions",
+    "video_path": "youtube:H3FxAwEKDGY",
+    "ts": "2026-02-26T18:18:58.029422"
   }
 ]
