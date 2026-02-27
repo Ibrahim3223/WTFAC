@@ -23016,11 +23016,19 @@
     "ts": "2026-02-27T03:55:15.696160"
   },
   {
-    "channel": "TrailScape 60",
-    "entity": "Imagine if beautiful landmarks disappeared | USA National Parks",
-    "content_hash": "ad7a37121d4c5e62",
-    "title": "Imagine if beautiful landmarks disappeared | USA National Parks",
-    "video_path": "youtube:9OaefGCUsOE",
-    "ts": "2026-02-27T04:09:15.576655"
+    "channel": "Weather Window 60",
+    "entity": "Weather Forecast Isn't What You Think Anymore | Storm Secrets",
+    "content_hash": "f183c778b8a7a7f5",
+    "title": "Weather Forecast Isn't What You Think Anymore | Storm Secrets",
+    "video_path": "youtube:ZRkmWhi11kQ",
+    "ts": "2026-02-27T04:06:15.010604"
+  },
+  {
+    "channel": "Ocean Pulse",
+    "entity": "Breaking: Ocean Isn't What You Think Anymore | Coastal Conservation",
+    "content_hash": "772c61a410e4ab72",
+    "title": "Breaking: Ocean Isn't What You Think Anymore | Coastal Conservation",
+    "video_path": "youtube:JCm-qNDNJpI",
+    "ts": "2026-02-27T04:15:14.943387"
   }
 ]
