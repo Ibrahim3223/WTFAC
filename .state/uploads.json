@@ -23440,11 +23440,19 @@
     "ts": "2026-03-01T04:17:16.666635"
   },
   {
-    "channel": "TrailScape 60",
-    "entity": "Top 10 Scenic Trails in 60s America | Hidden Landmarks",
-    "content_hash": "8adda309170e3f01",
-    "title": "Top 10 Scenic Trails in 60s America | Hidden Landmarks",
-    "video_path": "youtube:XLX2c32J_So",
-    "ts": "2026-03-01T04:25:55.964144"
+    "channel": "Focus Rituals",
+    "entity": "Stop scrolling, boost focus: Simple 10-minute routine",
+    "content_hash": "1220ca676b8fa1cf",
+    "title": "Stop scrolling, boost focus: Simple 10-minute routine",
+    "video_path": "youtube:bO3G4wkOR7I",
+    "ts": "2026-03-01T04:23:19.523468"
+  },
+  {
+    "channel": "Timelapse Lab",
+    "entity": "Visual Science | The Hidden Connection Between Art and Science",
+    "content_hash": "3744c5cb7fbd6815",
+    "title": "Visual Science | The Hidden Connection Between Art and Science",
+    "video_path": "youtube:OipFoJadd20",
+    "ts": "2026-03-01T04:30:09.528877"
   }
 ]
