@@ -23376,11 +23376,19 @@
     "ts": "2026-03-01T03:20:49.384413"
   },
   {
-    "channel": "CritterFact",
-    "entity": "Wildlife MYTHS that are SECRETLY true! | Wildlife Facts",
-    "content_hash": "5ecec3b47bd41ffe",
-    "title": "Wildlife MYTHS that are SECRETLY true! | Wildlife Facts",
-    "video_path": "youtube:6cwKV4pJ2UA",
-    "ts": "2026-03-01T03:31:05.991266"
+    "channel": "GalacticUpdate",
+    "entity": "LATEST Space Discoveries | Exoplanets Reveal New Cosmic Secrets",
+    "content_hash": "8df002e02bc03f77",
+    "title": "LATEST Space Discoveries | Exoplanets Reveal New Cosmic Secrets",
+    "video_path": "youtube:6xvMBZr9WGw",
+    "ts": "2026-03-01T03:26:36.420110"
+  },
+  {
+    "channel": "WildWonderCaps",
+    "entity": "Incredible Wildlife Moments | Top 5% Revealed | Save Before You Miss!",
+    "content_hash": "67451972b73adf8f",
+    "title": "Incredible Wildlife Moments | Top 5% Revealed | Save Before You Miss!",
+    "video_path": "youtube:10owySGXcoc",
+    "ts": "2026-03-01T03:33:39.666918"
   }
 ]
