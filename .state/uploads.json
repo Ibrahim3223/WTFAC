@@ -23512,11 +23512,19 @@
     "ts": "2026-03-01T17:14:04.327565"
   },
   {
-    "channel": "GameDay 60",
-    "entity": "Daily Sports Updates | 2025 Sports Highlights and Trends",
-    "content_hash": "10e01bfcee4ae978",
-    "title": "Daily Sports Updates | 2025 Sports Highlights and Trends",
-    "video_path": "youtube:GkEqPj6HySY",
-    "ts": "2026-03-01T17:28:51.455892"
+    "channel": "FixIt Fast",
+    "entity": "Fix Anything in 30 Seconds | DIY Home Repair Hacks",
+    "content_hash": "e7aa58317a896dbf",
+    "title": "Fix Anything in 30 Seconds | DIY Home Repair Hacks",
+    "video_path": "youtube:jkJT4b83W9U",
+    "ts": "2026-03-01T17:25:34.464195"
+  },
+  {
+    "channel": "CityFrame Stories",
+    "entity": "City Secrets Exposed | Urban Insights",
+    "content_hash": "4be648598eadc3dc",
+    "title": "City Secrets Exposed | Urban Insights",
+    "video_path": "youtube:vAKqUNKEK40",
+    "ts": "2026-03-01T17:32:27.061035"
   }
 ]
